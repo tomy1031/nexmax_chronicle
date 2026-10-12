@@ -42,6 +42,7 @@ var _hold_bark_done := false
 var _shake_t := 0.0
 var _gear_angle := 0.0
 var _rope: MeshInstance3D
+var _ratchet_wheel: Node3D
 
 
 func _init() -> void:
@@ -288,6 +289,8 @@ func _build_gate() -> void:
 	LevelKit.box(ratchet, Vector3(0, 0.6, 0), Vector3(0.9, 1.2, 0.9), C_WOOD)
 	var small := LevelKit.gear(ratchet, Vector3(0, 1.45, 0), 0.4, 0.12, Color(0.7, 0.55, 0.28), 8)
 	small.name = "RatchetWheel"
+	small.rotation.y = PI * 0.5
+	_ratchet_wheel = small
 	LevelKit.box(ratchet, Vector3(-0.5, 1.6, 0), Vector3(0.7, 0.12, 0.12), Color(0.3, 0.3, 0.32), false)
 	LevelKit.label(ratchet, "歯止め", Vector3(0, 2.25, 0), 40, Color(1, 0.95, 0.8), true, Vector3.ZERO, Color(0, 0, 0, 0.7))
 
@@ -672,13 +675,18 @@ func _process(delta: float) -> void:
 			if danger and (not _was_danger or was_phase != GatePuzzleLogic.Phase.WAIT_SIGNAL):
 				Hud.bark("おはる", "待って！　そこに人がいる！", 3.0)
 				oharu.play("fan_wait")
+				oharu.emote("×", 2.0)
 			elif not danger and _was_danger:
 				Hud.bark("おはる", "今は離して！", 3.0)
 				Sfx.play("lock", 1.3)
 				oharu.play("fan_go")
+				oharu.emote("！", 2.5)
 		else:
 			oharu.play("idle" if logic.phase != GatePuzzleLogic.Phase.ADJUSTING else "point")
-		genbei.play("hammer" if logic.phase == GatePuzzleLogic.Phase.ADJUSTING and logic.holding else "idle")
+		var adjusting := logic.phase == GatePuzzleLogic.Phase.ADJUSTING and logic.holding
+		genbei.play("hammer" if adjusting else "idle")
+		if adjusting and _ratchet_wheel:
+			_ratchet_wheel.rotation.z += delta * 3.0
 		_was_danger = danger
 		_sync_boats(delta)
 		_update_companions()

@@ -1,0 +1,160 @@
+name: Deploy to GitHub Pages
+
+# main へ push するたびに、テスト → Web 書き出し → GitHub Pages へ公開する。
+# 公開先: https://tomy1031.github.io/nexmax_chronicle/
+#
+# GitHub Pages は COOP/COEP ヘッダーを送れないため、Web 書き出しは
+# シングルスレッド版（export_presets.cfg の variant/thread_support=false、
+# web_nothreads_*.zip テンプレート）を使う。
+#
+# リポジトリ側の前提: Settings > Pages > Build and deployment > Source を
+# 「GitHub Actions」にしておく（gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow）。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 公開は1本ずつ。途中のデプロイは中断せず、後続の実行を待たせる。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # エディタとテンプレートは同じバージョンでそろえる。
+  # テンプレート置き場は Godot が探す ~/.local/share/godot/export_templates/<版>.stable/
+  GODOT_VERSION: "4.7.2"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Test and export (Web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # エディタ(約200MB)と、Web 用シングルスレッドテンプレート2枚だけを保存する。
+      # 約1.28GBの export_templates.tpz 自体はキャッシュしない。
+      - name: Restore Godot cache
+        id: godot-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/godot-editor
+            ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-${{ env.GODOT_VERSION }}-stable-linux-x86_64-web-nothreads-v1
+
+      - name: Download Godot editor and Web templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          release_url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          editor_zip="Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          templates_tpz="Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          template_dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          work="$RUNNER_TEMP/godot-download"
+          mkdir -p "$work/editor" "$HOME/godot-editor" "$template_dir"
+
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o "$work/SHA512-SUMS.txt" "$release_url/SHA512-SUMS.txt"
+
+          echo "::group::Godot editor"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o "$work/$editor_zip" "$release_url/$editor_zip"
+          (cd "$work" && grep " ${editor_zip}\$" SHA512-SUMS.txt | sha512sum -c -)
+          unzip -q -o "$work/$editor_zip" -d "$work/editor"
+          install -m 0755 "$work/editor/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$HOME/godot-editor/godot"
+          rm -f "$work/$editor_zip"
+          echo "::endgroup::"
+
+          echo "::group::Web export templates (nothreads only)"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 \
+            -o "$work/$templates_tpz" "$release_url/$templates_tpz"
+          (cd "$work" && grep " ${templates_tpz}\$" SHA512-SUMS.txt | sha512sum -c -)
+          unzip -j -o "$work/$templates_tpz" \
+            templates/web_nothreads_release.zip \
+            templates/web_nothreads_debug.zip \
+            templates/version.txt \
+            -d "$template_dir"
+          rm -f "$work/$templates_tpz"
+          echo "::endgroup::"
+
+      - name: Set up Godot
+        run: |
+          chmod +x "$HOME/godot-editor/godot"
+          echo "$HOME/godot-editor" >> "$GITHUB_PATH"
+          ls -l "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+
+      - name: Show Godot version
+        run: godot --headless --version
+
+      # 初回の取り込み。.godot/ は git 管理外なので CI では毎回作り直す。
+      - name: Import project
+        run: timeout 600 godot --headless --path . --import
+
+      # -s モードは Autoload が無いので、純粋ロジックだけを検証する。
+      # 構文エラー等でスクリプト自体が読めない場合は終了コード 0 のまま終わることがあるため、
+      # 「RESULT: PASS」が出力にあることと、SCRIPT ERROR が無いことも確認する。
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/unit-tests.log"
+          timeout 300 godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee "$log"
+          if grep -q "SCRIPT ERROR" "$log"; then
+            echo "::error title=Unit tests::SCRIPT ERROR was printed"
+            exit 1
+          fi
+          grep -qx "RESULT: PASS" "$log" || { echo "::error title=Unit tests::RESULT: PASS not found"; exit 1; }
+
+      # 全スクリプトの読み込みと各シーンの数秒間の実行。成功時に "SMOKE OK" を出力する。
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/smoke-test.log"
+          timeout 600 godot --headless --path . res://tests/SmokeTest.tscn 2>&1 | tee "$log"
+          if grep -q "SCRIPT ERROR" "$log"; then
+            echo "::error title=Smoke test::SCRIPT ERROR was printed"
+            exit 1
+          fi
+          grep -q "SMOKE OK" "$log" || { echo "::error title=Smoke test::SMOKE OK not found"; exit 1; }
+
+      - name: Export Web build
+        run: |
+          set -euo pipefail
+          mkdir -p build/web
+          timeout 900 godot --headless --path . --export-release "Web" build/web/index.html
+          for f in index.html index.js index.pck index.wasm; do
+            test -s "build/web/$f" || { echo "::error title=Export::build/web/$f is missing"; exit 1; }
+          done
+          # Jekyll による加工を防ぐ（空ファイル）
+          touch build/web/.nojekyll
+          ls -lh build/web
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/web
+          # .nojekyll はドットファイルなので、含める指定が必要
+          include-hidden-files: true
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -78,6 +78,9 @@ func reset() -> void:
 
 
 func set_flag(flag: String, value: Variant) -> void:
+	if flag == "future_route_open":
+		push_warning("TimelineState: future_route_open は drawing_confirmed から算出するため直接設定できません")
+		return
 	if not flag in self:
 		push_warning("TimelineState: unknown flag %s" % flag)
 		return

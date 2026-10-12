@@ -60,14 +60,15 @@ func is_danger() -> bool:
 ## 調整が完了した瞬間に true を返す。
 func tick(delta: float) -> bool:
 	var ratchet_set := false
+	# 先に舟を動かしてから完了を判定する（完了直後に「必ず1艘いる」を保証するため）
+	if phase != Phase.DONE:
+		_update_boats(delta)
 	if phase == Phase.ADJUSTING and holding:
 		progress = minf(1.0, progress + delta / ADJUST_TIME)
 		if progress >= 1.0:
 			phase = Phase.WAIT_SIGNAL
 			ratchet_set = true
 			_ensure_first_signal_boat()
-	if phase != Phase.DONE:
-		_update_boats(delta)
 	return ratchet_set
 
 
@@ -84,7 +85,12 @@ func _update_boats(delta: float) -> void:
 
 
 func _ensure_first_signal_boat() -> void:
-	if not is_danger():
+	# 危険範囲の出口ぎりぎりの舟だけでは「待って」が一瞬で終わるので、しばらく残る舟を用意する
+	var lingering := false
+	for x in boats:
+		if x >= DANGER_MIN_X + 3.0 and x <= DANGER_MAX_X:
+			lingering = true
+	if not lingering:
 		boats.append(FIRST_SIGNAL_BOAT_X)
 	# 次の舟まで十分な間隔（合図の窓）を空ける
 	spawn_timer = BOAT_PERIOD

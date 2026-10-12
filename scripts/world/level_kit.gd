@@ -366,8 +366,8 @@ static func environment(parent: Node, sky_top: Color, sky_horizon: Color, ground
 	sun.light_energy = sun_energy * 0.82
 	sun.rotation_degrees = sun_rot
 	sun.shadow_enabled = not Game.low_quality
-	sun.directional_shadow_max_distance = 45.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_max_distance = 38.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.shadow_bias = 0.04
 	sun.shadow_normal_bias = 1.5
 	parent.add_child(sun)
@@ -405,3 +405,75 @@ static func lantern(parent: Node, pos: Vector3, color: Color = Color(1.0, 0.45, 
 	l.material_override = mat(color, 1.6, 0.6)
 	cyl(parent, pos + Vector3(0, 0.38, 0), 0.16, 0.08, Color(0.15, 0.12, 0.1))
 	cyl(parent, pos - Vector3(0, 0.38, 0), 0.16, 0.08, Color(0.15, 0.12, 0.1))
+
+
+# ---------------------------------------------------------------- 静的メッシュの結合（Web向けの軽量化）
+
+## root 以下の「動かない」メッシュを、同じマテリアルごとに1つのメッシュへまとめてドローコールを減らす。
+## 次のものは対象外：グループ "dynamic" の子孫、VariantSwitch・Npc・ClawTarget・Portal・Crystal・
+## CharacterBody3D・パーティクル・非表示ノード、透明／シェーダー／輪郭線つきマテリアル。
+## 戻り値は生成した結合メッシュの数。
+static func merge_static(root: Node3D) -> int:
+	var groups := {}
+	var inv := root.global_transform.affine_inverse()
+	_collect_static(root, inv, groups)
+	var made := 0
+	for key in groups:
+		var items: Array = groups[key]
+		if items.size() < 2:
+			continue
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for it in items:
+			st.append_from(it[0], 0, it[1])
+		var mi := MeshInstance3D.new()
+		mi.name = "Merged_%d" % made
+		mi.mesh = st.commit()
+		mi.material_override = items[0][3]
+		root.add_child(mi)
+		made += 1
+		for it in items:
+			(it[2] as Node).queue_free()
+	return made
+
+
+static func _collect_static(node: Node, inv: Transform3D, groups: Dictionary) -> void:
+	for child in node.get_children():
+		if _skip_merge(child):
+			continue
+		if child is MeshInstance3D:
+			var mi := child as MeshInstance3D
+			var m := mi.material_override as StandardMaterial3D
+			if m != null and mi.mesh != null and m.next_pass == null \
+					and m.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED \
+					and mi.get_script() == null and mi.get_child_count() == 0 \
+					and mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON:
+				var key := m.get_instance_id()
+				if not groups.has(key):
+					groups[key] = []
+				groups[key].append([mi.mesh, inv * mi.global_transform, mi, m])
+				continue
+		_collect_static(child, inv, groups)
+
+
+static func _skip_merge(n: Node) -> bool:
+	if n.is_in_group("dynamic"):
+		return true
+	if n is Node3D and not (n as Node3D).visible:
+		return true
+	if n is VariantSwitch or n is Npc or n is ClawTarget or n is Portal or n is Crystal \
+			or n is CharacterBody3D or n is CPUParticles3D or n is GPUParticles3D or n is Camera3D:
+		return true
+	return n.get_script() != null and not (n is StaticBody3D)
+
+
+## 小さな部品は影を落とさないようにする（影のパスのドローコールを減らす）。
+static func trim_shadows(root: Node, max_size: float = 0.35) -> void:
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null or mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			continue
+		var aabb := mi.get_aabb()
+		var s := aabb.size * mi.global_transform.basis.get_scale()
+		if maxf(s.x, maxf(s.y, s.z)) < max_size:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

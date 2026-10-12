@@ -25,6 +25,7 @@ func _ready() -> void:
 	_apply_debug_args()
 	_build_world()
 	_spawn_player()
+	LevelKit.trim_shadows(self)
 	marker = ObjectiveMarker.new()
 	add_child(marker)
 	Hud.show_gameplay(true)

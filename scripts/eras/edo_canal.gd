@@ -77,6 +77,19 @@ func _build_world() -> void:
 	add_spawn("default", Vector3(14.8, 0.1, 12.8), 62.0)
 
 	_build_npcs()
+	# 動くもの以外を結合してドローコールを減らす（Web・M1 8GB 向け）
+	LevelKit.merge_static(self)
+	if Game.debug_args.has("edo_demo"):
+		_debug_demo.call_deferred()
+
+
+## 検証用：パズルの「合図待ち」状態をすぐ再現する（-- --edo_demo）
+func _debug_demo() -> void:
+	await get_tree().create_timer(0.3).timeout
+	puzzle_active = true
+	gate_hold.grab_enabled = true
+	logic.grab()
+	logic.progress = 0.995
 
 
 func _build_ground() -> void:
@@ -86,7 +99,7 @@ func _build_ground() -> void:
 	# 石畳の帯
 	for i in 18:
 		var x := -34.0 + i * 3.9
-		LevelKit.box(self, Vector3(x, 0.01, 12.5), Vector3(3.7, 0.04, 3.2), Color(0.6, 0.55, 0.48).lerp(Color(0.52, 0.5, 0.47), fmod(i * 0.37, 1.0)), false)
+		LevelKit.box(self, Vector3(x, 0.01, 12.5), Vector3(3.7, 0.04, 3.2), [Color(0.6, 0.55, 0.48), Color(0.56, 0.53, 0.48), Color(0.52, 0.5, 0.47)][i % 3], false)
 	# 範囲の見えない壁
 	LevelKit.wall(self, Vector3(-37, 3, 0), Vector3(1, 12, 60))
 	LevelKit.wall(self, Vector3(35, 3, 0), Vector3(1, 12, 60))
@@ -101,7 +114,7 @@ func _build_canal() -> void:
 		LevelKit.box(self, Vector3(-1, -1.5, 4.25 * sz), Vector3(74, 3.0, 0.5), C_STONE, true)
 		for i in 24:
 			var x := -36.0 + i * 3.1
-			LevelKit.box(self, Vector3(x, -0.6, 4.02 * sz), Vector3(1.4, 0.5, 0.08), C_STONE.darkened(0.12 + fmod(i * 0.29, 1.0) * 0.08), false)
+			LevelKit.box(self, Vector3(x, -0.6, 4.02 * sz), Vector3(1.4, 0.5, 0.08), C_STONE.darkened([0.12, 0.16, 0.2][i % 3]), false)
 	# 水面：上流（屋根付き水路側）と下流
 	LevelKit.water(self, Vector3(26.0, WATER_UP, 0), Vector2(28, 8.0), Color(0.06, 0.28, 0.42), Color(0.3, 0.68, 0.78), Vector2(-0.25, 0.0))
 	water_down = LevelKit.water(self, Vector3(-14.0, _down_level, 0), Vector2(52, 8.0), Color(0.06, 0.28, 0.42), Color(0.3, 0.68, 0.78),
@@ -262,6 +275,7 @@ func _build_gate() -> void:
 	LevelKit.box(self, Vector3(GATE_X, 6.3, 0), Vector3(1.4, 0.3, 11.0), Color(0.32, 0.22, 0.15), false)
 	LevelKit.cyl(self, Vector3(GATE_X, 6.25, 2.6), 0.32, 0.4, Color(0.4, 0.3, 0.2), false, Vector3(0, 0, 90))  # 滑車
 	board = Node3D.new()
+	board.add_to_group("dynamic")
 	board.position = Vector3(GATE_X, BOARD_CLOSED_Y if TimelineState.gate_repaired else BOARD_OPEN_Y, 0)
 	add_child(board)
 	LevelKit.box(board, Vector3.ZERO, Vector3(0.36, 3.2, 8.5), Color(0.5, 0.35, 0.22))
@@ -271,6 +285,7 @@ func _build_gate() -> void:
 	var rm := BoxMesh.new()
 	rm.size = Vector3(0.07, 1.0, 0.07)
 	_rope = LevelKit.mesh(self, rm, Vector3(GATE_X, 5.0, 2.6), LevelKit.mat(Color(0.85, 0.78, 0.6)))
+	_rope.add_to_group("dynamic")
 
 	# 南岸の軸受台
 	LevelKit.box(self, Vector3(GATE_X, 1.15, 5.25), Vector3(0.9, 2.3, 0.4), C_WOOD_DARK)                # 軸受（歯車の奥）
@@ -290,6 +305,7 @@ func _build_gate() -> void:
 	var small := LevelKit.gear(ratchet, Vector3(0, 1.45, 0), 0.4, 0.12, Color(0.7, 0.55, 0.28), 8)
 	small.name = "RatchetWheel"
 	small.rotation.y = PI * 0.5
+	small.add_to_group("dynamic")
 	_ratchet_wheel = small
 	LevelKit.box(ratchet, Vector3(-0.5, 1.6, 0), Vector3(0.7, 0.12, 0.12), Color(0.3, 0.3, 0.32), false)
 	LevelKit.label(ratchet, "歯止め", Vector3(0, 2.25, 0), 40, Color(1, 0.95, 0.8), true, Vector3.ZERO, Color(0, 0, 0, 0.7))
@@ -350,6 +366,7 @@ func _build_gate() -> void:
 	add_child(spray)
 
 	_boat_root = Node3D.new()
+	_boat_root.add_to_group("dynamic")
 	add_child(_boat_root)
 
 
@@ -397,6 +414,7 @@ func _build_north_bank() -> void:
 		LevelKit.box(n, Vector3(0, 2.5, 2.52), Vector3(1.0, 1.0, 0.06), Color(0.2, 0.2, 0.22), false)
 	# 水車
 	_wheel = Node3D.new()
+	_wheel.add_to_group("dynamic")
 	_wheel.position = Vector3(-10.0, 1.2, -5.0)
 	add_child(_wheel)
 	var wv := LevelKit.gear(_wheel, Vector3.ZERO, 2.2, 0.5, Color(0.5, 0.36, 0.22), 14, Color(0.4, 0.28, 0.18))

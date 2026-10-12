@@ -128,6 +128,30 @@ jobs:
           fi
           grep -q "SMOKE OK" "$log" || { echo "::error title=Smoke test::SMOKE OK not found"; exit 1; }
 
+      # 1726年の水門パズルを実シーンで通しで動かす（設置→早すぎる解除→人がいる時の解除→成功）
+      - name: Gate puzzle flow test
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/edo-flow.log"
+          timeout 600 godot --headless --path . res://tests/EdoFlowTest.tscn 2>&1 | tee "$log"
+          if grep -q "SCRIPT ERROR" "$log"; then
+            echo "::error title=Gate puzzle flow::SCRIPT ERROR was printed"
+            exit 1
+          fi
+          grep -q "EDO FLOW OK" "$log" || { echo "::error title=Gate puzzle flow::EDO FLOW OK not found"; exit 1; }
+
+      # 物語の各段階で、シーン・スポーン地点・目標マーカーの対象がそろっているか
+      - name: Chronicle contract test
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/contract.log"
+          timeout 600 godot --headless --path . res://tests/ChronicleContractTest.tscn 2>&1 | tee "$log"
+          if grep -q "SCRIPT ERROR" "$log"; then
+            echo "::error title=Contract test::SCRIPT ERROR was printed"
+            exit 1
+          fi
+          grep -q "CONTRACT OK" "$log" || { echo "::error title=Contract test::CONTRACT OK not found"; exit 1; }
+
       - name: Export Web build
         run: |
           set -euo pipefail

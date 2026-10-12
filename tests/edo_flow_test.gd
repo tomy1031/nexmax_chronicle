@@ -8,6 +8,7 @@ var failures := 0
 
 
 func _ready() -> void:
+	SaveManager.save_path = "user://test_slot.json"
 	Engine.time_scale = 4.0
 	TimelineState.reset()
 	TimelineState.met_genbei = true

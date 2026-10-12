@@ -6,6 +6,7 @@ extends RefCounted
 const LAYER_WORLD := 1
 const LAYER_PLAYER := 2
 const LAYER_ENEMY := 4
+const LAYER_BOUNDS := 8   # 見えない範囲の壁：プレイヤーと敵は止めるが、カメラは通す
 
 static var _mats: Dictionary = {}
 static var _water_shader: Shader
@@ -127,11 +128,12 @@ static func box(parent: Node, pos: Vector3, size: Vector3, color: Color, collide
 	return body
 
 
-## 見えない壁（落下防止・範囲制限）。
+## 見えない壁（落下防止・範囲制限）。カメラのスプリングアームには当たらない。
 static func wall(parent: Node, pos: Vector3, size: Vector3) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.position = pos
-	body.collision_layer = LAYER_WORLD
+	body.collision_layer = LAYER_BOUNDS
+	body.collision_mask = 0
 	parent.add_child(body)
 	var cs := CollisionShape3D.new()
 	var shape := BoxShape3D.new()

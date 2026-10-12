@@ -53,7 +53,7 @@ func _ready() -> void:
 	add_to_group("player")
 	Game.player = self
 	collision_layer = LevelKit.LAYER_PLAYER
-	collision_mask = LevelKit.LAYER_WORLD
+	collision_mask = LevelKit.LAYER_WORLD | LevelKit.LAYER_BOUNDS
 	floor_snap_length = 0.3
 	floor_max_angle = deg_to_rad(50)
 	if get_node_or_null("CollisionShape3D") == null:

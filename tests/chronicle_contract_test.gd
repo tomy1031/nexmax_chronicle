@@ -33,6 +33,7 @@ var failures := 0
 
 
 func _ready() -> void:
+	SaveManager.save_path = "user://test_slot.json"
 	Game.debug_args["nostory"] = "1"
 	Game.debug_args["shot"] = "1"
 	for st in STAGES:

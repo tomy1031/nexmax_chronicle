@@ -16,6 +16,7 @@ const SCENES := [
 
 
 func _ready() -> void:
+	SaveManager.save_path = "user://test_slot.json"
 	Game.debug_args["nostory"] = "1"
 	var only := str(Game.debug_args.get("only", ""))
 	for e in SCENES:

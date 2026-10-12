@@ -16,6 +16,7 @@ var failures := 0
 
 
 func _ready() -> void:
+	SaveManager.save_path = "user://test_slot.json"
 	await get_tree().process_frame
 	_check_scripts("res://scripts")
 	for entry in SCENES:

@@ -5,14 +5,16 @@ extends Node
 signal saved
 
 const SAVE_PATH := "user://nexmax_chronicle_slot1.json"
+## テストは別のファイルに保存する（遊んでいるセーブを壊さない）
+var save_path := SAVE_PATH
 
 
 func has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+	return FileAccess.file_exists(save_path)
 
 
 func save_game() -> bool:
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
 		push_warning("SaveManager: 保存に失敗しました (%s)" % error_string(FileAccess.get_open_error()))
 		return false
@@ -33,7 +35,7 @@ func load_game() -> bool:
 func read_save() -> Dictionary:
 	if not has_save():
 		return {}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(save_path, FileAccess.READ)
 	if f == null:
 		return {}
 	var parsed: Variant = JSON.parse_string(f.get_as_text())
@@ -46,4 +48,4 @@ func read_save() -> Dictionary:
 
 func delete_save() -> void:
 	if has_save():
-		DirAccess.remove_absolute(SAVE_PATH)
+		DirAccess.remove_absolute(save_path)

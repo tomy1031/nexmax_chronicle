@@ -1,7 +1,9 @@
 class_name CharacterBuilder
 extends RefCounted
 ## 登場人物の見た目を簡易形状で組み立てる。原点は足元、前方は -Z。
-## build() が返すノードは、任意で animate(delta: float, moving: bool, anim: String) を持てる（Npc が毎フレーム呼ぶ）。
+## build() が返すノードは animate(delta: float, moving: bool, anim: String) を持つ（Npc が毎フレーム呼ぶ）。
+## 各キャラの形と動きは scripts/npc/models/*.gd（共通部分は chibi_base.gd）。
+## 対応アニメ: "idle" / "walk" / "wave" / "hammer" / "point" / "cheer" / "fan_wait" / "fan_go" / "sit" / "work"
 ##
 ## kind 一覧:
 ##   "genbei"   源兵衛（1726・からくり職人。白髪・白ひげ・額にゴーグル・藍の着物・白い前掛け）
@@ -26,38 +28,27 @@ const NAMES := {
 	"helper_bot": "整備ボット",
 }
 
+const MODELS := {
+	"genbei": preload("res://scripts/npc/models/genbei_model.gd"),
+	"oharu": preload("res://scripts/npc/models/oharu_model.gd"),
+	"matsui": preload("res://scripts/npc/models/matsui_model.gd"),
+	"sora": preload("res://scripts/npc/models/sora_model.gd"),
+	"villager": preload("res://scripts/npc/models/villager_model.gd"),
+	"boatman": preload("res://scripts/npc/models/boatman_model.gd"),
+	"doll": preload("res://scripts/npc/models/doll_model.gd"),
+	"citizen": preload("res://scripts/npc/models/citizen_model.gd"),
+	"helper_bot": preload("res://scripts/npc/models/helper_bot_model.gd"),
+}
+
 
 static func display_name(kind: String) -> String:
 	return NAMES.get(kind, kind)
 
 
-## 仮の見た目（詳細なモデルは差し替え予定）。
+## kind の見た目を作って返す（形はこの場で組み立て済み）。知らない kind は通行人の見た目にする。
 static func build(kind: String) -> Node3D:
-	var root := Node3D.new()
+	var script: GDScript = MODELS.get(kind, MODELS["citizen"])
+	var root: Node3D = script.new()
 	root.name = "Model_%s" % kind
-	var colors := {
-		"genbei": Color(0.2, 0.25, 0.45), "oharu": Color(0.95, 0.55, 0.65),
-		"matsui": Color(0.12, 0.12, 0.14), "sora": Color(0.95, 0.95, 0.95),
-		"villager": Color(0.5, 0.35, 0.25), "boatman": Color(0.3, 0.35, 0.5),
-		"doll": Color(0.75, 0.55, 0.35), "citizen": Color(0.4, 0.5, 0.6),
-		"helper_bot": Color(0.95, 0.95, 0.95),
-	}
-	var c: Color = colors.get(kind, Color.GRAY)
-	var h := 0.55 if kind == "doll" or kind == "helper_bot" else (1.15 if kind == "oharu" or kind == "sora" else 1.45)
-	var body := MeshInstance3D.new()
-	var cap := CapsuleMesh.new()
-	cap.radius = h * 0.22
-	cap.height = h * 0.7
-	body.mesh = cap
-	body.position = Vector3(0, h * 0.35, 0)
-	body.material_override = LevelKit.char_mat(c)
-	root.add_child(body)
-	var head := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = h * 0.2
-	sm.height = h * 0.4
-	head.mesh = sm
-	head.position = Vector3(0, h * 0.82, 0)
-	head.material_override = LevelKit.char_mat(Color(1.0, 0.85, 0.72))
-	root.add_child(head)
+	root.call("construct")
 	return root

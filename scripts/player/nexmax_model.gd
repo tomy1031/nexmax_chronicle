@@ -210,12 +210,12 @@ func animate(delta: float, h_speed: float, on_floor: bool, vel_y: float, aiming:
 	for e in eyes:
 		e.scale.y = lerpf(e.scale.y, blink, delta * 30.0)
 
-	# 被弾の点滅
+	# 被弾の点滅（終わった瞬間だけ表示に戻す。外からの非表示を上書きしない）
 	if _hurt_t > 0.0:
 		_hurt_t -= delta
 		visible = int(_hurt_t * 20.0) % 2 == 0
-	else:
-		visible = true
+		if _hurt_t <= 0.0:
+			visible = true
 
 
 # ---------------------------------------------------------------- 部品

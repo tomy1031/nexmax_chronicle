@@ -370,8 +370,8 @@ static func environment(parent: Node, sky_top: Color, sky_horizon: Color, ground
 	sun.shadow_enabled = not Game.low_quality
 	sun.directional_shadow_max_distance = 38.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	sun.shadow_bias = 0.04
-	sun.shadow_normal_bias = 1.5
+	sun.shadow_bias = 0.05
+	sun.shadow_normal_bias = 2.2
 	parent.add_child(sun)
 	return sun
 

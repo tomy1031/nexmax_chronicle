@@ -4,7 +4,7 @@ extends Node3D
 ## 青く丸い頭・白い顔・横の耳・2本のアンテナ・大きな靴（プレイイメージ準拠）。
 ## 原点は足元。前方は -Z。
 
-const BLUE := Color(0.18, 0.52, 0.96)
+const BLUE := Color(0.15, 0.46, 0.93)
 const BLUE_DARK := Color(0.12, 0.36, 0.75)
 const WHITE := Color(0.98, 0.98, 1.0)
 const GREY := Color(0.42, 0.46, 0.55)
@@ -93,15 +93,15 @@ func _build() -> void:
 	# 口（にっこり）
 	var mouth := MeshInstance3D.new()
 	var mm := SphereMesh.new()
-	mm.radius = 0.07
-	mm.height = 0.07
+	mm.radius = 0.088
+	mm.height = 0.088
 	mm.is_hemisphere = true
 	mm.radial_segments = 16
 	mm.rings = 4
 	mouth.mesh = mm
-	mouth.position = Vector3(0.0, -0.075, -0.405)
+	mouth.position = Vector3(0.0, -0.07, -0.41)
 	mouth.rotation_degrees = Vector3(180 + 15, 0, 0)  # 平らな面を上に：正面から半円の口に見える
-	mouth.scale = Vector3(1.0, 0.8, 0.45)
+	mouth.scale = Vector3(1.15, 1.0, 0.42)
 	mouth.material_override = LevelKit.unshaded(Color(0.78, 0.18, 0.24))
 	head.add_child(mouth)
 
@@ -113,6 +113,9 @@ func _build() -> void:
 	# 脚と大きな靴
 	leg_l = _make_leg(-1.0)
 	leg_r = _make_leg(1.0)
+
+	# 同じ色の部品をピボットごとにまとめて描画を軽くする
+	LevelKit.merge_children_recursive(self)
 
 
 func _make_arm(sx: float) -> Node3D:

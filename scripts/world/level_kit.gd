@@ -477,3 +477,33 @@ static func trim_shadows(root: Node, max_size: float = 0.35) -> void:
 		var s := aabb.size * mi.global_transform.basis.get_scale()
 		if maxf(s.x, maxf(s.y, s.z)) < max_size:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## node の直下にあるメッシュを、マテリアルごとに1つへまとめる（node の座標系のまま）。
+## 子孫の各ノードにも同じことを行う。メッシュを個別に動かしていないモデル（ピボットで動かすもの）専用。
+static func merge_children_recursive(node: Node3D) -> void:
+	var groups := {}
+	for c in node.get_children():
+		if c is Node3D and c.get_child_count() > 0:
+			merge_children_recursive(c)
+		if c is MeshInstance3D and c.get_child_count() == 0 and c.get_script() == null and (c as MeshInstance3D).material_override != null:
+			var mi := c as MeshInstance3D
+			var key := mi.material_override.get_instance_id()
+			if not groups.has(key):
+				groups[key] = []
+			groups[key].append(mi)
+	for key in groups:
+		var items: Array = groups[key]
+		if items.size() < 2:
+			continue
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for mi in items:
+			st.append_from((mi as MeshInstance3D).mesh, 0, (mi as MeshInstance3D).transform)
+		var merged := MeshInstance3D.new()
+		merged.mesh = st.commit()
+		merged.material_override = (items[0] as MeshInstance3D).material_override
+		node.add_child(merged)
+		for mi in items:
+			node.remove_child(mi)
+			(mi as Node).queue_free()

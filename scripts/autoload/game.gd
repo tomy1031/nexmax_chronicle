@@ -20,10 +20,20 @@ var low_quality := false
 
 var _was_captured := false
 
+## 検証用の起動オプション（godot ... シーン.tscn -- --shot --spawn=ID --flags=a,b --cam=x,y,z:lx,ly,lz --nostory）
+var debug_args := {}
+var shot_mode: bool:
+	get:
+		return debug_args.has("shot")
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_input_map()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--"):
+			var kv := a.substr(2).split("=", true, 1)
+			debug_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 
 
 func _process(delta: float) -> void:
@@ -54,6 +64,8 @@ func set_paused(p: bool) -> void:
 
 
 func capture_mouse() -> void:
+	if shot_mode:
+		return
 	if not get_tree().paused:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 

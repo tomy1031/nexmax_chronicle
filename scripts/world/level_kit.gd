@@ -340,24 +340,30 @@ static func environment(parent: Node, sky_top: Color, sky_horizon: Color, ground
 	psm.sky_curve = 0.12
 	sky.sky_material = psm
 	env.sky = sky
+	# 環境光は空の色を使うが、明るすぎると白飛びするので抑える（ambient は 0〜1 の目安で受け取る）
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = ambient
+	env.ambient_light_energy = ambient * 0.55
+	env.ambient_light_sky_contribution = 0.85
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.05
+	env.tonemap_exposure = 0.92
+	env.tonemap_white = 1.6
 	env.glow_enabled = true
-	env.glow_intensity = 0.55
-	env.glow_bloom = 0.05
-	env.glow_hdr_threshold = 1.1
+	env.glow_intensity = 0.32
+	env.glow_bloom = 0.0
+	env.glow_hdr_threshold = 1.35
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.18
+	env.adjustment_contrast = 1.08
 	if fog.a > 0.0:
 		env.fog_enabled = true
 		env.fog_light_color = fog
-		env.fog_density = 0.006
-		env.fog_sky_affect = 0.3
+		env.fog_density = 0.0022
+		env.fog_sky_affect = 0.15
 	we.environment = env
 	parent.add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.light_color = sun_color
-	sun.light_energy = sun_energy
+	sun.light_energy = sun_energy * 0.82
 	sun.rotation_degrees = sun_rot
 	sun.shadow_enabled = not Game.low_quality
 	sun.directional_shadow_max_distance = 45.0

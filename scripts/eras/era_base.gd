@@ -22,6 +22,7 @@ func _ready() -> void:
 	Game.input_locked = true
 	TimelineState.current_era = era
 	arrived_by_warp = TimeTravel.pending_fx == TimeTravel.FX_WARP
+	_apply_debug_args()
 	_build_world()
 	_spawn_player()
 	marker = ObjectiveMarker.new()
@@ -35,10 +36,12 @@ func _ready() -> void:
 	if music_theme != "":
 		Sfx.play_music(music_theme)
 	Hud.arrive(era, _show_era_card())
+	_apply_debug_camera()
 	await get_tree().create_timer(0.5).timeout
 	Game.input_locked = false
 	Game.capture_mouse()
-	_start_story()
+	if not Game.debug_args.has("nostory"):
+		_start_story()
 
 
 func _exit_tree() -> void:
@@ -67,6 +70,37 @@ func water_level_at(_pos: Vector3) -> float:
 
 func is_safe_ground(_pos: Vector3) -> bool:
 	return true
+
+
+# ---- 検証用
+
+func _apply_debug_args() -> void:
+	var a: Dictionary = Game.debug_args
+	if a.has("spawn"):
+		TimeTravel.pending_spawn = a.spawn
+	if a.has("flags"):
+		for f in str(a.flags).split(",", false):
+			if f in TimelineState:
+				TimelineState.set(f, true)
+	if a.has("robots"):
+		TimelineState.robots_defeated = int(a.robots)
+
+
+func _apply_debug_camera() -> void:
+	var a: Dictionary = Game.debug_args
+	if a.has("nohud"):
+		Hud.visible = false
+	if not a.has("cam"):
+		return
+	var parts := str(a.cam).split(":")
+	var p := parts[0].split_floats(",")
+	var l := parts[1].split_floats(",") if parts.size() > 1 else PackedFloat64Array([0, 0, 0])
+	var cam := Camera3D.new()
+	cam.fov = 60.0
+	add_child(cam)
+	cam.global_position = Vector3(p[0], p[1], p[2])
+	cam.look_at(Vector3(l[0], l[1], l[2]), Vector3.UP)
+	cam.current = true
 
 
 # ---- 共通

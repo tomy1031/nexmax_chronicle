@@ -70,6 +70,7 @@ var era_card: Control
 var era_year: Label
 var era_place: Label
 var flash_rect: ColorRect
+var loading_label: Label
 
 # 状態
 var hp := 5
@@ -148,7 +149,13 @@ func _input(event: InputEvent) -> void:
 
 # ================================================================ 公開API
 
+func show_loading(v: bool, text: String = "読み込み中…") -> void:
+	loading_label.text = text
+	loading_label.visible = v
+
+
 func reset_for_title() -> void:
+	show_loading(false)
 	gameplay.visible = false
 	dlg_panel.visible = false
 	choice_panel.visible = false
@@ -370,6 +377,7 @@ func warp_out(tint: Color) -> void:
 
 ## 新しいシーンに着いた時の演出（暗転・ワープ解除と時代カード）。
 func arrive(era: int, show_card: bool) -> void:
+	show_loading(false)
 	if warp_rect.visible:
 		fade_rect.visible = false
 		var tw := create_tween()
@@ -793,6 +801,22 @@ func _build() -> void:
 	fade_rect.color = Color(0.02, 0.03, 0.08, 0.0)
 	fade_rect.visible = false
 	root.add_child(fade_rect)
+
+	# 読み込み中の表示（Web版は初回のシェーダー準備で数秒止まることがあるため）
+	loading_label = _label("読み込み中…", 22, Color(0.85, 0.92, 1.0))
+	loading_label.anchor_left = 1.0
+	loading_label.anchor_right = 1.0
+	loading_label.anchor_top = 1.0
+	loading_label.anchor_bottom = 1.0
+	loading_label.offset_left = -320
+	loading_label.offset_right = -40
+	loading_label.offset_top = -80
+	loading_label.offset_bottom = -40
+	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	loading_label.add_theme_constant_override("outline_size", 8)
+	loading_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	loading_label.visible = false
+	root.add_child(loading_label)
 
 	# 時代カードは会話・パネルより下に描く（パネルを開いても重ならない）
 	root.move_child(era_card, dlg_panel.get_index())

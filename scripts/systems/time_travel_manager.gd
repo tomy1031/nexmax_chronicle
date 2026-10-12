@@ -56,6 +56,7 @@ func _go(path: String, spawn_id: String, fx: int, era: int) -> void:
 		await Hud.warp_out(ERA_TINTS.get(era, Color.WHITE))
 	else:
 		await Hud.fade_out(0.45)
+	Hud.show_loading(true, "%s %s へ移動中…" % [era_label(era), ERA_PLACES.get(era, "")] if fx == FX_WARP else "読み込み中…")
 	TimelineState.current_era = era
 	pending_spawn = spawn_id
 	pending_fx = fx

@@ -1,0 +1,9 @@
+# Godot
+.godot/
+build/
+*.translation
+export_credentials.cfg
+# OS
+.DS_Store
+# Test / capture output
+tests/output/

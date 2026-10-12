@@ -178,6 +178,11 @@ func set_era(era: int) -> void:
 	era_label.text = "%s　%s" % [TimeTravel.era_label(era), place]
 
 
+## 試作シーンなど、時代以外の場所名を出したい時に使う。
+func set_era_text(text: String) -> void:
+	era_label.text = text
+
+
 func set_crystals(n: int) -> void:
 	crystal_label.text = "◆ %d" % n
 
@@ -789,6 +794,9 @@ func _build() -> void:
 	fade_rect.visible = false
 	root.add_child(fade_rect)
 
+	# 時代カードは会話・パネルより下に描く（パネルを開いても重ならない）
+	root.move_child(era_card, dlg_panel.get_index())
+
 
 static func controls_bbcode() -> String:
 	return "[b]操作方法[/b]（キーボード＋マウス）\n" \
@@ -839,6 +847,11 @@ func _make_theme() -> Theme:
 	var th := Theme.new()
 	th.default_font = _font
 	th.default_font_size = 18
+	# 同梱フォントは Regular だけなので、[b] は擬似太字で表示する
+	var bold := FontVariation.new()
+	bold.base_font = _font
+	bold.variation_embolden = 0.9
+	th.set_font("bold_font", "RichTextLabel", bold)
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.12, 0.22, 0.42, 0.95)
 	normal.set_corner_radius_all(12)

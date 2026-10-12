@@ -93,8 +93,8 @@ func _build_world() -> void:
 	add_child(_card)
 	if Game.debug_args.has("nohud"):
 		_card.visible = false
-	add_spawn("proto_start", Vector3(0, 0.05, 4.8), 0.0)
-	add_spawn("default", Vector3(0, 0.05, 4.8), 0.0)
+	add_spawn("proto_start", Vector3(0.6, 0.05, 3.0), 8.0)
+	add_spawn("default", Vector3(0.6, 0.05, 3.0), 8.0)
 	# 動かない部品を材質ごとに1つのメッシュへまとめる（Web版のドローコール対策）
 	HubBuilder.merge_by_color(self)
 	LevelKit.merge_static(self)

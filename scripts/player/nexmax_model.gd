@@ -171,13 +171,13 @@ func animate(delta: float, h_speed: float, on_floor: bool, vel_y: float, aiming:
 		leg_r.rotation.x = -swing * 0.9
 		body_root.position.y = absf(sin(_phase)) * 0.07 * minf(run, 1.0) + sin(_t * 2.2) * 0.012
 	else:
-		leg_l.rotation.x = lerpf(leg_l.rotation.x, -0.6 if vel_y > 0.0 else 0.3, delta * 10.0)
-		leg_r.rotation.x = lerpf(leg_r.rotation.x, 0.4 if vel_y > 0.0 else -0.2, delta * 10.0)
-		body_root.position.y = lerpf(body_root.position.y, 0.0, delta * 8.0)
+		leg_l.rotation.x = lerpf(leg_l.rotation.x, -0.6 if vel_y > 0.0 else 0.3, _k(delta, 10.0))
+		leg_r.rotation.x = lerpf(leg_r.rotation.x, 0.4 if vel_y > 0.0 else -0.2, _k(delta, 10.0))
+		body_root.position.y = lerpf(body_root.position.y, 0.0, _k(delta, 8.0))
 
 	# 腕：歩きで振る。クロー構え中は右腕を前へ伸ばす
 	var arm_swing := -swing * 0.9 if on_floor else -1.2
-	arm_l.rotation.x = lerpf(arm_l.rotation.x, arm_swing, delta * 14.0)
+	arm_l.rotation.x = lerpf(arm_l.rotation.x, arm_swing, _k(delta, 14.0))
 	var target_r := swing * 0.9 if on_floor else -1.2
 	if aiming or holding:
 		target_r = PI * 0.5
@@ -185,19 +185,19 @@ func animate(delta: float, h_speed: float, on_floor: bool, vel_y: float, aiming:
 		_attack_t -= delta
 		target_r = PI * 0.55
 		arm_l.rotation.x = -PI * 0.3
-	arm_r.rotation.x = lerpf(arm_r.rotation.x, target_r, delta * 16.0)
-	arm_r.rotation.z = lerpf(arm_r.rotation.z, 0.05 if (aiming or holding) else 0.25, delta * 10.0)
+	arm_r.rotation.x = lerpf(arm_r.rotation.x, target_r, _k(delta, 16.0))
+	arm_r.rotation.z = lerpf(arm_r.rotation.z, 0.05 if (aiming or holding) else 0.25, _k(delta, 10.0))
 
 	# 前傾・ひねり
-	body_root.rotation.x = lerpf(body_root.rotation.x, -0.12 * minf(run, 1.2), delta * 8.0)
+	body_root.rotation.x = lerpf(body_root.rotation.x, -0.12 * minf(run, 1.2), _k(delta, 8.0))
 	head.rotation.z = sin(_phase * 0.5) * 0.04 * minf(run, 1.0)
 	if _attack_t > 0.0:
 		body_root.rotation.y = sin((0.28 - _attack_t) / 0.28 * PI) * -0.6
 	else:
-		body_root.rotation.y = lerpf(body_root.rotation.y, 0.0, delta * 10.0)
+		body_root.rotation.y = lerpf(body_root.rotation.y, 0.0, _k(delta, 10.0))
 
 	# 伸び縮み
-	_squash = _squash.lerp(Vector3.ONE, delta * 9.0)
+	_squash = _squash.lerp(Vector3.ONE, _k(delta, 9.0))
 	body_root.scale = _squash
 
 	# まばたき
@@ -208,7 +208,7 @@ func animate(delta: float, h_speed: float, on_floor: bool, vel_y: float, aiming:
 	if _blink_t < 0.0:
 		_blink_t = randf_range(2.0, 4.5)
 	for e in eyes:
-		e.scale.y = lerpf(e.scale.y, blink, delta * 30.0)
+		e.scale.y = lerpf(e.scale.y, blink, _k(delta, 30.0))
 
 	# 被弾の点滅（終わった瞬間だけ表示に戻す。外からの非表示を上書きしない）
 	if _hurt_t > 0.0:
@@ -216,6 +216,11 @@ func animate(delta: float, h_speed: float, on_floor: bool, vel_y: float, aiming:
 		visible = int(_hurt_t * 20.0) % 2 == 0
 		if _hurt_t <= 0.0:
 			visible = true
+
+
+## 補間の係数（フレームレートに依存しない）
+func _k(delta: float, speed: float) -> float:
+	return 1.0 - exp(-speed * delta)
 
 
 # ---------------------------------------------------------------- 部品

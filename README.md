@@ -24,6 +24,8 @@
 | 5 | 異次元拠点 | 回復と最後のチェックポイント。2086年への扉 |
 | 6 | 2086年 ナンバタウン | 開いた新しい保守路でソラと会い、警備ロボを停止させる |
 
+タイトルの「クロー練習場（試作）」では、仕様書 §18 の ClawPrototype（歯車をつかんで軸にはめる練習を3回）を単独で遊べます。初めて成功するまでの時間・つかんだ回数・不発の回数を最後に表示します。
+
 水門のパズルは「操作しなければ進まないが、仲間がいないと成功しない」が狙いです。
 源兵衛が歯止めを調整する間は歯車を保持し続け、おはるの合図（舟が来ているか）を見て離します。
 早く離すと調整が戻り、人がいるときに離すと失敗します。
@@ -68,6 +70,15 @@ godot --headless --path . -s res://tests/run_tests.gd
 
 # スモークテスト（全スクリプトの読み込みと各シーンの実行）。最後に "SMOKE OK" が出れば合格
 godot --headless --path . res://tests/SmokeTest.tscn
+
+# 1726年の水門パズルを実シーンで通しで動かす（"EDO FLOW OK"）
+godot --headless --path . res://tests/EdoFlowTest.tscn
+
+# 物語の各段階で、シーン・スポーン地点・目標の対象がそろっているか（"CONTRACT OK"）
+godot --headless --path . res://tests/ChronicleContractTest.tscn
+
+# 描画負荷の計測（ウィンドウあり。各シーンのドローコール数などを表示）
+godot --path . res://tests/PerfProbe.tscn -- --shot
 ```
 
 - ユニットテストは合格で終了コード 0、失敗で 1。各テストに `PASS` / `FAIL` が出ます。

@@ -1,20 +1,29 @@
-// キーボード・マウス入力。キャンバスのクリックでポインタロック、Esc で解除。
-export type InputState = {
-  keys: Set<string>
+// 入力機器の層：キーボードの生の状態（KeyboardEvent.code）を集めるだけ。
+// ゲーム処理は inputActions.ts の resolveActions() を通したアクションだけを見る。
+// マウスは必須ではない（キャンバスをクリックしたときだけ、任意の視点操作としてポインタロックを使える）。
+import type { RawInput } from './inputActions'
+
+export type InputState = RawInput & {
+  /** 押している control（KeyboardEvent.code） */
+  down: Set<string>
+  /** このフレームで押された control */
+  pressed: Set<string>
+  /** 任意：ポインタロック中のマウス移動量（UI では案内しない） */
   mouseDX: number
   mouseDY: number
   locked: boolean
-  /** 1 回押しのイベント（P・F3・G など） */
-  pressed: Set<string>
 }
+
+/** ブラウザの既定動作（スクロール・フォーカス移動）を止めるキー */
+const PREVENT = new Set(['Space', 'Tab', 'F3', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 
 export function createInput(canvas: HTMLCanvasElement): InputState & { endFrame(): void } {
   const s: InputState & { endFrame(): void } = {
-    keys: new Set(),
+    down: new Set(),
+    pressed: new Set(),
     mouseDX: 0,
     mouseDY: 0,
     locked: false,
-    pressed: new Set(),
     endFrame() {
       s.mouseDX = 0
       s.mouseDY = 0
@@ -22,12 +31,14 @@ export function createInput(canvas: HTMLCanvasElement): InputState & { endFrame(
     },
   }
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'F3' || e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault()
-    if (!s.keys.has(e.code)) s.pressed.add(e.code)
-    s.keys.add(e.code)
+    if (PREVENT.has(e.code)) e.preventDefault()
+    if (e.repeat) return
+    if (!s.down.has(e.code)) s.pressed.add(e.code)
+    s.down.add(e.code)
   })
-  window.addEventListener('keyup', (e) => s.keys.delete(e.code))
-  window.addEventListener('blur', () => s.keys.clear())
+  window.addEventListener('keyup', (e) => s.down.delete(e.code))
+  window.addEventListener('blur', () => s.down.clear())
+  // 任意のマウス視点（必須ではない）
   canvas.addEventListener('click', () => {
     if (!s.locked) canvas.requestPointerLock?.()
   })

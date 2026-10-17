@@ -63,6 +63,24 @@ export const SHOTS: Shot[] = [
   },
 ]
 
+/** プレイ開始位置（?spawn=street|boat|balcony|swing|genbei|gear。開発・検証用。既定は street） */
+export type Spawn = { pos: THREE.Vector3; facing: number; camYaw: number; camPitch: number }
+
+export const SPAWNS: Record<string, Spawn> = {
+  // 仕掛け横丁の通り（水門を望む）
+  street: { pos: v(-11.5, 0, 9.8), facing: -Math.PI / 2 - 0.3, camYaw: -Math.PI / 2 + 0.45, camPitch: 0.28 },
+  // 舟の上の木箱と小さな歯車の前（南岸）
+  boat: { pos: v(-11.2, 0, 8.4), facing: 0.78, camYaw: 0.74, camPitch: 0.5 },
+  // 水門番の家の前のボードウォーク（おはるの朱のバルコニーの金具を見上げる）
+  balcony: { pos: v(3.0, 0.15, 4.3), facing: -2.06, camYaw: -2.06, camPitch: -0.28 },
+  // 渡し梁の北岸（吊り輪を見上げる）
+  swing: { pos: v(-26.6, 0, -8.0), facing: 2.97, camYaw: 2.97, camPitch: -0.22 },
+  // 源兵衛の作業台（F で話す）
+  genbei: { pos: v(4.1, L.PLATFORM.y, -1.9), facing: 2.18, camYaw: 2.18, camPitch: 0.3 },
+  // ショット 05 の桟橋（大歯車を支える位置）
+  gear: { pos: v(3.35, L.PIER.y, -5.45), facing: -2.39, camYaw: -2.25, camPitch: 0.12 },
+}
+
 export function faceYaw(from: THREE.Vector3, face: THREE.Vector3 | number): number {
   if (typeof face === 'number') return face
   return Math.atan2(-(face.x - from.x), -(face.z - from.z))

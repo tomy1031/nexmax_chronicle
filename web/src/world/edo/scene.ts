@@ -12,6 +12,7 @@ import { coveredWarehouse, gatehouse, genbeiWorkshop, kura, machiya, type Frame 
 import { Foliage, createPetals, groundPetals } from './nature'
 import { archBridge, castle, farHouse, floatingIsland, mountains, pagoda, terrace, torii, waterWheel } from './backdrop'
 import { buildWater, createWaterMaterial, createFallMaterial, createFoamPatchMaterial, createSpray, fallSheet, type WaterRect } from './water'
+import { buildClawTargets, type ClawWorld } from './clawTargets'
 
 export type EdoScene = {
   root: THREE.Group
@@ -19,6 +20,8 @@ export type EdoScene = {
   colliders: ColliderList
   lights: LightSpot[]
   gate: GateParts
+  /** つかむNMClaw の対象（引き寄せる物・金具・吊り輪・大歯車）と協力パズルの舟 */
+  claw: ClawWorld
   update(dt: number, t: number): void
 }
 
@@ -55,6 +58,7 @@ export function buildEdoScene(m: MaterialLibrary, quality: QualitySettings): Edo
   buildPier(c)
   buildUpstream(c, cf, root, foliage)
   buildFar(c, cf, root, farFoliage)
+  const claw = buildClawTargets(c, gate)
 
   root.add(c.b.build('static'))
   const far = c.bf.build('far')
@@ -80,6 +84,7 @@ export function buildEdoScene(m: MaterialLibrary, quality: QualitySettings): Edo
     colliders: c.col,
     lights: c.lights,
     gate,
+    claw,
     update(dt: number, t: number) {
       for (const u of c.updaters) u(dt, t)
     },

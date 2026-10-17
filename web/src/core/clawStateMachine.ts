@@ -21,6 +21,8 @@ export type ClawEvent = (typeof ClawEvent)[keyof typeof ClawEvent];
 
 export const GRAB_TIME = 0.18;
 export const RELEASE_TIME = 0.15;
+/** 対象のない場所へ射出したときの「伸びて戻る」時間（操作マニュアル v1.1 §1.2：体力は減らない） */
+export const MISS_TIME = 0.36;
 
 export class ClawStateMachine {
   state: ClawState = ClawState.IDLE;
@@ -55,6 +57,30 @@ export class ClawStateMachine {
       return true;
     }
     return false;
+  }
+
+  /**
+   * 操作マニュアル v1.1 の射出（J を 1 回押す。構え・長押しは不要）。
+   * 対象があれば GRABBING（ワイヤーが届くまで travelTime 秒）、無ければ空振りの戻り動作（RELEASING）。
+   * 旧仕様の beginAim → tryGrab と同じ状態を通るので、tick / release はそのまま使える。
+   */
+  fire(hasTarget: boolean, travelTime: number = GRAB_TIME, missTime: number = MISS_TIME): boolean {
+    if (this.state !== ClawState.IDLE && this.state !== ClawState.AIMING) {
+      return false;
+    }
+    if (hasTarget) {
+      this.state = ClawState.GRABBING;
+      this.timer = travelTime;
+    } else {
+      this.state = ClawState.RELEASING;
+      this.timer = missTime;
+    }
+    return true;
+  }
+
+  /** 対象につながっている（保持中）か */
+  isConnected(): boolean {
+    return this.state === ClawState.HOLDING;
   }
 
   /** 保持中の左クリック、または対象側からの強制解除。 */

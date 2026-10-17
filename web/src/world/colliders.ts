@@ -9,6 +9,8 @@ export type BoxCollider = {
   /** 斜面など X 軸回りの傾き */
   rotX?: number
   rotZ?: number
+  /** 見えない壁（水への落下防止・プレイ範囲）。プレイヤーは止めるが、視線・カメラ・置いた物は通す */
+  invisible?: boolean
 }
 
 export class ColliderList {
@@ -37,5 +39,6 @@ export class ColliderList {
     const dz = bz - az
     const len = Math.hypot(dx, dz)
     this.box((ax + bx) / 2, (y0 + y1) / 2, (az + bz) / 2, len, y1 - y0, thick, -Math.atan2(dz, dx))
+    this.items[this.items.length - 1].invisible = true
   }
 }

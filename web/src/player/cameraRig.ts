@@ -1,8 +1,17 @@
-// 三人称カメラのスプリングアーム：マウスで回し、壁に当たったら手前に縮む（Rapier のレイ）。
+// 三人称カメラのスプリングアーム：方向キー（look アクション）で回す。押し始めはゆっくり、
+// 押し続けると加速（inputActions.stepLook）。壁に当たったら手前に縮む（Rapier のレイ）。
+// マウスは任意（ポインタロック中だけ加算）。
 import * as THREE from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type { Physics } from './physics'
-import type { InputState } from './input'
+import { createLookState, stepLook, type Axis2 } from './inputActions'
+
+export const CAMERA_TUNING = {
+  /** カメラの高さ角（rad）。小さいほど低い位置から見上げる */
+  pitchMin: -0.55,
+  pitchMax: 1.2,
+  mouseSensitivity: 0.0024,
+}
 
 export class CameraRig {
   yaw = 0
@@ -12,7 +21,11 @@ export class CameraRig {
   private readonly target = new THREE.Vector3()
   private readonly smoothTarget = new THREE.Vector3()
   private readonly dir = new THREE.Vector3()
+  private readonly up = new THREE.Vector3(0, 0.95, 0)
+  private readonly look = createLookState()
   private initialized = false
+  /** 自動で向きを変える目標（到着時など）。方向キーを押すと取り消す */
+  private auto: { yaw: number; pitch: number } | null = null
   private readonly camera: THREE.PerspectiveCamera
   private readonly phys: Physics
   private readonly exclude: RAPIER.Collider
@@ -23,21 +36,36 @@ export class CameraRig {
     this.exclude = exclude
   }
 
-  update(dt: number, input: InputState, focusFeet: THREE.Vector3): void {
-    const sens = 0.0024
-    this.yaw -= input.mouseDX * sens
-    this.pitch += input.mouseDY * sens
-    if (input.keys.has('KeyQ')) this.yaw += dt * 1.8
-    if (input.keys.has('KeyE')) this.yaw -= dt * 1.8
-    this.pitch = Math.min(1.2, Math.max(-0.35, this.pitch))
-    this.target.copy(focusFeet).add(new THREE.Vector3(0, 0.95, 0))
+  /**
+   * look.x：右へ回す（+）、look.y：上を見る（+）。mouseDX/DY は任意の追加入力。
+   * pitch はカメラの高さ角なので、上を見る = pitch を下げる。
+   */
+  update(dt: number, look: Axis2, focusFeet: THREE.Vector3, mouseDX = 0, mouseDY = 0): void {
+    if (this.auto && (look.x !== 0 || look.y !== 0 || mouseDX !== 0 || mouseDY !== 0)) this.auto = null
+    if (this.auto) {
+      let d = this.auto.yaw - this.yaw
+      while (d > Math.PI) d -= Math.PI * 2
+      while (d < -Math.PI) d += Math.PI * 2
+      const k = Math.min(1, dt * 5)
+      const dp = this.auto.pitch - this.pitch
+      this.yaw += d * k
+      this.pitch += dp * k
+      if (Math.abs(d) < 0.01 && Math.abs(dp) < 0.01) this.auto = null
+    }
+    const { dYaw, dPitch } = stepLook(this.look, look, dt)
+    this.yaw -= dYaw
+    this.pitch -= dPitch
+    this.yaw -= mouseDX * CAMERA_TUNING.mouseSensitivity
+    this.pitch += mouseDY * CAMERA_TUNING.mouseSensitivity
+    this.pitch = Math.min(CAMERA_TUNING.pitchMax, Math.max(CAMERA_TUNING.pitchMin, this.pitch))
+    this.target.copy(focusFeet).add(this.up)
     if (!this.initialized) {
       this.smoothTarget.copy(this.target)
       this.initialized = true
     }
     this.smoothTarget.lerp(this.target, 1 - Math.exp(-dt * 14))
     this.dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch))
-    const hit = this.phys.raycast(this.smoothTarget, this.dir, this.distance + 0.3, this.exclude)
+    const hit = this.phys.raycast(this.smoothTarget, this.dir, this.distance + 0.3, this.exclude, true)
     const want = hit !== null ? Math.max(0.6, hit - 0.3) : this.distance
     // 縮むときは速く、伸びるときはゆっくり
     const k = want < this.current ? 20 : 3
@@ -46,9 +74,14 @@ export class CameraRig {
     this.camera.lookAt(this.smoothTarget.x, this.smoothTarget.y + 0.25, this.smoothTarget.z)
   }
 
+  /** なめらかに向きを変える（yaw はカメラが置かれる側の向き。方向キーで取り消せる） */
+  turnTo(yaw: number, pitch: number): void {
+    this.auto = { yaw, pitch }
+  }
+
   /** 現在のカメラから yaw/pitch を逆算（ショットからプレイへ戻るとき） */
   syncFrom(camera: THREE.Camera, focusFeet: THREE.Vector3): void {
-    const off = new THREE.Vector3().subVectors(camera.position, focusFeet.clone().add(new THREE.Vector3(0, 0.95, 0)))
+    const off = new THREE.Vector3().subVectors(camera.position, focusFeet.clone().add(this.up))
     this.yaw = Math.atan2(off.x, off.z)
     this.pitch = Math.min(1.0, Math.max(0.05, Math.asin(off.y / Math.max(0.01, off.length()))))
     this.initialized = false

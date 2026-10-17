@@ -7,6 +7,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { drawGear, makeCanvas } from '../render/textures'
+import { createNexmax } from './nexmax/nexmaxModel'
 
 export type CharacterName = 'nexmax' | 'genbei' | 'oharu'
 export type Pose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave' | 'run' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'dash'
@@ -48,6 +49,8 @@ const loader = new GLTFLoader()
 loader.setMeshoptDecoder(MeshoptDecoder)
 
 export async function loadCharacter(name: CharacterName, targetHeightMeters: number): Promise<Character> {
+  // 主人公は部品ごとに組み立てたモデル（関節で動かす）。GLB は使わない
+  if (name === 'nexmax') return createNexmax(targetHeightMeters)
   const url = `./models/${name}.glb`
   try {
     const head = await fetch(url, { method: 'HEAD' })

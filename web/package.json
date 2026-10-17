@@ -8,17 +8,28 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "models:inspect": "node scripts/inspect-model.mjs",
+    "models:process": "node scripts/process-model.mjs",
+    "models:all": "node scripts/process-all.mjs",
+    "models:selftest": "node scripts/selftest/run-selftest.mjs"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.5.1",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@types/three": "^0.186.0",
+    "draco3dgltf": "^1.5.7",
+    "meshoptimizer": "^1.2.0",
+    "sharp": "^0.35.3",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.5"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
+    "n8ao": "^2.0.1",
     "postprocessing": "^6.39.5",
     "three": "^0.186.1"
   }

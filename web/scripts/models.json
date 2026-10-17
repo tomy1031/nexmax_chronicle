@@ -1,0 +1,23 @@
+{
+  "_comment": "Tripo の生 GLB (assets_src/tripo/<name>.glb) → public/models/<name>.glb の変換定義。height はメートル(BBox の Y 幅)、tris は三角形数の上限。face は「元モデルが正面を向けている方向」(Tripo は通常 +z)。出力は常に -Z 向き・足元 y=0・X/Z 中央。",
+  "inputDir": "../assets_src/tripo",
+  "outputDir": "public/models",
+  "defaults": {
+    "texture": 1024,
+    "face": "+z",
+    "pivot": "bottom",
+    "keepAnim": false,
+    "meshopt": true,
+    "webp": true
+  },
+  "models": [
+    { "name": "nexmax",    "height": 1.2,  "tris": 25000, "notes": "主人公格のキャラ(ネクスマックス)。立ち姿・やや丸いシルエット。" },
+    { "name": "genbei",    "height": 1.6,  "tris": 20000, "notes": "源兵衛。人型・立ち姿。" },
+    { "name": "oharu",     "height": 1.25, "tris": 18000, "notes": "お春。人型・立ち姿(子供サイズ)。" },
+    { "name": "matsui",    "height": 1.7,  "tris": 20000, "notes": "松井。人型・立ち姿。" },
+    { "name": "sora",      "height": 1.3,  "tris": 20000, "notes": "空(ソラ)。人型・立ち姿。" },
+    { "name": "gear",      "height": 2.8,  "tris": 12000, "notes": "歯車。直径≒2.8m を高さとして指定。足元(最下点)が y=0。中心原点が欲しければ pivot を center に。" },
+    { "name": "machiya",   "height": 6,    "tris": 25000, "notes": "町家(建物)。軒先までの高さ。" },
+    { "name": "watergate", "height": 7,    "tris": 20000, "notes": "水門。" }
+  ]
+}

@@ -5,7 +5,8 @@
 import type { InputState } from './input'
 import { CAMERA_TUNING } from './cameraRig'
 import { TOUCH_TUNING, stickVector, touchHintView, type TouchButtonId, type TouchHintContext } from './touchLogic'
-import { CLAW_SVG, type Hint } from '../ui/hud'
+import type { Hint } from '../ui/hud'
+import { CLAW_SVG } from '../ui/future/icons'
 
 const BUTTONS: Array<{ id: TouchButtonId; control: string }> = [
   { id: 'claw', control: 'touch:claw' },

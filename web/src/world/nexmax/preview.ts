@@ -247,6 +247,57 @@ if (freezeT !== null) {
   for (let i = 0; i < n; i++) step(STEP)
 }
 
+// ------------------------------------------------------------------ 狙いの確認（?aimline=1）
+// 射出口（handAnchor）から前腕の軸（ローカル -Y）方向へ伸ばした線（水色）と、射出口→狙いの線（橙）、狙いの印（赤）。
+// 2 本の線が重なれば、爪は狙いへまっすぐ出ている。window.__aimCheck() で角度（度）を返す。
+const aimLines: Array<{ inst: Inst; axis: THREE.Line; toAim: THREE.Line }> = []
+if (q.get('aimline') === '1') {
+  for (const inst of insts) {
+    if (!inst.aim) continue
+    const mk = (color: string) => {
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()])
+      const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color, depthTest: false }))
+      l.renderOrder = 999
+      l.frustumCulled = false
+      scene.add(l)
+      return l
+    }
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshBasicMaterial({ color: '#ff3040' }))
+    marker.position.copy(inst.aim)
+    scene.add(marker)
+    aimLines.push({ inst, axis: mk('#38e8ff'), toAim: mk('#ff9a30') })
+  }
+}
+function muzzleRay(inst: Inst): { pos: THREE.Vector3; dir: THREE.Vector3 } {
+  const a = inst.ch.handAnchor
+  a.updateWorldMatrix(true, false)
+  const pos = new THREE.Vector3().setFromMatrixPosition(a.matrixWorld)
+  const dir = new THREE.Vector3(0, -1, 0).transformDirection(a.matrixWorld)
+  return { pos, dir }
+}
+function updateAimLines(): void {
+  for (const { inst, axis, toAim } of aimLines) {
+    const { pos, dir } = muzzleRay(inst)
+    const len = inst.aim ? pos.distanceTo(inst.aim) : 1
+    const pa = axis.geometry.attributes.position as THREE.BufferAttribute
+    pa.setXYZ(0, pos.x, pos.y, pos.z)
+    pa.setXYZ(1, pos.x + dir.x * len, pos.y + dir.y * len, pos.z + dir.z * len)
+    pa.needsUpdate = true
+    const pb = toAim.geometry.attributes.position as THREE.BufferAttribute
+    pb.setXYZ(0, pos.x, pos.y, pos.z)
+    if (inst.aim) pb.setXYZ(1, inst.aim.x, inst.aim.y, inst.aim.z)
+    pb.needsUpdate = true
+  }
+}
+;(window as unknown as { __aimCheck: () => unknown }).__aimCheck = () =>
+  insts
+    .filter((i) => i.aim)
+    .map((inst) => {
+      const { pos, dir } = muzzleRay(inst)
+      const want = inst.aim!.clone().sub(pos).normalize()
+      return { pose: inst.pose, deg: +THREE.MathUtils.radToDeg(Math.acos(Math.min(1, Math.max(-1, dir.dot(want))))).toFixed(1) }
+    })
+
 function placeLabels(): void {
   const v = new THREE.Vector3()
   for (const { el, inst } of labels) {
@@ -265,6 +316,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(0.05, (now - last) / 1000)
   last = now
   if (freezeT === null) step(dt)
+  updateAimLines()
   renderer.render(scene, camera)
   placeLabels()
   frames++

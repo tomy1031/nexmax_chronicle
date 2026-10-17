@@ -1,0 +1,3 @@
+Rectangular Paving by Dimitrios Savva — Poly Haven (https://polyhaven.com/a/rectangular_paving)
+License: CC0 1.0 (public domain). 1k JPG: diff / nor (OpenGL) / arm = AO+Rough+Metal. Real-world size 2m x 2m.
+Used by: 2086 Nanba Town festival plaza (src/stages/future2086).

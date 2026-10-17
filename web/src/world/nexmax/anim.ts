@@ -411,7 +411,7 @@ export function evalSwing(p: Params, c: Ctx): void {
 export function evalPulled(p: Params, c: Ctx): void {
   clearParams(p)
   p.aim = c.hasAim ? 1 : 0
-  p.aimSide = 0.5
+  p.aimSide = 0.18
   p.look = c.hasAim ? 0.8 : 0
   p.pivotY = 0.95
   p.bodyPitch = -0.5
@@ -443,12 +443,13 @@ export function evalFire(p: Params, c: Ctx): void {
   const punch = smooth(0, 0.075, t)
   const recoil = smooth(0.06, 0.1, t) * Math.exp(-Math.max(0, t - 0.1) * 7)
   p.aim = c.hasAim ? punch : 0
-  p.aimSide = 0.1
+  // 真上に近い対象のときだけ効く（頭を避ける）。ふつうは肩から対象へまっすぐ
+  p.aimSide = 0.3
   p.look = c.hasAim ? 1 : 0
   p.rShX = lerp(0.6, Math.PI / 2, punch)
   p.rShZ = 0.12
   p.rEl = lerp(1.2, 0.0, punch) + 0.35 * recoil
-  p.torsoYaw = -0.3 + 0.16 * recoil
+  p.torsoYaw = -0.08 + 0.1 * recoil
   p.torsoPitch = -0.04 + 0.12 * recoil
   p.bodyPitch = 0.05 * recoil
   p.squash = 1 - 0.04 * recoil
@@ -458,7 +459,7 @@ export function evalFire(p: Params, c: Ctx): void {
   p.lEl = 0.7
   p.lShY = 0.2
   p.hipsY = -0.025
-  p.hipsYaw = -0.12
+  p.hipsYaw = -0.04
   p.rHipZ = 0.06
   p.lHipZ = 0.06
   p.fist = 0.6
@@ -471,7 +472,7 @@ export function evalHold(p: Params, c: Ctx): void {
   const t = c.t
   const shake = Math.sin(t * 37) * 0.012 + Math.sin(t * 23.3) * 0.008
   p.aim = c.hasAim ? 1 : 0
-  p.aimSide = 0.12
+  p.aimSide = 0.3
   p.look = c.hasAim ? 0.9 : 0
   p.brace = 1
   p.rShX = Math.PI / 2
@@ -479,12 +480,12 @@ export function evalHold(p: Params, c: Ctx): void {
   p.lShX = 1.25
   p.lShZ = -0.35
   p.lEl = 0.9
-  p.torsoYaw = -0.32 + shake
+  p.torsoYaw = -0.1 + shake
   p.torsoPitch = 0.1 + shake * 0.6
   p.torsoRoll = shake
   p.bodyPitch = 0.14
   p.hipsY = -0.045 + Math.abs(shake) * 0.3
-  p.hipsYaw = -0.15
+  p.hipsYaw = -0.05
   p.headPitch = -0.04
   p.headRoll = 0.06 + shake
   p.rHipZ = 0.08

@@ -93,6 +93,9 @@ hud.preloadSpeakers(['源兵衛', 'おはる'])
 | `preloadSpeakers(names)` | 話者アイコンを先に作る |
 | `setSpeakerIcon(name, url)` | 顔の画像を外から渡す（イラストなど） |
 | `dispose()` | HUD とポートレート用レンダラを解放 |
+| `setTouchMode(on)` | スマホのタッチ操作用の表示（`.nx-touch`）：目的・台詞・照準・キー案内からキー名を外す（`player/touchLogic.ts` の `toTouchText`）、操作一覧をタッチ用に、右腕の輪をつかむボタンに、左腕の輪を左上へ小さく、会話ウィンドウを右腕の輪の手前までに収める、コンパスをハートと目的の間に収める |
+| `touchTargets` | タッチで押せる部品（`rightArm`＝つかむ、`leftArm`＝左腕を選ぶ）。`game.ts` がタッチ層の `bindButton` でつなぐ |
+| `setClawPrompt(label, ready)` | タッチ：右腕の輪の中の言葉（「つかむ」「飛びつく」「離す」など）と、照準が合っているか（輪が黄色） |
 
 表情の優先順：`setPortraitExpression` ＞ 一時的な表情（ダメージ＝心配 2.2 秒、`flash('danger')`＝驚き、`banner` 成功＝笑顔／失敗＝心配）＞ `setPlayerPose` ＞ 右腕を使用中（`setArms` の active / holding）＝必死 ＞ 体力 1 以下＝心配 ＞ 笑顔。
 

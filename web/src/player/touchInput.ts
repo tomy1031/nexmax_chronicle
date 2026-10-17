@@ -1,15 +1,17 @@
 // スマホのタッチ操作の層：画面の左側をなぞるとスティック（移動・大きく倒すとダッシュ）、右側をなぞるとカメラ。
-// 右下に「つかむ」「ジャンプ」と、使えるときだけ「話す」「切替」、右上に「装備・記録」「一時停止」。
+// 「つかむ」は HUD の右下の右腕の輪をそのまま使う（game.ts が bindButton でつなぐ）。この層が出すのは、
+// 輪の左上に「ジャンプ」と、使えるときだけ「切替」「話す（調べる・次へ・決定）」、左上の状態表示の下に「一時停止」「装備・記録」。
 // 押した内容は input.ts と同じ状態（down/pressed/analog/mouseDX）へ 'touch:…' の control として書き込むだけで、
 // ゲーム処理は inputActions.ts の TOUCH_BINDINGS を通したアクションしか見ない。
+import './touchInput.css'
 import type { InputState } from './input'
 import { CAMERA_TUNING } from './cameraRig'
-import { TOUCH_TUNING, stickVector, touchHintView, type TouchButtonId, type TouchHintContext } from './touchLogic'
+import { TOUCH_TUNING, stickVector, touchHintView, type TouchHintContext } from './touchLogic'
 import type { Hint } from '../ui/hud'
-import { CLAW_SVG } from '../ui/future/icons'
 
-const BUTTONS: Array<{ id: TouchButtonId; control: string }> = [
-  { id: 'claw', control: 'touch:claw' },
+/** この層が出すボタン（つかむは HUD の右腕の輪） */
+type LayerButton = 'jump' | 'interact' | 'lock'
+const BUTTONS: Array<{ id: LayerButton; control: string }> = [
   { id: 'jump', control: 'touch:jump' },
   { id: 'interact', control: 'touch:interact' },
   { id: 'lock', control: 'touch:lock' },
@@ -33,12 +35,15 @@ export class TouchControls {
   private readonly surface: HTMLDivElement
   private readonly stickBase: HTMLDivElement
   private readonly stickKnob: HTMLDivElement
-  private readonly buttons = {} as Record<TouchButtonId, HTMLButtonElement>
-  private readonly labels = {} as Record<TouchButtonId, HTMLSpanElement>
+  private readonly buttons = {} as Record<LayerButton, HTMLButtonElement>
+  private readonly labels = {} as Record<LayerButton, HTMLSpanElement>
   private readonly releasers: Array<() => void> = []
   private stick: { id: number; x: number; y: number } | null = null
   private lookPtr: { id: number; x: number; y: number } | null = null
   private playing = true
+  private locked = false
+  /** 一時停止・メニューの画面：画面をタップすると閉じる */
+  private overlay: 'pause' | 'menu' | null = null
   private viewKey = ''
 
   constructor(ui: HTMLElement, input: InputState) {
@@ -49,16 +54,20 @@ export class TouchControls {
       <div class="touch-surface"></div>
       <div class="touch-stick"><div class="touch-knob"></div></div>
       <div class="touch-actions">
-        <button class="tbtn tbtn-claw" type="button"><span class="tbtn-icon">${CLAW_SVG}</span><span class="tbtn-label"></span></button>
         <button class="tbtn tbtn-jump" type="button"><span class="tbtn-label"></span></button>
-        <button class="tbtn tbtn-interact" type="button" hidden><span class="tbtn-label"></span></button>
         <button class="tbtn tbtn-lock" type="button" hidden><span class="tbtn-label"></span></button>
+        <button class="tbtn tbtn-interact" type="button" hidden><span class="tbtn-label"></span></button>
       </div>
       <div class="touch-sys">
-        <button class="tbtn tbtn-sys tbtn-menu" type="button" aria-label="装備・記録">${MENU_SVG}</button>
         <button class="tbtn tbtn-sys tbtn-pause" type="button" aria-label="一時停止">${PAUSE_SVG}</button>
+        <button class="tbtn tbtn-sys tbtn-menu" type="button" aria-label="装備・記録">${MENU_SVG}</button>
       </div>`
     ui.appendChild(this.root)
+    // 縦持ちのときの案内（HUD より上に出すので層の外に置く。表示は CSS の orientation で切り替える）
+    const rotate = document.createElement('div')
+    rotate.className = 'touch-rotate'
+    rotate.innerHTML = '<div><div class="touch-rotate-icon"></div>画面を横向きにしてください</div>'
+    ui.appendChild(rotate)
     this.surface = this.root.querySelector('.touch-surface') as HTMLDivElement
     this.stickBase = this.root.querySelector('.touch-stick') as HTMLDivElement
     this.stickKnob = this.root.querySelector('.touch-knob') as HTMLDivElement
@@ -81,8 +90,7 @@ export class TouchControls {
     })
     window.addEventListener('resize', () => this.placeStick(null))
     this.placeStick(null)
-    this.applyHints([], { canInteract: false, canSwitch: false })
-    this.setClawState(false, false)
+    this.applyHints([], { interact: null, canSwitch: false })
   }
 
   /** 要素を押している間だけ control を down にする（離す・指がそれる・取り消しで up） */
@@ -114,6 +122,11 @@ export class TouchControls {
     const s = this.surface
     s.addEventListener('pointerdown', (e) => {
       e.preventDefault()
+      if (this.overlay) {
+        // 一時停止・メニューは、画面のどこをタップしても閉じる（同じボタンをもう一度押したのと同じ）
+        this.input.pressed.add(this.overlay === 'pause' ? 'touch:pause' : 'touch:menu')
+        return
+      }
       if (!this.playing) return
       const left = e.clientX < window.innerWidth * TOUCH_TUNING.stickZone
       if (left && !this.stick) {
@@ -181,7 +194,7 @@ export class TouchControls {
     for (const r of this.releasers) r()
   }
 
-  /** プレイ中だけスティック・カメラ・アクションのボタンを出す（一時停止・メニュー・ショット中は隠す） */
+  /** プレイ中だけスティック・カメラ・アクションのボタンを出す（一時停止・メニュー・ショット・時空移動の間は隠す） */
   setPlaying(on: boolean): void {
     if (on === this.playing) return
     this.playing = on
@@ -192,8 +205,25 @@ export class TouchControls {
     }
   }
 
-  /** キー案内からボタンの文字・表示を決め、画面下に出す案内（タッチ用の言い方）を返す */
-  applyHints(hints: readonly Hint[], ctx: TouchHintContext): Hint[] {
+  /** 一時停止・メニューの画面が出ている（画面のタップで閉じる。その間は一時停止・メニューのボタンを隠す） */
+  setOverlay(kind: 'pause' | 'menu' | null): void {
+    if (kind === this.overlay) return
+    this.overlay = kind
+    this.root.classList.toggle('overlay', kind !== null)
+  }
+
+  /** 演出・選択肢などで操作が止まっている間は「ジャンプ」「切替」を隠す（「次へ」「決定」は出したまま） */
+  setLocked(on: boolean): void {
+    if (on === this.locked) return
+    this.locked = on
+    this.root.classList.toggle('locked', on)
+  }
+
+  /**
+   * キー案内からボタンの文字・表示を決める。返すのは画面下に出す案内（タッチ用の言い方）と、
+   * HUD の右腕の輪（つかむボタン）に出す言葉
+   */
+  applyHints(hints: readonly Hint[], ctx: TouchHintContext): { hud: Hint[]; claw: string } {
     const v = touchHintView(hints, ctx)
     const key = JSON.stringify(v.labels)
     if (key !== this.viewKey) {
@@ -203,16 +233,10 @@ export class TouchControls {
         this.buttons[b.id].hidden = label === null
         if (label !== null && this.labels[b.id].textContent !== label) {
           this.labels[b.id].textContent = label
-          this.labels[b.id].classList.toggle('long', label.length > 4)
+          this.buttons[b.id].classList.toggle('long', [...label].length > 4)
         }
       }
     }
-    return v.hud
-  }
-
-  /** 「つかむ」の光り方：照準が対象に合っている（金）・ワイヤーを使っている（強い水色） */
-  setClawState(ready: boolean, active: boolean): void {
-    this.buttons.claw.classList.toggle('ready', ready && !active)
-    this.buttons.claw.classList.toggle('active', active)
+    return { hud: v.hud, claw: v.labels.claw ?? 'つかむ' }
   }
 }

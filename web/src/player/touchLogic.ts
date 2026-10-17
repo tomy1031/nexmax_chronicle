@@ -68,15 +68,18 @@ export function stickVector(dx: number, dy: number, cfg: typeof TOUCH_TUNING = T
 export type TouchButtonId = 'claw' | 'jump' | 'interact' | 'lock'
 
 export type TouchHintView = {
-  /** 各ボタンの文字。null は隠す */
+  /** 各ボタンの文字。null は隠す（つかむ・ジャンプは常に出す） */
   labels: Record<TouchButtonId, string | null>
-  /** 画面下に出す案内（キー名は使わない） */
+  /** 画面下に出す案内（キー名は使わない。key は指の動きの名前） */
   hud: Hint[]
 }
 
 export type TouchHintContext = {
-  /** 近くに話せる相手がいる */
-  canInteract: boolean
+  /**
+   * その場で「話す・調べる」ボタン（F）に反応するものの言葉（「話す」「IDO の QR を読む」など）。無ければ null。
+   * 照準の案内が優先されて案内に F が無いときでも、ボタンは出しておくために使う
+   */
+  interact: string | null
   /** 狙える対象が複数あって切り替えられる */
   canSwitch: boolean
 }
@@ -89,12 +92,14 @@ const KEY_GESTURE: Partial<Record<string, string>> = {
   WASD: 'スティック',
   '↑↓←→': '右側をなぞる',
   Shift: '大きく倒す',
+  'A/D': 'スティック左右',
+  'W／S': 'スティック上下',
 }
 
 /**
  * キーボード用の案内をタッチ用に読み替える。ボタンに載せられるもの（J・Space・F・R）はボタンの文字に、
- * 移動・カメラ・ダッシュは指の動きの案内にする。Esc などは画面のボタンがあるので出さない。
- * 「話す」「切替」は使えるときだけ出す（案内の有無ではなく状況で決める）。
+ * 移動・カメラ・ダッシュ・揺らす・選ぶは指の動きの案内にする。Esc などは画面のボタンがあるので出さない。
+ * 「話す」「切替」は使えるときだけ出す。
  */
 export function touchHintView(hints: readonly Hint[], ctx: TouchHintContext): TouchHintView {
   const fromKey: Partial<Record<TouchButtonId, string>> = {}
@@ -112,14 +117,39 @@ export function touchHintView(hints: readonly Hint[], ctx: TouchHintContext): To
     labels: {
       claw: fromKey.claw ?? 'つかむ',
       jump: fromKey.jump ?? 'ジャンプ',
-      interact: ctx.canInteract ? (fromKey.interact ?? '話す') : null,
+      interact: fromKey.interact ?? ctx.interact,
       lock: ctx.canSwitch ? (fromKey.lock ?? '切替') : null,
     },
     hud,
   }
 }
 
-/** 目的の説明文にあるキーの言い方をタッチ用にする（「J でつかむ」→「「つかむ」をタップ」） */
+/**
+ * 目的の説明・台詞にあるキーの言い方をタッチ用にする（順に当てる）。英字の途中（QR・IDO など）には当てない。
+ * 「KEY：言葉」（目的の補足）と「KEY で…」（台詞）の両方の形を読み替える。
+ */
+const TEXT_RULES: Array<[RegExp, string]> = [
+  // 目的の補足：「WASD：移動　Space：ジャンプ」など
+  [/WASD：/g, '左側をなぞって'],
+  [/↑↓←→：/g, '右側をなぞって'],
+  [/A\/D：/g, 'スティックを左右に倒して'],
+  [/Shift：/g, 'スティックを大きく倒して'],
+  [/(^|[^A-Za-z0-9])(?:J|F|R|Space)：([^\s　]+)/g, '$1「$2」'],
+  // 「J でつかむ」「J で離す」→ ボタンを押す言い方
+  [/(^|[^A-Za-z0-9])J ?で(つかむ|離す)/g, '$1「$2」をタップ'],
+  // 台詞：「J で引き寄せて」「A と D で勢いをつけて」「Space で飛んで」「F を押すと」「F で QR を読んで」「近づいて F や」
+  [/(^|[^A-Za-z0-9])J ?で/g, '$1「つかむ」で'],
+  [/(^|[^A-Za-z0-9])Space ?で/g, '$1「ジャンプ」で'],
+  [/(^|[^A-Za-z0-9])A ?と ?D ?で/g, '$1スティックを左右に倒して'],
+  [/(^|[^A-Za-z0-9])F ?を押/g, '$1画面のボタンを押'],
+  // 目的の補足の終わり：「ラボの作業台で F」
+  [/で ?F(?=$|[\s　。、！])/g, 'でボタンをタップ'],
+  [/(^|[^A-Za-z0-9])F ?で/g, '$1画面のボタンで'],
+  [/(^|[^A-Za-z0-9])F ?や/g, '$1ボタンを押すんや'],
+]
+
 export function toTouchText(text: string): string {
-  return text.replace(/J で(つかむ|離す)/g, '「$1」をタップ')
+  let t = text
+  for (const [re, to] of TEXT_RULES) t = t.replace(re, to)
+  return t
 }

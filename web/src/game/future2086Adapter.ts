@@ -46,7 +46,7 @@ type Mods = {
   matM: typeof import('../stages/future2086/fmaterials')
 }
 
-/** 選択肢（W/S・↑↓ で選び、F／J で決定） */
+/** 選択肢（W/S・↑↓ で選び、F／J で決定。スマホでは選択肢をタップすると選んで決定） */
 class ChoiceBox {
   private el: HTMLDivElement | null = null
   private opts: Array<{ id: string; label: string }> = []
@@ -54,6 +54,8 @@ class ChoiceBox {
   private prompt = ''
   id = ''
   private lastY = 0
+  /** タップされた（次のフレームの update で決定する） */
+  private tapped = false
 
   get open(): boolean {
     return this.el !== null
@@ -67,13 +69,30 @@ class ChoiceBox {
     this.sel = 0
     this.el = document.createElement('div')
     this.el.className = 'game-choice'
+    this.tapped = false
+    // タップ（スマホだけ押せる。PC では選択肢の箱がポインタを受け取らない）
+    this.el.addEventListener('pointerdown', (e) => {
+      const o = (e.target as HTMLElement).closest<HTMLElement>('.gc-opt')
+      if (!o) return
+      e.preventDefault()
+      this.sel = Number(o.dataset.i)
+      this.tapped = true
+      this.render()
+    })
     ui.appendChild(this.el)
     this.render()
   }
 
+  /** タップで決まったか（1 回だけ true） */
+  takeTap(): boolean {
+    const t = this.tapped
+    this.tapped = false
+    return t && this.el !== null
+  }
+
   private render(): void {
     if (!this.el) return
-    this.el.innerHTML = `<div class="gc-title">${this.prompt}</div>${this.opts.map((o, i) => `<div class="gc-opt${i === this.sel ? ' on' : ''}">${i === this.sel ? '▶ ' : ''}${o.label}</div>`).join('')}<div class="gc-foot">W／S：選ぶ　F：決定</div>`
+    this.el.innerHTML = `<div class="gc-title">${this.prompt}</div>${this.opts.map((o, i) => `<div class="gc-opt${i === this.sel ? ' on' : ''}" data-i="${i}">${i === this.sel ? '▶ ' : ''}${o.label}</div>`).join('')}<div class="gc-foot">W／S：選ぶ　F：決定</div>`
   }
 
   /** move.y / look.y の押し始めで選ぶ */
@@ -319,11 +338,15 @@ class Future2086Stage implements Stage {
     return best
   }
 
+  private pickChoice(): void {
+    const id = this.choice.id
+    const opt = this.choice.pick()
+    if (opt) this.story.send({ kind: 'choice', id, option: opt })
+  }
+
   interact(rt: StageRuntime): boolean {
     if (this.choice.open) {
-      const id = this.choice.id
-      const opt = this.choice.pick()
-      if (opt) this.story.send({ kind: 'choice', id, option: opt })
+      this.pickChoice()
       return true
     }
     if (this.blocked) return true
@@ -369,6 +392,7 @@ class Future2086Stage implements Stage {
 
   update(dt: number, frame: ActionFrame, rt: StageRuntime): void {
     if (this.choice.open) this.choice.input(frame)
+    if (this.choice.takeTap()) this.pickChoice()
     rt.setControlLocked(this.blocked)
     this.story.send({ kind: 'tick', dt })
     const z = this.fs.zoneAt(rt.player.position)

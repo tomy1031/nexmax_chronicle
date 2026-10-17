@@ -101,7 +101,7 @@ describe("inputActions: タッチの割り当て", () => {
 });
 
 describe("touchLogic: キー案内 → タッチ", () => {
-  const none = { canInteract: false, canSwitch: false };
+  const none = { interact: null, canSwitch: false };
   const START = [
     { key: "WASD", label: "移動" },
     { key: "↑↓←→", label: "カメラ" },
@@ -133,15 +133,43 @@ describe("touchLogic: キー案内 → タッチ", () => {
   it("「話す」「切替」は使えるときだけ出す", () => {
     expect(touchHintView([], none).labels.interact).toBeNull();
     expect(touchHintView([], none).labels.lock).toBeNull();
-    const v = touchHintView([{ key: "J", label: "つかむ" }, { key: "R", label: "対象を切替" }], { canInteract: true, canSwitch: true });
+    // 照準の案内が優先されて F が無くても、その場で反応するものがあれば出す
+    const v = touchHintView([{ key: "J", label: "つかむ" }, { key: "R", label: "対象を切替" }], { interact: "話す", canSwitch: true });
     expect(v.labels.interact).toBe("話す");
     expect(v.labels.lock).toBe("対象を切替");
     expect(v.hud).toEqual([]);
+  });
+
+  it("話すボタンの言葉は案内（会話の「次へ」・選択肢の「決定」・ステージの言葉）に従う", () => {
+    expect(touchHintView([{ key: "F", label: "次へ" }], none).labels.interact).toBe("次へ");
+    expect(touchHintView([{ key: "F", label: "IDO の QR を読む" }], none).labels.interact).toBe("IDO の QR を読む");
+    const choice = touchHintView([{ key: "W／S", label: "選ぶ" }, { key: "F", label: "決定" }], none);
+    expect(choice.labels.interact).toBe("決定");
+    expect(choice.hud).toEqual([{ key: "スティック上下", label: "選ぶ" }]);
+    expect(touchHintView([{ key: "A/D", label: "揺らす" }], none).hud).toEqual([{ key: "スティック左右", label: "揺らす" }]);
   });
 
   it("目的の説明の「J で…」をタッチの言い方にする", () => {
     expect(toTouchText("桟橋から照準を歯車へ向けて J でつかむ")).toBe("桟橋から照準を歯車へ向けて 「つかむ」をタップ");
     expect(toTouchText("舟が通り過ぎたら J で離す")).toBe("舟が通り過ぎたら 「離す」をタップ");
     expect(toTouchText("源兵衛が歯止めを入れている")).toBe("源兵衛が歯止めを入れている");
+  });
+
+  it("目的の補足の「KEY：言葉」をタッチの言い方にする", () => {
+    expect(toTouchText("WASD：移動　↑↓←→：カメラ　Space：ジャンプ")).toBe("左側をなぞって移動　右側をなぞってカメラ　「ジャンプ」");
+    expect(toTouchText("ソラの近くで F：話す")).toBe("ソラの近くで 「話す」");
+    expect(toTouchText("北の端のアーチ　J：ぶら下がる　A/D：揺らす　Space：離脱")).toBe("北の端のアーチ　「ぶら下がる」　スティックを左右に倒して揺らす　「離脱」");
+    expect(toTouchText("赤い輪に破片が落ちる　Shift：ダッシュ　Space：ジャンプ")).toBe("赤い輪に破片が落ちる　スティックを大きく倒してダッシュ　「ジャンプ」");
+    expect(toTouchText("ラボの作業台で F")).toBe("ラボの作業台でボタンをタップ");
+    expect(toTouchText("IDOマーカーの光で F")).toBe("IDOマーカーの光でボタンをタップ");
+  });
+
+  it("台詞の「KEY で…」をタッチの言い方にする（英字の途中には当てない）", () => {
+    expect(toTouchText("照準を合わせて J で引き寄せてみて。")).toBe("照準を合わせて 「つかむ」で引き寄せてみて。");
+    expect(toTouchText("吊り輪にぶら下がって、A と D で勢いをつけて、Space で飛んで！")).toBe("吊り輪にぶら下がって、スティックを左右に倒して勢いをつけて、「ジャンプ」で飛んで！");
+    expect(toTouchText("展示のリングの前で F を押すと、記録を選べるよ。")).toBe("展示のリングの前で 画面のボタンを押すと、記録を選べるよ。");
+    expect(toTouchText("この石の標識が IDO や。F で QR を読んでみ。")).toBe("この石の標識が IDO や。画面のボタンで QR を読んでみ。");
+    expect(toTouchText("水路沿いの石の標識……IDOを調べてみて。近づいて F や。")).toBe("水路沿いの石の標識……IDOを調べてみて。近づいて ボタンを押すんや。");
+    expect(toTouchText("IDO の QR を読む")).toBe("IDO の QR を読む");
   });
 });

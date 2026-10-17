@@ -93,6 +93,12 @@ export class AdaptiveResolution {
     this.ratio = max
   }
 
+  private fastWindows = 0
+
+  /**
+   * 1.5 秒ごとの平均で解像度を上下させる。解像度を変えるとレンダーターゲットを作り直すため一瞬止まる。
+   * 何度も上げ下げして引っかからないよう、下げるのは素早く（大きく）、上げるのは「余裕のある状態が続いたとき」だけにする。
+   */
   sample(dt: number): void {
     this.acc += dt
     this.frames++
@@ -103,11 +109,23 @@ export class AdaptiveResolution {
     this.frames = 0
     if (this.cooldown > 0) return
     let next = this.ratio
-    if (avg > 1 / 45) next = Math.max(this.min, this.ratio - 0.15)
-    else if (avg < 1 / 58 && this.ratio < this.max) next = Math.min(this.max, this.ratio + 0.1)
+    if (avg > 1 / 40) {
+      next = Math.max(this.min, this.ratio - 0.25)
+      this.fastWindows = 0
+    } else if (avg > 1 / 50) {
+      next = Math.max(this.min, this.ratio - 0.1)
+      this.fastWindows = 0
+    } else if (avg < 1 / 62) {
+      this.fastWindows++
+      if (this.fastWindows >= 3 && this.ratio < this.max) {
+        next = Math.min(this.max, this.ratio + 0.1)
+        this.fastWindows = 0
+      }
+    } else this.fastWindows = 0
+    next = Math.round(next * 100) / 100
     if (next !== this.ratio) {
       this.ratio = next
-      this.cooldown = 2
+      this.cooldown = 4
       this.apply(next)
     }
   }

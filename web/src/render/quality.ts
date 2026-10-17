@@ -16,7 +16,8 @@ export function readParams(): { quality: QualitySettings; shot: string | null; f
   const level: QualityLevel = p.get('quality') === 'low' ? 'low' : 'high'
   const quality: QualitySettings =
     level === 'high'
-      ? { level, shadowMapSize: 2048, maxPixelRatio: 1.5, ao: true, aoHalfRes: false, bloom: true, petals: 700 }
+      ? // Retina でも描画解像度は 1.25 倍まで・AO は半分の解像度（M1 実機で 25fps 前後しか出なかったため）
+        { level, shadowMapSize: 2048, maxPixelRatio: 1.25, ao: true, aoHalfRes: true, bloom: true, petals: 600 }
       : { level, shadowMapSize: 1024, maxPixelRatio: 1.0, ao: true, aoHalfRes: true, bloom: true, petals: 250 }
   const shot = p.get('shot')
   return { quality, shot, fixedRatio: shot !== null || p.has('fixed') }

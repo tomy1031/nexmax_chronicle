@@ -79,6 +79,13 @@ type Active = {
   rt: StageRuntime
 }
 
+/** 時代ごとに登場する話者（HUD の顔アイコンを読み込み時に先に作る） */
+const SPEAKERS_BY_STAGE: Partial<Record<StageKey, string[]>> = {
+  '1726': ['源兵衛', 'おはる'],
+  '2026': ['マツイ社長', '佐伯'],
+  '2086': ['ソラ'],
+}
+
 export class Game {
   private readonly app: HTMLDivElement
   private readonly q: QualitySettings
@@ -254,6 +261,8 @@ export class Game {
   private async loadStage(key: StageKey, spawnId: string | null, from: StageKey | null, progress: (p: number, msg: string) => void, initial = false): Promise<void> {
     const stage = await createStage(key)
     this.hud.setEra(stage.label)
+    // その時代の話者アイコンを先に作っておく（初めて話したときに止まらないように）
+    this.hud.preloadSpeakers(SPEAKERS_BY_STAGE[key] ?? [])
     const loadCtx: StageLoadContext = {
       renderer: this.renderer,
       quality: this.q,
@@ -722,7 +731,9 @@ export class Game {
     this.oreGlow = Math.max(0, this.oreGlow - dt * 0.5)
     applyRigOreGlow(nexmax, this.oreGlow)
 
-    // HUD
+    // HUD（左上の顔は本物のモデル：ポーズで表情、鉱石の光で縁が光る）
+    hud.setPlayerPose(pose)
+    hud.setOreGlow(this.oreGlow)
     hud.setHints(this.computeHints(a))
     const o = stage.objective(rt)
     hud.setObjective(o.title, o.sub)

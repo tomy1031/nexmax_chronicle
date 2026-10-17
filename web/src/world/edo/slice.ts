@@ -1,6 +1,7 @@
 // 縦切り試作：1726年 大坂・仕掛け横丁（からくり水門）。
 // 読み込み → シーン構築 → 物理 → キャラクター → シェーダ事前コンパイル → ループ。
 // 操作はキーボードだけで完結（操作マニュアル v1.1）。入力 → アクション（inputActions）→ ゲーム処理。
+// スマホのときだけタッチ操作（touchInput）も足す。PC の操作・表示は変えない。
 import * as THREE from 'three'
 import { readParams } from '../../render/quality'
 import { createRenderer, createSunRig, AdaptiveResolution } from '../../render/renderer'
@@ -12,7 +13,9 @@ import { createPhysics } from '../../player/physics'
 import { PlayerController } from '../../player/controller'
 import { CameraRig } from '../../player/cameraRig'
 import { createInput } from '../../player/input'
-import { resolveActions, type ActionFrame } from '../../player/inputActions'
+import { KEYBOARD_BINDINGS, TOUCH_BINDINGS, resolveActions, type ActionFrame } from '../../player/inputActions'
+import { shouldUseTouch } from '../../player/touchLogic'
+import { TouchControls } from '../../player/touchInput'
 import { ClawSystem } from '../../player/clawSystem'
 import { TARGET_CATEGORY, type ClawTargetType } from '../../player/clawLogic'
 import { PART_NAMES, canOpenHub, clawArm, initialEquipment, selectArm } from '../../player/equipment'
@@ -121,6 +124,20 @@ export async function startEdoSlice(app: HTMLDivElement, ui: HTMLDivElement): Pr
   const hud = new Hud(ui)
   if (urlp.has('nohud')) ui.style.display = 'none'
   const input = createInput(renderer.domElement)
+  const useTouch = shouldUseTouch({
+    param: urlp.get('touch'),
+    coarse: matchMedia('(pointer: coarse)').matches,
+    hoverNone: matchMedia('(hover: none)').matches,
+    touchPoints: navigator.maxTouchPoints ?? 0,
+  })
+  // スマホではキーボード（つないだとき用）にタッチの割り当てを足す
+  const bindings = useTouch ? [...KEYBOARD_BINDINGS, ...TOUCH_BINDINGS] : KEYBOARD_BINDINGS
+  const touch = useTouch ? new TouchControls(ui, input) : null
+  if (touch) {
+    hud.setTouchMode(true)
+    touch.bindButton(hud.leftArmSlot, 'touch:armL')
+    document.documentElement.classList.add('touch-ui')
+  }
   const spawnInfo = SPAWNS[urlp.get('spawn') ?? 'street'] ?? SPAWNS.street
   const spawn = spawnInfo.pos.clone()
   const player = new PlayerController(phys, spawn)
@@ -427,8 +444,9 @@ export async function startEdoSlice(app: HTMLDivElement, ui: HTMLDivElement): Pr
     oharu.setPose(gs.signal === 'wait' ? 'hold' : gs.phase === GatePhase.ADJUSTING && gateFlow.logic.holding ? 'idle' : 'wave')
     if (gs.signal === 'wait') oharu.setAim(null)
 
-    // HUD
-    hud.setHints(computeHints())
+    // HUD（スマホではボタンの文字に載せ、残りを指の動きの案内として出す）
+    const hints = computeHints()
+    hud.setHints(touch ? touch.applyHints(hints, { canInteract: nearNpc() !== null, canSwitch: claw.candidateCount > 1 && claw.wire.phase === 'idle' }) : hints)
     const o = gateFlow.objective()
     hud.setObjective(o.title, o.sub)
     hud.setGate(gs.visible ? { progress: gs.progress, signal: gs.signal, signalText: gs.signalText, adjusting: gs.phase === GatePhase.ADJUSTING && gateFlow.logic.holding } : null)
@@ -482,7 +500,7 @@ export async function startEdoSlice(app: HTMLDivElement, ui: HTMLDivElement): Pr
     const dt = Math.min(timer.getDelta(), 0.1) * timeScale
     uTime.value += dt
     renderer.info.reset()
-    const frame = resolveActions(input)
+    const frame = resolveActions(input, bindings)
     lastFrame = frame
     // 開発用（操作案内には出さない）
     if (input.pressed.has('KeyP')) setMode(shotIndex + 1 >= SHOTS.length ? -1 : shotIndex + 1)
@@ -501,6 +519,7 @@ export async function startEdoSlice(app: HTMLDivElement, ui: HTMLDivElement): Pr
       focus.copy(player.position)
     }
     const frozen = shotIndex === -1 && (paused || menuOpen)
+    touch?.setPlaying(shotIndex === -1 && !frozen)
     const ndt = frozen ? 0 : dt
     nexmax.update(ndt, shotIndex === -1 ? player.speed : SHOTS[shotIndex].nexmax.pose === 'walk' ? 3.2 : 0)
     genbei.update(ndt, 0)
@@ -533,6 +552,7 @@ export async function startEdoSlice(app: HTMLDivElement, ui: HTMLDivElement): Pr
         right: { name: PART_NAMES.grapple_claw, holding: u.holdingLabel, selected: equipment.selected === 'right', active: u.phase !== 'idle' },
         left: { name: equipment.left ? PART_NAMES[equipment.left] : null, selected: equipment.selected === 'left' },
       })
+      touch?.setClawState(u.selected !== null, u.phase !== 'idle')
       if (frozen) hud.setHints([])
     }
     hud.tick(dt)

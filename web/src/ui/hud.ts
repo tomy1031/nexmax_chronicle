@@ -3,7 +3,10 @@
 // ・中央：照準。対象が無いときは小さな点、対象には種類ごとの形と色で吸い付き、輪郭の枠を出す
 // ・右下：選択中の NMClaw（右腕）と、つかんでいる対象　・左下：左腕の装備枠（初期は「装備なし」）
 // ・画面下：必要なときだけキー案内（キーボードのみ。マウスやコントローラーの表記は出さない）
+//   スマホ（setTouchMode）ではキー名を出さず、指の動きの案内とタッチ用の操作一覧にする
 // ・台詞（源兵衛・おはる）、短いお知らせ、水門パズルの進み具合、一時停止（操作一覧）、装備・記録メニュー
+
+import { toTouchText } from '../player/touchLogic'
 
 export type HudStats = { fps: number; ms: number; calls: number; tris: number; ratio: number; quality: string; textures: number; programs: number }
 
@@ -43,7 +46,22 @@ export const CONTROL_LIST: Array<[string, string]> = [
   ['Esc', '一時停止・操作一覧'],
 ]
 
-const CLAW_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 44 L26 30 M22 26 l8 8 M30 22 c6-8 18-8 22 0 M30 22 c2 10 10 14 20 12 M36 40 l8 8" stroke="currentColor" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`
+/** スマホの操作一覧（一時停止画面） */
+export const TOUCH_CONTROL_LIST: Array<[string, string]> = [
+  ['左側をなぞる', '移動（大きく倒すとダッシュ）'],
+  ['右側をなぞる', 'カメラ・照準の向き'],
+  ['つかむ', 'NMClaw を射出／もう一度で解除'],
+  ['ジャンプ', 'ジャンプ／ワイヤーから離脱'],
+  ['話す', '話す・調べる（近くにいるとき）'],
+  ['切替', '狙う対象を切り替える（候補が複数のとき）'],
+  ['左腕の枠', '左腕の装備を選ぶ'],
+  ['☰', '装備・記録'],
+  ['❚❚', '一時停止・操作一覧'],
+]
+
+const controlRows = (list: Array<[string, string]>) => list.map(([k, d]) => `<tr><td><kbd>${k}</kbd></td><td>${d}</td></tr>`).join('')
+
+export const CLAW_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 44 L26 30 M22 26 l8 8 M30 22 c6-8 18-8 22 0 M30 22 c2 10 10 14 20 12 M36 40 l8 8" stroke="currentColor" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`
 const HAND_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M22 46 V26 M30 44 V20 M38 44 V22 M46 44 V28 M22 46 c0 8 6 12 12 12 s14-4 14-12 V30" stroke="currentColor" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 
 const RETICLE_SHAPES: Record<ReticleCategory, string> = {
@@ -96,6 +114,8 @@ export class Hud {
   private bannerTimer = 0
   private armKey = ''
   private gateKey = ''
+  private touch = false
+  private objRaw = ['', '']
 
   constructor(ui: HTMLElement) {
     this.root = document.createElement('div')
@@ -154,7 +174,7 @@ export class Hud {
         <div class="panel">
           <div class="panel-title">一時停止</div>
           <div class="panel-sub">操作一覧（キーボード）</div>
-          <table class="controls">${CONTROL_LIST.map(([k, d]) => `<tr><td><kbd>${k}</kbd></td><td>${d}</td></tr>`).join('')}</table>
+          <table class="controls">${controlRows(CONTROL_LIST)}</table>
           <div class="panel-note">キー設定は今後のバージョンで対応します</div>
           <div class="panel-foot"><kbd>Esc</kbd>：ゲームに戻る</div>
         </div>
@@ -238,8 +258,28 @@ export class Hud {
   // ---------------------------------------------------------------- 左上
 
   setObjective(title: string, sub: string): void {
+    this.objRaw = [title, sub]
+    if (this.touch) sub = toTouchText(sub)
     if (this.objTitle.textContent !== title) this.objTitle.textContent = title
     if (this.objSub.textContent !== sub) this.objSub.textContent = sub
+  }
+
+  /** スマホのタッチ操作に合わせた表示にする（キー名を出さない・操作一覧をタッチ用に・腕の枠をボタンの邪魔にならない位置へ） */
+  setTouchMode(on: boolean): void {
+    this.touch = on
+    this.root.classList.toggle('touch', on)
+    el(this.pause, '.panel-sub').textContent = on ? '操作一覧（タッチ）' : '操作一覧（キーボード）'
+    el(this.pause, '.controls').innerHTML = controlRows(on ? TOUCH_CONTROL_LIST : CONTROL_LIST)
+    el(this.pause, '.panel-note').hidden = on
+    el(this.pause, '.panel-foot').innerHTML = on ? '<kbd>❚❚</kbd>：ゲームに戻る' : '<kbd>Esc</kbd>：ゲームに戻る'
+    el(this.menu, '.panel-foot').innerHTML = on ? '<kbd>☰</kbd>：閉じる' : '<kbd>Tab</kbd>：閉じる'
+    this.retLabelKey = ''
+    this.setObjective(this.objRaw[0], this.objRaw[1])
+  }
+
+  /** 左腕の枠（スマホではタップで左腕を選ぶ） */
+  get leftArmSlot(): HTMLElement {
+    return this.armL
   }
 
   setEra(text: string): void {
@@ -296,7 +336,9 @@ export class Hud {
     const key = `${label}|${s.candidates > 1 && !s.connected ? 1 : 0}|${s.locked ? 1 : 0}`
     if (key !== this.retLabelKey) {
       this.retLabelKey = key
-      this.retLabel.innerHTML = `${escapeHtml(label)}${s.candidates > 1 && !s.connected ? ` <span class="ret-lock">${s.locked ? 'ロック中' : ''} R：切替</span>` : ''}`
+      // スマホでは「切替」ボタンが出るので R の案内は出さない
+      const lock = s.candidates > 1 && !s.connected ? (this.touch ? (s.locked ? 'ロック中' : '') : `${s.locked ? 'ロック中' : ''} R：切替`) : ''
+      this.retLabel.innerHTML = `${escapeHtml(label)}${lock ? ` <span class="ret-lock">${lock}</span>` : ''}`
     }
   }
 
@@ -404,10 +446,12 @@ export class Hud {
 
   setPaused(on: boolean): void {
     this.pause.hidden = !on
+    this.root.classList.toggle('panel-open', !this.pause.hidden || !this.menu.hidden)
   }
 
   setMenu(on: boolean): void {
     this.menu.hidden = !on
+    this.root.classList.toggle('panel-open', !this.pause.hidden || !this.menu.hidden)
   }
 
   /** 毎フレーム：お知らせ・演出の時間切れ */

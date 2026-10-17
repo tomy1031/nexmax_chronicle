@@ -58,6 +58,24 @@ export const KEYBOARD_BINDINGS: readonly Binding[] = [
   btn('pause', 'Escape'),
 ]
 
+/**
+ * スマホのタッチ操作の割り当て（touchInput.ts が control を down/pressed/analog に入れる）。
+ * move は画面左側のスティック（analog：-1〜1）。look は画面右側のドラッグで、角度の増分として
+ * 入力層が直接カメラへ渡すため、ここには含めない。攻撃・異次元空間は実装後に足す。
+ */
+export const TOUCH_BINDINGS: readonly Binding[] = [
+  ax('move', 'touch:moveX', 'x', 1),
+  ax('move', 'touch:moveY', 'y', 1),
+  btn('dash', 'touch:dash'),
+  btn('jump', 'touch:jump'),
+  btn('claw_fire', 'touch:claw'),
+  btn('interact', 'touch:interact'),
+  btn('lock_switch', 'touch:lock'),
+  btn('select_left', 'touch:armL'),
+  btn('menu', 'touch:menu'),
+  btn('pause', 'touch:pause'),
+]
+
 /** 入力層が毎フレーム渡す生の状態（control 名の集合）。analog はスティック等の連続値（-1〜1） */
 export type RawInput = {
   down: ReadonlySet<string>

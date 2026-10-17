@@ -4,7 +4,7 @@ import { Batch, M, rbox } from '../../render/batch'
 import { TEX_METERS } from '../../render/materials'
 import { L } from './layout'
 import { WOOD, beamAB, crate, deck, lantern, post, railing, ropeCoil, stairs, woodBox, woodTint, barrel, type Ctx } from './kit'
-import { createFallMaterial, createFoamPatchMaterial, createSpray, fallSheet, mergeGroupByMaterial, type Emitter } from './water'
+import { createFallMaterial, createFoamPatchMaterial, createSpray, fallSheet, foamMound, mergeGroupByMaterial, type Emitter } from './water'
 
 export type GateParts = {
   gear: THREE.Group
@@ -120,15 +120,18 @@ export function buildGate(c: Ctx, scene: THREE.Group): GateParts {
   // ---------------------------------------------------------- 滝
   const falls = new THREE.Group()
   falls.name = 'falls'
-  const fallMatA = createFallMaterial(0.13, 1, 1.25)
-  const fallMatB = createFallMaterial(0.61, 0.65, 1.55)
-  const fallMatC = createFallMaterial(0.37, 1, 1.0)
+  // 3 層：芯（白く濃い）・外側の膜（少し膨らむ）・しぶきのヴェール（広く薄い）で厚みを出す
+  const fallMatA = createFallMaterial(0.13, 1, 1.25, 0.35, 0.03)
+  const fallMatB = createFallMaterial(0.61, 0.7, 1.55, 0.2, 0.05)
+  const fallMatC = createFallMaterial(0.37, 1, 1.0, 0.05, 0.0)
+  const fallMatV = createFallMaterial(0.83, 0.38, 1.9, 0.6, 0.08)
   for (let i = 0; i < 2; i++) {
     const zc = (POSTS_Z[i] + POSTS_Z[i + 1]) / 2
     const w = POSTS_Z[i + 1] - POSTS_Z[i] - 0.66
     // 一段目：堰板の上からエプロンへ
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 0.02, L.WL_UP + 0.04, zc), Math.PI, w, L.WL_UP - APRON_Y, 0.55), fallMatA))
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 0.06, L.WL_UP + 0.06, zc), Math.PI, w * 1.04, L.WL_UP - APRON_Y + 0.05, 0.72), fallMatB))
+    falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 0.1, L.WL_UP + 0.02, zc), Math.PI, w * 1.1, L.WL_UP - APRON_Y + 0.1, 0.95, 10, 6), fallMatV))
     // エプロン上の流れ
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 0.5, APRON_Y + 0.05, zc), Math.PI, w + 0.2, 0.04, GX - 0.5 - APRON_X0, 3, 6), fallMatC))
   }
@@ -139,12 +142,14 @@ export function buildGate(c: Ctx, scene: THREE.Group): GateParts {
     woodBox(c, GX - 0.75, 3.0, zc, 0.5, 0.14, w + 0.4, { tint: dark() })
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 0.95, 3.05, zc), Math.PI, w, 3.05 - APRON_Y, 0.6, 16, 14), fallMatA))
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 1.0, 3.08, zc), Math.PI, w + 0.15, 3.1 - APRON_Y, 0.85, 16, 14), fallMatB))
+    falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 1.05, 3.0, zc), Math.PI, w + 0.4, 3.1 - APRON_Y, 1.15, 12, 8), fallMatV))
   }
   // 二段目：エプロンの縁から水路へ（幅広）
   const wide = apronZ1 - apronZ0
   const zMid = (apronZ0 + apronZ1) / 2
   falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(APRON_X0, APRON_Y + 0.03, zMid), Math.PI, wide, APRON_Y - L.WL_DOWN, 0.55, 12, 16), fallMatA))
   falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(APRON_X0 - 0.04, APRON_Y + 0.05, zMid), Math.PI, wide * 1.03, APRON_Y - L.WL_DOWN + 0.05, 0.75, 12, 16), fallMatB))
+  falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(APRON_X0 - 0.08, APRON_Y + 0.02, zMid), Math.PI, wide * 1.06, APRON_Y - L.WL_DOWN + 0.1, 1.0, 8, 12), fallMatV))
   // 三つ目の区画：板の隙間から勢いよく吹き出す
   {
     const zc = (POSTS_Z[2] + POSTS_Z[3]) / 2
@@ -160,6 +165,7 @@ export function buildGate(c: Ctx, scene: THREE.Group): GateParts {
   troughs.forEach(([zc, ty, toY, w], i) => {
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 1.0, ty, zc), Math.PI, w - 0.15, ty - toY - 0.05, 0.55, 18, 6), fallMatA))
     falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 1.05, ty + 0.02, zc), Math.PI, w - 0.02, ty - toY, 0.72, 18, 6), fallMatB))
+    falls.add(new THREE.Mesh(fallSheet(new THREE.Vector3(GX - 1.1, ty - 0.05, zc), Math.PI, w + 0.25, ty - toY + 0.05, 0.95, 12, 5), fallMatV))
     const len = 14 + i * 3
     woodBox(c, GX - 1.05 + (len + 1.05) / 2, ty - 0.1, zc, len + 1.05, 0.14, w + 0.2, { tint: dark() })
     woodBox(c, GX - 1.05 + (len + 1.05) / 2, ty + 0.2, zc - (w + 0.1) / 2, len + 1.05, 0.6, 0.1, { tint: dark() })
@@ -191,22 +197,55 @@ export function buildGate(c: Ctx, scene: THREE.Group): GateParts {
   addFoam(GX - 0.8, (POSTS_Z[1] + POSTS_Z[2]) / 2, 1.5, 1.8, APRON_Y + 0.08, foamMat)
   addFoam(GX - 0.8, (POSTS_Z[0] + POSTS_Z[1]) / 2 + 0.2, 1.4, 1.6, APRON_Y + 0.08, foamMat2)
   addFoam(GX - 1.3, (POSTS_Z[2] + POSTS_Z[3]) / 2, 2.2, 2.0, L.WL_DOWN + 0.05, foamMat)
+  // 着水点の白い泡の盛り上がり（沸き立つ泡）
+  const G = L.GEAR
+  scene.add(foamMound(APRON_X0 - 0.75, L.WL_DOWN, zMid, 0.95, wide / 2 + 0.25, 0.42, 0.11))
+  scene.add(foamMound(APRON_X0 - 1.9, L.WL_DOWN, zMid - 0.3, 1.4, wide / 2 + 0.6, 0.18, 0.47, 0.8))
+  scene.add(foamMound(GX - 1.55, L.WL_DOWN, (POSTS_Z[2] + POSTS_Z[3]) / 2, 0.8, 0.9, 0.35, 0.29))
+  scene.add(foamMound(GX - 1.0, APRON_Y + 0.02, (POSTS_Z[1] + POSTS_Z[2]) / 2, 0.55, 0.85, 0.22, 0.63))
+  scene.add(foamMound(GX - 1.0, APRON_Y + 0.02, (POSTS_Z[0] + POSTS_Z[1]) / 2 + 0.15, 0.5, 0.75, 0.2, 0.91))
+  // 歯車が水を切るところ（両側の水際）と、歯車の足もとの泡
+  scene.add(foamMound(G.x, L.WL_DOWN, G.z, 0.85, 1.55, 0.38, 0.37))
+  for (const dz of [-0.8, 0.8]) scene.add(foamMound(G.x - 0.15, L.WL_DOWN, G.z + dz, 0.5, 0.45, 0.45, 0.5 + dz))
 
-  // しぶきと霧
+  // しぶき（芯のある細かい粒）・水煙（やわらかい中粒）・霧（大きく薄い）
   const q = c.quality.level === 'high' ? 1 : 0.5
+  const n = (k: number) => Math.round(k * q)
+  const gearSide = new THREE.Vector3(0, 0, 1)
   const em: Emitter[] = [
-    { pos: new THREE.Vector3(APRON_X0 - 0.7, L.WL_DOWN + 0.1, zMid), spread: new THREE.Vector3(0.5, 0.1, wide / 2), vel: new THREE.Vector3(-1.4, 2.6, 0), velJitter: 1.3, count: Math.round(420 * q), life: [0.5, 1.1], size: [0.15, 0.4], alpha: 0.85 },
-    { pos: new THREE.Vector3(GX - 0.75, APRON_Y + 0.1, zMid), spread: new THREE.Vector3(0.25, 0.05, wide / 2), vel: new THREE.Vector3(-0.8, 1.8, 0), velJitter: 0.9, count: Math.round(220 * q), life: [0.4, 0.9], size: [0.12, 0.3], alpha: 0.8 },
-    { pos: new THREE.Vector3(L.GEAR.x + 0.2, L.WL_DOWN + 0.1, L.GEAR.z), spread: new THREE.Vector3(0.5, 0.1, 1.3), vel: new THREE.Vector3(-0.8, 2.6, 0), velJitter: 1.4, count: Math.round(380 * q), life: [0.5, 1.1], size: [0.15, 0.42], alpha: 0.9 },
-    { pos: new THREE.Vector3(GX - 1.3, L.WL_DOWN + 0.1, (POSTS_Z[2] + POSTS_Z[3]) / 2), spread: new THREE.Vector3(0.5, 0.1, 0.6), vel: new THREE.Vector3(-1.2, 2.4, 0), velJitter: 1.2, count: Math.round(200 * q), life: [0.5, 1.1], size: [0.15, 0.4], alpha: 0.85 },
-    { pos: new THREE.Vector3(GX - 1.5, APRON_Y + 0.15, (POSTS_Z[0] + POSTS_Z[2]) / 2), spread: new THREE.Vector3(0.3, 0.05, 2.2), vel: new THREE.Vector3(-1.0, 2.6, 0), velJitter: 1.2, count: Math.round(260 * q), life: [0.5, 1.0], size: [0.15, 0.4], alpha: 0.85 },
+    { pos: new THREE.Vector3(APRON_X0 - 0.7, L.WL_DOWN + 0.1, zMid), spread: new THREE.Vector3(0.5, 0.1, wide / 2), vel: new THREE.Vector3(-1.5, 2.8, 0), velJitter: 1.4, count: n(900), life: [0.45, 1.0], size: [0.07, 0.2], alpha: 0.95 },
+    { pos: new THREE.Vector3(GX - 0.75, APRON_Y + 0.1, zMid), spread: new THREE.Vector3(0.25, 0.05, wide / 2), vel: new THREE.Vector3(-0.9, 1.9, 0), velJitter: 1.0, count: n(420), life: [0.35, 0.8], size: [0.05, 0.12], alpha: 0.9 },
+    { pos: new THREE.Vector3(G.x + 0.2, L.WL_DOWN + 0.1, G.z), spread: new THREE.Vector3(0.45, 0.1, 1.2), vel: new THREE.Vector3(-0.8, 2.8, 0), velJitter: 1.5, count: n(700), life: [0.45, 1.0], size: [0.08, 0.22], alpha: 0.95 },
+    { pos: new THREE.Vector3(GX - 1.3, L.WL_DOWN + 0.1, (POSTS_Z[2] + POSTS_Z[3]) / 2), spread: new THREE.Vector3(0.5, 0.1, 0.6), vel: new THREE.Vector3(-1.2, 2.5, 0), velJitter: 1.2, count: n(380), life: [0.45, 1.0], size: [0.05, 0.13], alpha: 0.9 },
+    { pos: new THREE.Vector3(GX - 1.5, APRON_Y + 0.15, (POSTS_Z[0] + POSTS_Z[2]) / 2), spread: new THREE.Vector3(0.3, 0.05, 2.2), vel: new THREE.Vector3(-1.0, 2.6, 0), velJitter: 1.2, count: n(480), life: [0.45, 0.95], size: [0.05, 0.13], alpha: 0.9 },
   ]
-  scene.add(createSpray(em, 1.0, new THREE.Color(1.5, 1.62, 1.7), 3))
+  // 歯車が水を切る両側で、回転の向きへ跳ね上がるしぶき
+  for (const s2 of [-1, 1]) {
+    em.push({
+      pos: new THREE.Vector3(G.x - 0.05, L.WL_DOWN + 0.05, G.z + s2 * 0.8),
+      spread: new THREE.Vector3(0.25, 0.05, 0.2),
+      vel: gearSide.clone().multiplyScalar(s2 * 0.9).add(new THREE.Vector3(-0.6, 3.0, 0)),
+      velJitter: 1.1,
+      count: n(380),
+      life: [0.4, 0.9],
+      size: [0.08, 0.24],
+      alpha: 0.95,
+    })
+  }
+  scene.add(createSpray(em, 1.0, new THREE.Color(1.55, 1.65, 1.72), 3, 0.15))
+  const puffs: Emitter[] = [
+    { pos: new THREE.Vector3(APRON_X0 - 0.8, L.WL_DOWN + 0.15, zMid), spread: new THREE.Vector3(0.5, 0.1, wide / 2), vel: new THREE.Vector3(-0.9, 1.8, 0), velJitter: 0.8, count: n(160), life: [0.7, 1.4], size: [0.45, 1.0], alpha: 0.55 },
+    { pos: new THREE.Vector3(G.x, L.WL_DOWN + 0.15, G.z), spread: new THREE.Vector3(0.45, 0.1, 1.2), vel: new THREE.Vector3(-0.5, 1.8, 0), velJitter: 0.8, count: n(140), life: [0.7, 1.4], size: [0.45, 1.0], alpha: 0.55 },
+    { pos: new THREE.Vector3(GX - 1.4, L.WL_DOWN + 0.15, (POSTS_Z[2] + POSTS_Z[3]) / 2), spread: new THREE.Vector3(0.4, 0.1, 0.6), vel: new THREE.Vector3(-0.7, 1.4, 0), velJitter: 0.6, count: n(50), life: [0.7, 1.3], size: [0.3, 0.7], alpha: 0.4 },
+    { pos: new THREE.Vector3(GX - 1.2, APRON_Y + 0.15, (POSTS_Z[0] + POSTS_Z[2]) / 2), spread: new THREE.Vector3(0.3, 0.1, 2.0), vel: new THREE.Vector3(-0.6, 1.3, 0), velJitter: 0.6, count: n(80), life: [0.7, 1.3], size: [0.3, 0.7], alpha: 0.4 },
+  ]
+  scene.add(createSpray(puffs, 1.0, new THREE.Color(1.4, 1.48, 1.55), 5, 0.75))
   const mist: Emitter[] = [
-    { pos: new THREE.Vector3(APRON_X0 - 1.5, L.WL_DOWN + 0.5, zMid), spread: new THREE.Vector3(1.4, 0.4, wide / 2 + 0.5), vel: new THREE.Vector3(-0.3, 0.5, 0), velJitter: 0.25, count: Math.round(40 * q), life: [2.5, 4.5], size: [2.0, 3.5], alpha: 0.13 },
-    { pos: new THREE.Vector3(GX - 1.2, APRON_Y + 0.6, zMid), spread: new THREE.Vector3(0.6, 0.6, wide / 2), vel: new THREE.Vector3(-0.2, 0.4, 0), velJitter: 0.2, count: Math.round(24 * q), life: [2.5, 4.0], size: [1.6, 2.6], alpha: 0.1 },
+    { pos: new THREE.Vector3(APRON_X0 - 1.5, L.WL_DOWN + 0.5, zMid), spread: new THREE.Vector3(1.4, 0.4, wide / 2 + 0.5), vel: new THREE.Vector3(-0.3, 0.5, 0), velJitter: 0.25, count: n(50), life: [2.5, 4.5], size: [2.0, 3.8], alpha: 0.16 },
+    { pos: new THREE.Vector3(GX - 1.2, APRON_Y + 0.6, zMid), spread: new THREE.Vector3(0.6, 0.6, wide / 2), vel: new THREE.Vector3(-0.2, 0.4, 0), velJitter: 0.2, count: n(30), life: [2.5, 4.0], size: [1.6, 2.8], alpha: 0.12 },
+    { pos: new THREE.Vector3(G.x, L.WL_DOWN + 0.4, G.z), spread: new THREE.Vector3(0.8, 0.3, 1.3), vel: new THREE.Vector3(-0.2, 0.45, 0), velJitter: 0.2, count: n(24), life: [2.0, 3.5], size: [1.5, 2.6], alpha: 0.12 },
   ]
-  scene.add(createSpray(mist, 1.0, new THREE.Color(1.15, 1.22, 1.3), 9))
+  scene.add(createSpray(mist, 1.0, new THREE.Color(1.15, 1.22, 1.3), 9, 1))
 
   // ---------------------------------------------------------- 源兵衛の作業台・桟橋・ボードウォーク
   const P = L.PLATFORM

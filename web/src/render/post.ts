@@ -1,6 +1,6 @@
-// 後処理：N8AO（環境遮蔽）→ ブルーム＋色調（露出・ACES・彩度・コントラスト・暖色・周辺減光）→ SMAA。
+// 後処理：N8AO（環境遮蔽）→ 層状のかすみ（距離と高さ）→ ブルーム＋色調（露出・ACES・彩度・コントラスト・暖色・周辺減光）→ SMAA。
 import * as THREE from 'three'
-import { BloomEffect, BlendFunction, Effect, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing'
+import { BloomEffect, BlendFunction, Effect, EffectAttribute, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import type { QualitySettings } from './quality'
 
@@ -57,17 +57,85 @@ export class GradeEffect extends Effect {
       blendFunction: BlendFunction.SRC,
       uniforms: new Map<string, THREE.Uniform>([
         ['gExposure', new THREE.Uniform(1.0)],
-        ['gSaturation', new THREE.Uniform(1.22)],
+        ['gSaturation', new THREE.Uniform(1.27)],
         ['gContrast', new THREE.Uniform(1.1)],
         ['gVignette', new THREE.Uniform(0.32)],
-        ['gLift', new THREE.Uniform(new THREE.Vector3(0.03, 0.015, 0.0))],
-        ['gGain', new THREE.Uniform(new THREE.Vector3(1.03, 1.0, 0.96))],
+        ['gLift', new THREE.Uniform(new THREE.Vector3(0.035, 0.018, 0.0))],
+        ['gGain', new THREE.Uniform(new THREE.Vector3(1.05, 1.0, 0.94))],
       ]),
     })
   }
 
   set(name: 'gExposure' | 'gSaturation' | 'gContrast' | 'gVignette', v: number): void {
     ;(this.uniforms.get(name) as THREE.Uniform).value = v
+  }
+}
+
+// ------------------------------------------------------------------ 層状のかすみ（空気遠近）
+
+const hazeFrag = /* glsl */ `
+uniform vec3 hCamPos;
+uniform mat3 hCamRot;
+uniform vec2 hTan;
+uniform vec3 hNear;
+uniform vec3 hFar;
+uniform float hDensity;
+uniform float hStart;
+uniform float hFalloff;
+uniform float hMax;
+
+void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+  if (depth >= 0.999999) {
+    outputColor = inputColor;
+    return;
+  }
+  float vz = getViewZ(depth);
+  vec2 ndc = uv * 2.0 - 1.0;
+  vec3 vp = vec3(ndc * hTan, -1.0) * (-vz);
+  float dist = length(vp);
+  vec3 wp = hCamPos + hCamRot * vp;
+  // 近くは澄んで、遠くほど（低いところほど）かすむ
+  float d = max(dist - hStart, 0.0);
+  float f = 1.0 - exp(-d * hDensity);
+  float low = exp(-max(wp.y, 0.0) * hFalloff);
+  float amt = clamp(f * mix(0.15, 1.0, low), 0.0, 1.0) * hMax;
+  // 中景は暖かい金色のかすみ、遠景は空の青へ
+  vec3 col = mix(hNear, hFar, smoothstep(90.0, 360.0, dist));
+  outputColor = vec4(mix(inputColor.rgb, col, amt), inputColor.a);
+}
+`
+
+export class HazeEffect extends Effect {
+  private readonly camera: THREE.PerspectiveCamera
+  private readonly rot = new THREE.Matrix3()
+
+  constructor(camera: THREE.PerspectiveCamera) {
+    super('HazeEffect', hazeFrag, {
+      attributes: EffectAttribute.DEPTH,
+      blendFunction: BlendFunction.SRC,
+      uniforms: new Map<string, THREE.Uniform>([
+        ['hCamPos', new THREE.Uniform(new THREE.Vector3())],
+        ['hCamRot', new THREE.Uniform(new THREE.Matrix3())],
+        ['hTan', new THREE.Uniform(new THREE.Vector2(1, 1))],
+        ['hNear', new THREE.Uniform(new THREE.Color(0.95, 0.88, 0.78))],
+        ['hFar', new THREE.Uniform(new THREE.Color(0.56, 0.75, 0.98))],
+        ['hDensity', new THREE.Uniform(0.0034)],
+        ['hStart', new THREE.Uniform(60)],
+        ['hFalloff', new THREE.Uniform(0.03)],
+        ['hMax', new THREE.Uniform(0.7)],
+      ]),
+    })
+    this.camera = camera
+  }
+
+  update(): void {
+    const cam = this.camera
+    const u = this.uniforms
+    ;(u.get('hCamPos') as THREE.Uniform).value.setFromMatrixPosition(cam.matrixWorld)
+    this.rot.setFromMatrix4(cam.matrixWorld)
+    ;(u.get('hCamRot') as THREE.Uniform).value.copy(this.rot)
+    const ty = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) / cam.zoom
+    ;(u.get('hTan') as THREE.Uniform).value.set(ty * cam.aspect, ty)
   }
 }
 
@@ -100,11 +168,12 @@ export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
     mipmapBlur: true,
     luminanceThreshold: 0.95,
     luminanceSmoothing: 0.35,
-    intensity: q.bloom ? 1.1 : 0,
+    intensity: q.bloom ? 1.2 : 0,
     radius: 0.72,
   })
   const grade = new GradeEffect()
-  composer.addPass(new EffectPass(camera, bloom, grade))
+  const haze = new HazeEffect(camera)
+  composer.addPass(new EffectPass(camera, haze, bloom, grade))
   const smaa = new SMAAEffect({ preset: q.level === 'high' ? SMAAPreset.HIGH : SMAAPreset.MEDIUM })
   composer.addPass(new EffectPass(camera, smaa))
   return {

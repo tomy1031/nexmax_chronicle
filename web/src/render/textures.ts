@@ -674,6 +674,11 @@ export function paintLantern(kind: 'cream' | 'red', S = 512): Painted {
       [ctx, crest],
       [ectx, kind === 'cream' ? '#5a1a10' : '#ffe2c8'],
     ] as Array<[CanvasRenderingContext2D, string]>) {
+      if (kind === 'red' && u > 0.5) {
+        // 赤提灯の裏側は筆文字の「祭」
+        drawLettering(cx2, { text: '祭', vertical: true, x: u * S - S * 0.1, y: S * 0.22, w: S * 0.2, h: S * 0.56, ink: col, squashX: 1 / 0.37, maxSize: S * 0.5 })
+        continue
+      }
       cx2.save()
       cx2.translate(u * S, S * 0.5)
       cx2.scale(0.37, 1)
@@ -740,11 +745,7 @@ export function paintFabric(design: FabricDesign): Painted {
       drawTomoe(ctx, W / 2, Hh * 0.52, W * 0.2, white)
       break
     case 'whiteTea':
-      ctx.fillStyle = indigo
-      ctx.font = `bold ${W * 0.42}px "Hiragino Mincho ProN","Yu Mincho","YuMincho",serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('茶', W / 2, Hh * 0.55)
+      drawLettering(ctx, { text: '茶', vertical: true, x: W * 0.28, y: Hh * 0.3, w: W * 0.44, h: Hh * 0.5, ink: indigo })
       break
     case 'waveBanner':
       ctx.fillStyle = white
@@ -757,12 +758,10 @@ export function paintFabric(design: FabricDesign): Painted {
       drawGear(ctx, W / 2, Hh * 0.4, W * 0.34, white, 9)
       break
     case 'redBannerText': {
+      // 乳（ちち）の白帯の下から縦書き
       ctx.fillStyle = white
-      ctx.font = `bold ${W * 0.62}px "Hiragino Mincho ProN","Yu Mincho","YuMincho",serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const chars = ['仕', '掛', 'け', '横', '丁']
-      chars.forEach((ch, i) => ctx.fillText(ch, W / 2, Hh * 0.13 + i * Hh * 0.155))
+      ctx.fillRect(0, 0, W, 26)
+      drawLettering(ctx, { text: '仕掛け横丁', vertical: true, x: W * 0.08, y: Hh * 0.05, w: W * 0.84, h: Hh * 0.8, ink: white })
       drawGear(ctx, W / 2, Hh * 0.92, W * 0.2, white, 8)
       break
     }
@@ -780,6 +779,201 @@ export function paintFabric(design: FabricDesign): Painted {
   return { color: c }
 }
 
+// ------------------------------------------------------------------ 文字（筆文字フォント・時代ごとの書字方向）
+
+/** 看板・幟・暖簾・提灯の書体。brush=Yuji Boku（太い筆）、kaisho=Yuji Syuku（楷書の筆）、mincho=明朝 */
+export type LetterFace = 'brush' | 'kaisho' | 'mincho'
+
+export type LetteringStyle = {
+  /** 横書きを右から左へ並べる（江戸時代の看板の書き方） */
+  horizontalRTL: boolean
+  face: LetterFace
+}
+
+const MINCHO = '"Hiragino Mincho ProN","Yu Mincho","YuMincho","Noto Serif JP",serif'
+const FACE_FAMILY: Record<LetterFace, string> = {
+  brush: `"Yuji Boku",${MINCHO}`,
+  kaisho: `"Yuji Syuku",${MINCHO}`,
+  mincho: MINCHO,
+}
+
+/** 現在の時代の書字ルール（既定は 1726 年：右横書き・筆文字）。時代を切り替える時は setLettering で変える。 */
+const lettering: LetteringStyle = { horizontalRTL: true, face: 'brush' }
+
+export function setLettering(s: Partial<LetteringStyle>): void {
+  Object.assign(lettering, s)
+}
+
+export function getLettering(): Readonly<LetteringStyle> {
+  return lettering
+}
+
+let fontsPromise: Promise<boolean> | null = null
+
+/**
+ * 筆文字フォント（public/fonts、SIL OFL）を FontFace API で読み込み、document.fonts に登録する。
+ * キャンバスに文字を描く前に必ず await すること。失敗・時間切れでも false を返して明朝で続行する。
+ */
+export function loadLetteringFonts(timeoutMs = 10000): Promise<boolean> {
+  if (fontsPromise) return fontsPromise
+  const faces: Array<[string, string]> = [
+    ['Yuji Boku', './fonts/YujiBoku-subset.woff2'],
+    ['Yuji Syuku', './fonts/YujiSyuku-subset.woff2'],
+  ]
+  const load = async (): Promise<boolean> => {
+    if (typeof FontFace === 'undefined' || !document.fonts) return false
+    const results = await Promise.allSettled(
+      faces.map(async ([family, url]) => {
+        const f = new FontFace(family, `url(${url}) format('woff2')`, { style: 'normal', weight: '400', display: 'block' })
+        await f.load()
+        document.fonts.add(f)
+        return f
+      }),
+    )
+    await document.fonts.ready
+    const ok = results.every((r) => r.status === 'fulfilled')
+    if (!ok) console.warn('[textures] 筆文字フォントの一部を読めませんでした（明朝で代用）', results)
+    return ok
+  }
+  fontsPromise = Promise.race([
+    load().catch((e) => {
+      console.warn('[textures] 筆文字フォントを読めませんでした（明朝で代用）', e)
+      return false
+    }),
+    new Promise<boolean>((r) => setTimeout(() => r(false), timeoutMs)),
+  ])
+  return fontsPromise
+}
+
+function fontCss(px: number, face: LetterFace = lettering.face): string {
+  // 筆文字は 1 ウェイトのみ。明朝は太字で
+  return face === 'mincho' ? `900 ${px}px ${FACE_FAMILY.mincho}` : `400 ${px}px ${FACE_FAMILY[face]}`
+}
+
+/** 縦書きで 90° 回す文字（長音・波ダッシュ・括弧） */
+const ROTATE_IN_VERTICAL = new Set([...'ー〜～…‥（）「」『』()[]－-'])
+/** 縦書きで右上へ寄せる小書きのかな */
+const SMALL_KANA = new Set([...'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ'])
+/** 縦書きで右上へ寄せる句読点 */
+const PUNCT = new Set([...'、。'])
+
+type GlyphPaint = (ctx: CanvasRenderingContext2D, ch: string, x: number, y: number, size: number) => void
+
+/** 文字を (x,y) を中心に描く（グリフの実際の外接矩形で上下中央にそろえる） */
+function drawGlyph(ctx: CanvasRenderingContext2D, ch: string, x: number, y: number, size: number, vertical: boolean, paint: (dx: number, dy: number) => void): void {
+  ctx.save()
+  ctx.translate(x, y)
+  if (vertical && ROTATE_IN_VERTICAL.has(ch)) ctx.rotate(Math.PI / 2)
+  if (vertical && (SMALL_KANA.has(ch) || PUNCT.has(ch))) ctx.translate(size * 0.18, -size * 0.2)
+  const m = ctx.measureText(ch)
+  const asc = m.actualBoundingBoxAscent || size * 0.8
+  const desc = m.actualBoundingBoxDescent || size * 0.1
+  const l = m.actualBoundingBoxLeft || 0
+  const r = m.actualBoundingBoxRight || m.width
+  const dx = (l - r) / 2
+  const dy = (asc - desc) / 2
+  paint(dx, dy)
+  ctx.restore()
+}
+
+export type TextBlock = {
+  text: string
+  /** 縦書き（列は右から左）。false なら横書き（時代の規則で右→左または左→右） */
+  vertical: boolean
+  /** 文字を置く範囲 */
+  x: number
+  y: number
+  w: number
+  h: number
+  ink: string
+  face?: LetterFace
+  /** 横書きの向きを個別に上書き */
+  rtl?: boolean
+  /** 1 文字の最大の大きさ（px） */
+  maxSize?: number
+  /** 文字の後ろの薄い彫り／にじみ（木の看板用） */
+  emboss?: string | null
+  /** 縦方向に伸ばす（提灯の曲面の補正など、1=そのまま） */
+  squashX?: number
+  /** 筆の太さの上乗せ（文字の大きさに対する輪郭線の太さ、0 でフォントのまま） */
+  bold?: number
+}
+
+/**
+ * 書字ルールに従ってテキストを描く。複数行は '\n' で区切る。
+ * 縦書き：各列は上→下、列は右→左。横書き：各行は上→下、行内は horizontalRTL なら右→左。
+ */
+export function drawLettering(ctx: CanvasRenderingContext2D, b: TextBlock): void {
+  const lines = b.text.split('\n').map((s) => [...s])
+  const nLines = lines.length
+  const longest = Math.max(1, ...lines.map((l) => l.length))
+  const face = b.face ?? lettering.face
+  const rtl = b.rtl ?? lettering.horizontalRTL
+  const sq = b.squashX ?? 1
+  const bold = b.bold ?? 0.035
+  const paintFn: GlyphPaint = (c, ch, x, y, size) => {
+    drawGlyph(c, ch, x, y, size, b.vertical, (dx, dy) => {
+      c.lineJoin = 'round'
+      c.lineWidth = size * bold
+      if (b.emboss) {
+        c.fillStyle = b.emboss
+        c.strokeStyle = b.emboss
+        c.fillText(ch, dx + size * 0.025, dy + size * 0.035)
+        if (bold > 0) c.strokeText(ch, dx + size * 0.025, dy + size * 0.035)
+      }
+      c.fillStyle = b.ink
+      c.strokeStyle = b.ink
+      c.fillText(ch, dx, dy)
+      if (bold > 0) c.strokeText(ch, dx, dy)
+    })
+  }
+  ctx.save()
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  if (b.vertical) {
+    const colW = (b.w * sq) / nLines
+    const cellH = b.h / longest
+    const size = Math.min(colW * 0.92, cellH * 1.0, b.maxSize ?? 1e9)
+    ctx.font = fontCss(size, face)
+    lines.forEach((col, ci) => {
+      // 右の列から
+      const cx = b.x + b.w - (ci + 0.5) * (b.w / nLines)
+      // 列が短い時は上寄せ（看板の慣習）
+      const step = Math.min(cellH, size * 1.04)
+      col.forEach((ch, i) => {
+        const cy = b.y + (i + 0.5) * step + (cellH - step) * 0.5 * (longest > col.length ? 0 : 1)
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1 / sq, 1)
+        paintFn(ctx, ch, 0, 0, size)
+        ctx.restore()
+      })
+    })
+  } else {
+    const rowH = b.h / nLines
+    const cellW = (b.w * sq) / longest
+    const size = Math.min(rowH * 0.86, cellW * 0.98, b.maxSize ?? 1e9)
+    ctx.font = fontCss(size, face)
+    const stepW = b.w / longest
+    lines.forEach((row, ri) => {
+      const cy = b.y + (ri + 0.5) * rowH
+      const used = row.length * stepW
+      const x0 = b.x + (b.w - used) / 2
+      row.forEach((ch, i) => {
+        // 右横書き：最初の文字をいちばん右に置く
+        const slot = rtl ? row.length - 1 - i : i
+        const cx = x0 + (slot + 0.5) * stepW
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1 / sq, 1)
+        paintFn(ctx, ch, 0, 0, size)
+        ctx.restore()
+      })
+    })
+  }
+  ctx.restore()
+}
+
 // ------------------------------------------------------------------ 看板
 
 export type SignSpec = {
@@ -790,6 +984,9 @@ export type SignSpec = {
   gear?: boolean
   color?: string
   bg?: 'wood' | 'black' | 'white'
+  face?: LetterFace
+  /** 横書きの向きを個別に上書き（既定は時代の規則：1726 年は右→左） */
+  rtl?: boolean
 }
 
 export function paintSign(spec: SignSpec, wood: HTMLCanvasElement): Painted {
@@ -811,83 +1008,119 @@ export function paintSign(spec: SignSpec, wood: HTMLCanvasElement): Painted {
   ctx.strokeStyle = 'rgba(255,220,170,0.35)'
   ctx.lineWidth = b * 0.25
   ctx.strokeRect(b * 1.2, b * 1.2, spec.w - b * 2.4, spec.h - b * 2.4)
-  const ink = spec.color ?? (bg === 'black' ? '#f2d38a' : '#2a160b')
-  const font = (px: number) => `900 ${px}px "Hiragino Mincho ProN","Yu Mincho","YuMincho","Noto Serif JP",serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  const chars = [...spec.text]
+  const ink = spec.color ?? (bg === 'black' ? '#f2d38a' : '#24130a')
+  const emboss = bg === 'black' ? 'rgba(0,0,0,0.55)' : 'rgba(255,232,196,0.45)'
   const area = spec.gear ? 0.78 : 1
+  const pad = b * 1.9
   if (spec.vertical) {
-    const size = Math.min(spec.w * 0.7, ((spec.h * 0.86 * area) / chars.length) * 0.95)
-    ctx.font = font(size)
-    chars.forEach((ch, i) => {
-      const y = spec.h * 0.08 + size * 0.55 + i * ((spec.h * 0.86 * area) / chars.length)
-      ctx.fillStyle = 'rgba(255,230,190,0.35)'
-      ctx.fillText(ch, spec.w / 2 + 2, y + 3)
-      ctx.fillStyle = ink
-      ctx.fillText(ch, spec.w / 2, y)
-    })
-    if (spec.gear) drawGear(ctx, spec.w / 2, spec.h * 0.88, spec.w * 0.28, ink, 8)
+    const h = (spec.h - pad * 2) * area
+    drawLettering(ctx, { text: spec.text, vertical: true, x: pad, y: pad, w: spec.w - pad * 2, h, ink, emboss, face: spec.face })
+    if (spec.gear) drawGear(ctx, spec.w / 2, spec.h - pad - (spec.h - pad * 2) * (1 - area) * 0.5, spec.w * 0.27, ink, 8)
   } else {
-    const size = Math.min(spec.h * 0.7, ((spec.w * 0.84 * area) / chars.length) * 0.98)
-    ctx.font = font(size)
-    const total = spec.w * 0.84 * area
-    chars.forEach((ch, i) => {
-      const x = spec.w * 0.08 + (i + 0.5) * (total / chars.length)
-      ctx.fillStyle = 'rgba(255,230,190,0.35)'
-      ctx.fillText(ch, x + 2, spec.h / 2 + 3)
-      ctx.fillStyle = ink
-      ctx.fillText(ch, x, spec.h / 2)
-    })
-    if (spec.gear) drawGear(ctx, spec.w * 0.88, spec.h / 2, spec.h * 0.3, ink, 8)
+    const rtl = spec.rtl ?? getLettering().horizontalRTL
+    const w = (spec.w - pad * 2) * area
+    // 右横書きでは飾りの歯車を読み終わり側（左端）へ置き、全体を左右反転した構図にする
+    const gearW = spec.w - pad * 2 - w
+    const tx = spec.gear && rtl ? pad + gearW : pad
+    drawLettering(ctx, { text: spec.text, vertical: false, x: tx, y: pad * 0.6, w, h: spec.h - pad * 1.2, ink, emboss, face: spec.face, rtl })
+    if (spec.gear) drawGear(ctx, rtl ? pad + gearW * 0.5 : spec.w - pad - gearW * 0.5, spec.h / 2, Math.min(spec.h * 0.3, gearW * 0.42), ink, 8)
   }
   return { color: c }
 }
 
 // ------------------------------------------------------------------ 桜・葉のカード
 
-export function paintBlossomCard(S = 512, seed = 9): Painted {
+/**
+ * 桜の花房カード（2×2 のアトラス）。1 つひとつの五弁の花・つぼみ・細い小枝で房を作り、
+ * 輪郭が花の形になるようにする（カードの四角が見えないよう、外周はまばらな花だけ）。
+ */
+export function paintBlossomCard(S = 1024, seed = 9): Painted {
   const rng = mulberry32(seed)
   const [c, ctx] = makeCanvas(S)
   ctx.clearRect(0, 0, S, S)
-  // ふんわりした花のかたまり（下地）
-  for (let k = 0; k < 16; k++) {
-    const a = range(rng, 0, Math.PI * 2)
-    const rr = Math.sqrt(rng()) * S * 0.24
-    const x = S / 2 + Math.cos(a) * rr
-    const y = S / 2 + Math.sin(a) * rr
-    const r = range(rng, S * 0.1, S * 0.19)
-    const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.4, r * 0.1, x, y, r)
-    g.addColorStop(0, hsl(342, 0.85, 0.9))
-    g.addColorStop(0.7, hsl(338, 0.75, 0.8))
-    g.addColorStop(1, hsl(334, 0.7, 0.72))
-    ctx.fillStyle = g
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  const flower = (x: number, y: number, r: number, rot: number, light: number) => {
+  const Q = S / 2
+  const flower = (x: number, y: number, r: number, rot: number, light: number, depth: number) => {
     ctx.save()
     ctx.translate(x, y)
     ctx.rotate(rot)
+    // 奥の花ほど濃い桃色・少し暗い
+    const hue = 340 + light * 8
+    const sat = 0.55 + depth * 0.3
+    const lig = 0.94 - depth * 0.14 - (1 - light) * 0.06
     for (let p = 0; p < 5; p++) {
       ctx.rotate((Math.PI * 2) / 5)
-      ctx.fillStyle = hsl(345, 0.8, 0.84 + light * 0.12)
+      const g = ctx.createLinearGradient(0, 0, 0, -r)
+      g.addColorStop(0, hsl(hue - 6, sat + 0.15, lig - 0.12))
+      g.addColorStop(0.6, hsl(hue, sat, lig))
+      g.addColorStop(1, hsl(hue + 4, sat - 0.1, Math.min(0.98, lig + 0.04)))
+      ctx.fillStyle = g
+      // 花びら（先に切れ込み）
       ctx.beginPath()
-      ctx.ellipse(0, -r * 0.55, r * 0.4, r * 0.55, 0, 0, Math.PI * 2)
+      ctx.moveTo(0, 0)
+      ctx.bezierCurveTo(-r * 0.55, -r * 0.25, -r * 0.5, -r * 0.95, -r * 0.14, -r * 1.0)
+      ctx.lineTo(0, -r * 0.86)
+      ctx.lineTo(r * 0.14, -r * 1.0)
+      ctx.bezierCurveTo(r * 0.5, -r * 0.95, r * 0.55, -r * 0.25, 0, 0)
       ctx.fill()
     }
-    ctx.fillStyle = hsl(335, 0.75, 0.62)
+    ctx.fillStyle = hsl(338, 0.7, 0.55 - depth * 0.1)
     ctx.beginPath()
-    ctx.arc(0, 0, r * 0.22, 0, Math.PI * 2)
+    ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2)
     ctx.fill()
+    // しべ
+    ctx.fillStyle = 'rgba(255,214,120,0.9)'
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2
+      ctx.beginPath()
+      ctx.arc(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3, r * 0.06, 0, Math.PI * 2)
+      ctx.fill()
+    }
     ctx.restore()
   }
-  // 表面の花と、縁から少しはみ出す花（輪郭をレース状に）
-  for (let k = 0; k < 110; k++) {
-    const a = range(rng, 0, Math.PI * 2)
-    const rr = Math.sqrt(rng()) * S * 0.42
-    flower(S / 2 + Math.cos(a) * rr, S / 2 + Math.sin(a) * rr, range(rng, 9, 17), range(rng, 0, 6.28), rng())
+  for (let q = 0; q < 4; q++) {
+    const ox = (q % 2) * Q
+    const oy = Math.floor(q / 2) * Q
+    const cx = ox + Q / 2
+    const cy = oy + Q / 2
+    const R = Q * 0.4
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(ox + 4, oy + 4, Q - 8, Q - 8)
+    ctx.clip()
+    // 小枝（房を支える茶色の細枝）
+    ctx.strokeStyle = '#7a4a3a'
+    ctx.lineCap = 'round'
+    for (let k = 0; k < 2; k++) {
+      const a = range(rng, 0, Math.PI * 2)
+      ctx.lineWidth = range(rng, 2.5, 4)
+      ctx.beginPath()
+      ctx.moveTo(cx + Math.cos(a) * R * 0.9, cy + Math.sin(a) * R * 0.9)
+      ctx.quadraticCurveTo(cx + range(rng, -20, 20), cy + range(rng, -20, 20), cx + Math.cos(a + 2.6) * R * 0.5, cy + Math.sin(a + 2.6) * R * 0.5)
+      ctx.stroke()
+    }
+    // 房の芯：奥の花をぎっしり（隙間を埋める）
+    const n = 60 + q * 8
+    const items: Array<{ x: number; y: number; r: number; d: number }> = []
+    for (let k = 0; k < n; k++) {
+      const a = range(rng, 0, Math.PI * 2)
+      const rr = Math.pow(rng(), 0.7) * R
+      // 房の形を少しいびつに
+      const wob = 1 + 0.18 * Math.sin(a * 3 + q * 1.7)
+      items.push({ x: cx + Math.cos(a) * rr * wob, y: cy + Math.sin(a) * rr * wob * 0.92, r: range(rng, 17, 27) * (1 - (rr / R) * 0.25), d: rr / R })
+    }
+    // 中心から遠い順（外側→内側）ではなく、奥（ランダムな深さ）から手前へ
+    items.sort(() => rng() - 0.5)
+    items.forEach((it, i) => flower(it.x, it.y, it.r, range(rng, 0, 6.28), rng(), Math.max(0, 0.7 - i / items.length) * (1 - it.d * 0.5)))
+    // つぼみ（外周にまばら）
+    for (let k = 0; k < 10; k++) {
+      const a = range(rng, 0, Math.PI * 2)
+      const rr = R * range(rng, 0.85, 1.1)
+      ctx.fillStyle = hsl(338, 0.75, 0.68)
+      ctx.beginPath()
+      ctx.ellipse(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 6, 9, a, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
   }
   return { color: c }
 }

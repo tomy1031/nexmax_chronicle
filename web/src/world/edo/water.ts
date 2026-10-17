@@ -192,13 +192,21 @@ function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 const fallVert = /* glsl */ `
 #include <common>
 #include <fog_pars_vertex>
+uniform float uTime;
+uniform float uSpeed;
+uniform float uWobble;
 varying vec2 vUv;
 varying vec3 vWN;
 varying vec3 vWPos;
 void main() {
   vUv = uv;
   vWN = normalize(mat3(modelMatrix) * normal);
-  vec4 wp = modelMatrix * vec4(position, 1.0);
+  // 落ちる水のうねり（下ほど大きく、流れに沿って下へ流れる）
+  float s = uv.y;
+  float t = uTime * uSpeed;
+  float w = sin(s * 9.0 - t * 7.0 + uv.x * 4.0) * 0.6 + sin(s * 17.0 - t * 11.0 + uv.x * 11.0) * 0.4;
+  vec3 p = position + normal * w * uWobble * (0.15 + s);
+  vec4 wp = modelMatrix * vec4(p, 1.0);
   vWPos = wp.xyz;
   vec4 mvPosition = viewMatrix * wp;
   gl_Position = projectionMatrix * mvPosition;
@@ -217,6 +225,7 @@ uniform vec3 uSunDir;
 uniform float uSpeed;
 uniform float uOpacity;
 uniform float uSeed;
+uniform float uWhite;
 varying vec2 vUv;
 varying vec3 vWN;
 varying vec3 vWPos;
@@ -226,20 +235,29 @@ void main() {
   float c1 = texture2D(uFoamTex, vec2(vUv.x * 1.2 + uSeed, v * 0.32 - t * 0.75)).r;
   float c2 = texture2D(uFoamTex, vec2(vUv.x * 2.8 + 0.37 + uSeed, v * 0.75 - t * 1.25)).r;
   float c3 = texture2D(uFoamTex, vec2(vUv.x * 7.0 + uSeed * 2.0, v * 1.7 - t * 2.1)).r;
-  float n = c1 * 0.55 + c2 * 0.4 + c3 * 0.3;
-  float aer = smoothstep(0.0, 0.3, v);
-  float white = clamp(n * 1.25 * (0.35 + 0.65 * aer) + v * 0.35 - 0.1, 0.0, 1.0);
-  vec3 water = uTop * (0.85 + 0.35 * c2);
-  vec3 col = mix(water, vec3(1.0), smoothstep(0.22, 0.7, white));
-  col *= 0.78 + 0.32 * c3;
-  float lit = 0.75 + 0.4 * max(dot(normalize(vWN), uSunDir), 0.0);
+  float c4 = texture2D(uFoamTex, vec2(vUv.x * 13.0 + uSeed * 5.0, v * 2.6 - t * 3.0)).r;
+  float n = c1 * 0.5 + c2 * 0.4 + c3 * 0.3 + c4 * 0.15;
+  // 落ち口はガラスのように澄み、下るほど空気を含んで真っ白になる
+  float aer = smoothstep(0.0, 0.35, v);
+  float white = clamp(n * 1.35 * (0.3 + 0.7 * aer) + v * 0.6 - 0.12 + uWhite * aer, 0.0, 1.0);
+  vec3 water = uTop * (0.9 + 0.3 * c2);
+  vec3 foamCol = vec3(0.96, 1.0, 1.03) * (0.84 + 0.2 * c3);
+  vec3 col = mix(water, foamCol, smoothstep(0.18, 0.62, white));
+  // 泡の谷間に青い影（白一色にしない）
+  col = mix(col, uTop * 0.72, (1.0 - smoothstep(0.25, 0.75, n)) * 0.32);
+  // 縦の筋（白い流れの線）
+  float streak = smoothstep(0.55, 0.85, texture2D(uFoamTex, vec2(vUv.x * 5.0 + uSeed * 7.0, v * 0.18 - t * 0.9)).r);
+  col = mix(col, vec3(1.0), streak * 0.5);
+  float lit = 0.72 + 0.42 * max(dot(normalize(vWN), uSunDir), 0.0);
   col *= lit * uSun;
-  col += vec3(0.95, 1.0, 1.0) * pow(max(c3 - 0.55, 0.0) * 2.2, 2.0) * 0.7;
+  // 落ち口の光るふち
+  col += vec3(0.9, 1.0, 1.0) * (1.0 - smoothstep(0.0, 0.07, v)) * 0.35;
+  col += vec3(0.95, 1.0, 1.0) * pow(max(c3 - 0.5, 0.0) * 2.0, 2.0) * 0.6;
   float en = texture2D(uFoamTex, vec2(vUv.x * 1.7 + uSeed * 3.0, v * 0.45 - t * 0.6)).r;
-  float edge = smoothstep(0.0, 0.14 + 0.16 * en, vUv.x) * smoothstep(1.0, 0.86 - 0.16 * en, vUv.x);
-  float top = smoothstep(0.0, 0.05, v);
-  float bottom = 1.0 - smoothstep(0.85, 1.0, v) * 0.55;
-  float a = mix(0.5, 1.0, smoothstep(0.1, 0.6, white)) * edge * top * bottom * uOpacity;
+  float edge = smoothstep(0.0, 0.1 + 0.16 * en, vUv.x) * smoothstep(1.0, 0.9 - 0.16 * en, vUv.x);
+  float top = smoothstep(0.0, 0.04, v);
+  float bottom = 1.0 - smoothstep(0.88, 1.0, v) * 0.45;
+  float a = mix(0.62, 1.0, smoothstep(0.1, 0.55, white)) * edge * top * bottom * uOpacity;
   gl_FragColor = vec4(col, a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -247,7 +265,7 @@ void main() {
 }
 `
 
-export function createFallMaterial(seed: number, opacity = 1, speed = 1.3): THREE.ShaderMaterial {
+export function createFallMaterial(seed: number, opacity = 1, speed = 1.3, white = 0.25, wobble = 0.03): THREE.ShaderMaterial {
   const t = textures()
   return new THREE.ShaderMaterial({
     vertexShader: fallVert,
@@ -259,12 +277,14 @@ export function createFallMaterial(seed: number, opacity = 1, speed = 1.3): THRE
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uFoamTex: { value: t.foam },
-      uTop: { value: new THREE.Color('#5fd2dc') },
-      uSun: { value: new THREE.Color('#fff1dc') },
+      uTop: { value: new THREE.Color('#7fdde6') },
+      uSun: { value: new THREE.Color('#fff4e4') },
       uSunDir: { value: new THREE.Vector3(-0.7, 0.5, -0.5).normalize() },
       uSpeed: { value: speed },
       uOpacity: { value: opacity },
       uSeed: { value: seed },
+      uWhite: { value: white },
+      uWobble: { value: wobble },
       uTime: uTime,
     },
   })
@@ -326,11 +346,14 @@ const sprayFrag = /* glsl */ `
 #include <fog_pars_fragment>
 uniform sampler2D uDot;
 uniform vec3 uColor;
+uniform float uSoft;
 varying float vAlpha;
 void main() {
-  float a = texture2D(uDot, gl_PointCoord).a * vAlpha;
+  float d = texture2D(uDot, gl_PointCoord).a;
+  // uSoft=0：芯のある小さな水しぶき、1：やわらかい霧
+  float a = mix(smoothstep(0.25, 0.95, d), d * d, uSoft) * vAlpha;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(uColor, a);
+  gl_FragColor = vec4(uColor * (1.0 + (1.0 - uSoft) * 0.15 * d), a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
@@ -349,7 +372,7 @@ export type Emitter = {
   alpha: number
 }
 
-export function createSpray(emitters: Emitter[], size: number, color: THREE.ColorRepresentation, seed = 1): THREE.Points {
+export function createSpray(emitters: Emitter[], size: number, color: THREE.ColorRepresentation, seed = 1, soft = 0.4): THREE.Points {
   const rng = mulberry32(seed)
   const total = emitters.reduce((s, e) => s + e.count, 0)
   const pos = new Float32Array(total * 3)
@@ -386,6 +409,7 @@ export function createSpray(emitters: Emitter[], size: number, color: THREE.Colo
       uDot: { value: textures().dot },
       uColor: { value: new THREE.Color(color) },
       uSize: { value: size },
+      uSoft: { value: soft },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 1.5) },
       uTime: uTime,
     },
@@ -442,6 +466,93 @@ export function createFoamPatchMaterial(seed: number): THREE.ShaderMaterial {
     fog: true,
     uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uFoamTex: { value: textures().foam }, uSeed: { value: seed }, uTime: uTime },
   })
+}
+
+// ------------------------------------------------------------------ 着水の白い泡の盛り上がり
+
+const moundVert = /* glsl */ `
+#include <common>
+#include <fog_pars_vertex>
+uniform float uTime;
+uniform float uSeed;
+varying vec2 vUv;
+varying float vH;
+varying vec3 vN;
+void main() {
+  vUv = uv;
+  vH = uv.y;
+  vN = normalize(mat3(modelMatrix) * normal);
+  vec3 p = position;
+  // 沸き立つように上下する
+  float a = atan(p.z, p.x);
+  float b = sin(a * 5.0 + uTime * 3.1 + uSeed * 9.0) * 0.5 + sin(a * 9.0 - uTime * 4.3 + uSeed * 3.0) * 0.5;
+  p.y *= 0.8 + 0.3 * b + 0.15 * sin(uTime * 6.0 + uSeed * 20.0);
+  vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}
+`
+const moundFrag = /* glsl */ `
+#include <common>
+#include <fog_pars_fragment>
+uniform float uTime;
+uniform float uSeed;
+uniform sampler2D uFoamTex;
+uniform vec3 uSunDir;
+uniform float uOpacity;
+varying vec2 vUv;
+varying float vH;
+varying vec3 vN;
+void main() {
+  // uv.x=周方向、uv.y=頂上(1)→ふち(0)。泡は頂上から外へ流れる
+  float f1 = texture2D(uFoamTex, vec2(vUv.x * 4.0 + uSeed, vUv.y * 1.2 + uTime * 0.7)).r;
+  float f2 = texture2D(uFoamTex, vec2(vUv.x * 9.0 - uSeed, vUv.y * 2.5 + uTime * 1.3)).r;
+  float f = f1 * 0.65 + f2 * 0.55;
+  float rim = smoothstep(0.0, 0.35, vH);
+  float a = smoothstep(0.32, 0.62, f + vH * 0.35) * rim * uOpacity;
+  if (a < 0.02) discard;
+  float lit = 0.78 + 0.35 * max(dot(normalize(vN), uSunDir), 0.0);
+  vec3 col = mix(vec3(0.78, 0.9, 0.94), vec3(1.0), smoothstep(0.35, 0.8, f)) * lit * 1.05;
+  gl_FragColor = vec4(col, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}
+`
+
+/** 滝の着水点の白い泡の盛り上がり（半楕円体）。y は水面の高さ。 */
+export function foamMound(x: number, y: number, z: number, sx: number, sz: number, h: number, seed: number, opacity = 1): THREE.Mesh {
+  const g = new THREE.SphereGeometry(1, 28, 6, 0, Math.PI * 2, 0, Math.PI / 2)
+  // uv.y：頂上=1、ふち=0 にそろえる
+  const pos = g.attributes.position
+  const rng = mulberry32(Math.floor(seed * 1000) + 7)
+  for (let i = 0; i < pos.count; i++) {
+    const py = pos.getY(i)
+    const k = 1 + (rng() - 0.5) * 0.25 * (1 - py)
+    pos.setXYZ(i, pos.getX(i) * k, py, pos.getZ(i) * k)
+  }
+  g.computeVertexNormals()
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: moundVert,
+    fragmentShader: moundFrag,
+    transparent: true,
+    depthWrite: false,
+    fog: true,
+    uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+      uFoamTex: { value: textures().foam },
+      uSeed: { value: seed },
+      uOpacity: { value: opacity },
+      uSunDir: { value: new THREE.Vector3(-0.7, 0.5, -0.5).normalize() },
+      uTime: uTime,
+    },
+  })
+  const m = new THREE.Mesh(g, mat)
+  m.position.set(x, y, z)
+  m.scale.set(sx, h, sz)
+  m.renderOrder = 3
+  m.name = 'foamMound'
+  return m
 }
 
 /** 同じマテリアルのメッシュ（滝のシートなど）を 1 つに結合 */

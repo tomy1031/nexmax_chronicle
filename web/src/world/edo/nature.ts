@@ -14,13 +14,37 @@ function newBuf(): CardBuf {
 
 const tmpU = new THREE.Vector3()
 const tmpV = new THREE.Vector3()
+const tmpW = new THREE.Vector3()
+const tmpN = new THREE.Vector3()
 
-function addCard(buf: CardBuf, p: THREE.Vector3, size: number, n: THREE.Vector3, color: THREE.Color, rng: Rng): void {
-  // ランダムな向きの四角形。法線は球状（なめらかな陰影）
-  tmpU.set(range(rng, -1, 1), range(rng, -1, 1), range(rng, -1, 1)).normalize()
-  tmpV.set(range(rng, -1, 1), range(rng, -1, 1), range(rng, -1, 1)).cross(tmpU).normalize()
+/**
+ * 四角いカードを 1 枚積む。face を渡すとその向きを中心に少しばらした向き（外向きのカード）、
+ * 無ければランダムな向き。atlas は 2×2 アトラスの区画（0..3）、-1 で画像全体。
+ */
+function addCard(buf: CardBuf, p: THREE.Vector3, size: number, n: THREE.Vector3, color: THREE.Color, rng: Rng, face?: THREE.Vector3, atlas = -1): void {
+  if (face) {
+    // face に垂直な 2 軸（少し傾ける）
+    tmpN.copy(face).add(tmpU.set(range(rng, -0.6, 0.6), range(rng, -0.6, 0.6), range(rng, -0.6, 0.6))).normalize()
+    tmpU.set(0, 1, 0)
+    if (Math.abs(tmpN.y) > 0.9) tmpU.set(1, 0, 0)
+    tmpU.cross(tmpN).normalize()
+    tmpV.crossVectors(tmpN, tmpU).normalize()
+    const r = range(rng, 0, Math.PI * 2)
+    const cr = Math.cos(r)
+    const sr = Math.sin(r)
+    tmpW.copy(tmpU).multiplyScalar(cr).addScaledVector(tmpV, sr)
+    tmpV.multiplyScalar(cr).addScaledVector(tmpU, -sr)
+    tmpU.copy(tmpW)
+  } else {
+    // ランダムな向きの四角形。法線は球状（なめらかな陰影）
+    tmpU.set(range(rng, -1, 1), range(rng, -1, 1), range(rng, -1, 1)).normalize()
+    tmpV.set(range(rng, -1, 1), range(rng, -1, 1), range(rng, -1, 1)).cross(tmpU).normalize()
+  }
   const h = size / 2
   const base = buf.pos.length / 3
+  const u0 = atlas < 0 ? 0 : (atlas % 2) * 0.5
+  const v0 = atlas < 0 ? 0 : Math.floor(atlas / 2) * 0.5
+  const us = atlas < 0 ? 1 : 0.5
   const corners = [
     [-1, -1, 0, 0],
     [1, -1, 1, 0],
@@ -30,7 +54,7 @@ function addCard(buf: CardBuf, p: THREE.Vector3, size: number, n: THREE.Vector3,
   for (const [a, b, u, v] of corners) {
     buf.pos.push(p.x + (tmpU.x * a + tmpV.x * b) * h, p.y + (tmpU.y * a + tmpV.y * b) * h, p.z + (tmpU.z * a + tmpV.z * b) * h)
     buf.nor.push(n.x, n.y, n.z)
-    buf.uv.push(u, v)
+    buf.uv.push(u0 + u * us, v0 + v * us)
     buf.col.push(color.r, color.g, color.b)
   }
   buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
@@ -71,13 +95,15 @@ export class Foliage {
     const far = cardCount < 0.9
     const seg = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number) => {
       const len = a.distanceTo(b)
-      c.b.add(new THREE.CylinderGeometry(r1, r0, len, far ? 5 : 9, 1), c.m.bark, orientAB(a, b), {
+      const thick = r0 > 0.09
+      c.b.add(new THREE.CylinderGeometry(r1, r0, len, far ? 5 : thick ? 9 : 6, 1, true), c.m.bark, orientAB(a, b), {
         tint: barkT,
         uv: 'scale',
         uvScale: [(2 * Math.PI * r0) / TEX_METERS.bark, len / TEX_METERS.bark],
         cast: !far,
       })
-      if (!far) c.b.add(new THREE.SphereGeometry(r1 * 1.02, 7, 5), c.m.bark, M(b.x, b.y, b.z), { tint: barkT, uv: 'scale', uvScale: [0.5, 0.3] })
+      // 節のふくらみは太い枝だけ
+      if (!far && r1 > 0.06) c.b.add(new THREE.SphereGeometry(r1 * 1.02, 7, 5), c.m.bark, M(b.x, b.y, b.z), { tint: barkT, uv: 'scale', uvScale: [0.5, 0.3] })
     }
     seg(p0, p1, 0.26 * s, 0.2 * s)
     seg(p1, p2, 0.2 * s, 0.15 * s)
@@ -90,27 +116,49 @@ export class Foliage {
       const out = range(rng, 1.4, 2.3) * s
       const up = range(rng, 0.8, 1.8) * s
       const e = p2.clone().add(new THREE.Vector3(Math.cos(a) * out, up, Math.sin(a) * out))
-      seg(p2, e, 0.13 * s, 0.06 * s)
-      const m = p2.clone().lerp(e, 0.55)
+      // 主枝は途中で折れ曲がる 2 節（まっすぐな棒に見せない）
+      const bend = p2.clone().lerp(e, 0.5).add(new THREE.Vector3(range(rng, -0.3, 0.3) * s, range(rng, -0.25, 0.1) * s, range(rng, -0.3, 0.3) * s))
+      seg(p2, bend, 0.11 * s, 0.075 * s)
+      seg(bend, e, 0.075 * s, 0.04 * s)
+      const m = p2.clone().lerp(bend, 0.8)
       const e2 = m.clone().add(new THREE.Vector3(Math.cos(a + 0.9) * out * 0.5, up * 0.5, Math.sin(a + 0.9) * out * 0.5))
-      seg(m, e2, 0.07 * s, 0.035 * s)
+      seg(m, e2, 0.05 * s, 0.025 * s)
       blobs.push({ p: e.clone().add(new THREE.Vector3(0, 0.2 * s, 0)), r: range(rng, 1.0, 1.35) * s })
       blobs.push({ p: e2.clone().add(new THREE.Vector3(0, 0.1 * s, 0)), r: range(rng, 0.7, 1.0) * s })
     }
     blobs.push({ p: crownC.clone().add(new THREE.Vector3(0, 0.6 * s, 0)), r: 1.5 * s })
     blobs.push({ p: crownC.clone(), r: 1.4 * s })
     const col = new THREE.Color()
+    const near = !far
+    // 房の外へ突き出す小枝（花の間から枝先が見える）
+    if (near) {
+      for (const bl of blobs) {
+        for (let k = 0; k < 3; k++) {
+          // 横〜やや下向き：花の間から枝先がのぞく（空に向かって突き出さない）
+          const dir = new THREE.Vector3(range(rng, -1, 1), range(rng, -0.55, 0.3), range(rng, -1, 1)).normalize()
+          const a = bl.p.clone().addScaledVector(dir, bl.r * 0.3)
+          const b = bl.p.clone().addScaledVector(dir, bl.r * range(rng, 0.8, 0.97))
+          const len = a.distanceTo(b)
+          c.b.add(new THREE.CylinderGeometry(0.012 * s, 0.026 * s, len, 4, 1, true), c.m.bark, orientAB(a, b), { tint: '#d8c4b8', uv: 'scale', uvScale: [0.2, len / TEX_METERS.bark], cast: false })
+        }
+      }
+    }
     for (const bl of blobs) {
-      // 内側のふくらみ（隙間を埋める）
-      const n = Math.round(bl.r * bl.r * 40 * cardCount)
+      // 近くの木は小さなカードを多めに（房の輪郭が花の形に見える）、遠くは大きく少なく
+      const n = Math.round(bl.r * bl.r * (near ? 78 : 40) * cardCount)
       for (let k = 0; k < n; k++) {
         const dir = new THREE.Vector3(range(rng, -1, 1), range(rng, -0.6, 1), range(rng, -1, 1)).normalize()
-        const rr = bl.r * Math.cbrt(range(rng, 0.25, 1))
+        const rr = bl.r * Math.cbrt(range(rng, 0.2, 1))
         const p = bl.p.clone().addScaledVector(dir, rr)
-        const nrm = p.clone().sub(crownC).normalize().multiplyScalar(0.6).add(dir.multiplyScalar(0.5)).normalize()
+        const outward = p.clone().sub(crownC).normalize()
+        const nrm = outward.clone().multiplyScalar(0.6).add(dir.clone().multiplyScalar(0.5)).normalize()
+        // 色：外側は白っぽく、内側は濃い桃色で少し暗く（奥行き）
+        const depth = 1 - rr / bl.r
         const light = range(rng, 0, 1)
-        col.setRGB(1, 0.93 + light * 0.07, 0.95 + light * 0.05)
-        addCard(this.blossom, p, range(rng, 0.6, 0.95) * s * (cardCount < 0.9 ? 1.4 : 1), nrm, col, rng)
+        const pink = range(rng, 0, 1) < 0.25 ? 0.08 : 0
+        col.setRGB(1 - depth * 0.22, (0.93 + light * 0.07) * (1 - depth * 0.3) - pink, (0.95 + light * 0.05) * (1 - depth * 0.26) - pink * 0.5)
+        const size = near ? range(rng, 0.45, 0.74) * s : range(rng, 0.6, 0.95) * s * 1.4
+        addCard(this.blossom, p, size, nrm, col, rng, near ? outward.clone().lerp(dir, 0.35).normalize() : undefined, Math.floor(rng() * 4))
       }
     }
     c.col.box(x, y + 1.2, z, 0.5 * s, 2.4, 0.5 * s)

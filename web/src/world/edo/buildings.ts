@@ -1,7 +1,7 @@
 // 町家・源兵衛の工房・水門番の家（おはるのバルコニー）・土蔵・上流の屋根付き水路倉庫。
 import * as THREE from 'three'
 import { M, rbox } from '../../render/batch'
-import { range, pick } from '../../render/noise'
+import { mulberry32, range, pick } from '../../render/noise'
 import type { FabricDesign } from '../../render/textures'
 import { WOOD, woodBox, woodTint, gableRoof, shedRoof, lantern, noren, signboard, crate, barrel, railing, post, ropeCoil, type Ctx } from './kit'
 
@@ -45,11 +45,14 @@ export type MachiyaOpts = {
 export function machiya(c: Ctx, f: Frame, o: MachiyaOpts): void {
   const W = o.width
   const D = o.depth
+  // 家ごとのばらつき（位置から決める乱数なので、他の配置の乱数列を乱さない）
+  const vr = mulberry32(Math.floor(f.ox * 131 + f.oz * 71 + 9973))
   const h1 = o.h1 ?? 3.0
-  const h2 = o.h2 ?? 2.3
+  const h2 = o.h2 ?? range(vr, 2.15, 2.6)
   const H = h1 + h2
   const postT = woodTint(c.rng, WOOD.dark, 0.08)
-  const plasterT = o.plasterTint ?? '#ffffff'
+  const plasterT = o.plasterTint ?? pick(vr, ['#ffffff', '#fff6ea', '#f6ead6', '#fffaf2', '#efe0c8'])
+  const roofT = o.roofTint ?? new THREE.Color('#ffffff').multiplyScalar(range(vr, 0.76, 1.06)).offsetHSL(range(vr, -0.02, 0.03), range(vr, -0.04, 0.05), 0)
   const low = o.lowDetail ?? false
   // 土台・床
   box(c, f, 0, 0.12, 0.25, W, 0.24, 0.5, c.m.stoneWall, '#e9e2d6', 3, 0.04)
@@ -134,7 +137,7 @@ export function machiya(c: Ctx, f: Frame, o: MachiyaOpts): void {
   // 大屋根
   {
     const [x, z] = fx(f, 0, D / 2 + 0.1)
-    gableRoof(c, x, z, W + 0.5, D + 1.3, f.y + H + 0.05, 1.55, f.rot === 0 || Math.abs(f.rot - Math.PI) < 0.01 ? 'x' : 'z', { tint: o.roofTint, endTiles: !low })
+    gableRoof(c, x, z, W + 0.5, D + 1.3, f.y + H + 0.05, range(vr, 1.4, 1.8), f.rot === 0 || Math.abs(f.rot - Math.PI) < 0.01 ? 'x' : 'z', { tint: roofT, endTiles: !low })
   }
   // 看板（屋根看板）
   if (o.sign) {
@@ -153,6 +156,74 @@ export function machiya(c: Ctx, f: Frame, o: MachiyaOpts): void {
       const [x, z] = fx(f, e * (W / 2 - 0.6), -1.0)
       const kind = lk === 'mixed' ? (e < 0 ? 'red' : 'cream') : lk
       lantern(c, x, f.y + h1 - 0.2, z, { kind, cord: 0.15, light: !low })
+    }
+    // 庇の先に小さな提灯の列（祭りの飾り）。縄を張って等間隔に吊る
+    if (!low && lk !== 'cream') {
+      const ly = f.y + h1 + 0.02
+      const lz = -1.08
+      const half = W / 2 - 1.05
+      const [ax, az] = fx(f, -half, lz)
+      const [bx, bz] = fx(f, half, lz)
+      const pts: THREE.Vector3[] = []
+      for (let k = 0; k <= 8; k++) {
+        const t = k / 8
+        pts.push(new THREE.Vector3(ax + (bx - ax) * t, ly - Math.sin(t * Math.PI) * 0.12, az + (bz - az) * t))
+      }
+      c.b.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.012, 4), c.m.darkLacquer, undefined, { cast: false })
+      const n = Math.max(3, Math.round((half * 2) / 0.8))
+      for (let k = 1; k < n; k++) {
+        const t = k / n
+        const [x, z] = fx(f, -half + half * 2 * t, lz)
+        const kind = lk === 'mixed' ? (k % 2 ? 'red' : 'cream') : 'red'
+        lantern(c, x, ly - Math.sin(t * Math.PI) * 0.12 - 0.2, z, { kind, s: 0.48, cord: 0.05, light: false })
+      }
+    }
+  }
+  // 店先の飾り：茶屋は赤い毛氈の縁台と野点傘、ほかは鉢植え
+  if (!low && shop !== 'closed') {
+    if (shop === 'tea') {
+      const lx = -W / 2 + 1.5
+      const [x, z] = fx(f, lx, -2.05)
+      for (const [dx, dz] of [
+        [-0.7, -0.17],
+        [0.7, -0.17],
+        [-0.7, 0.17],
+        [0.7, 0.17],
+      ] as const) {
+        const [px, pz] = fx(f, lx + dx, -2.05 + dz)
+        woodBox(c, px, f.y + 0.2, pz, 0.06, 0.4, 0.06, { tint: WOOD.dark })
+      }
+      woodBox(c, x, f.y + 0.42, z, 1.6, 0.06, 0.48, { rotY: f.rot, tint: WOOD.aged })
+      box(c, f, lx, 0.455, -2.05, 1.7, 0.02, 0.56, c.m.plain, '#c8322a', 1, 0)
+      box(c, f, lx, 0.36, -2.05 - 0.29, 1.7, 0.2, 0.015, c.m.plain, '#b52a24', 1, 0)
+      const [ux, uz] = fx(f, lx + 0.9, -2.45)
+      c.b.add(new THREE.CylinderGeometry(0.025, 0.025, 2.3, 6), c.m.wood, M(ux, f.y + 1.15, uz), { tint: WOOD.dark, cast: false })
+      c.b.add(new THREE.ConeGeometry(1.15, 0.42, 18, 1), c.m.lacquerRed, M(ux, f.y + 2.35, uz), { tint: '#ffffff' })
+      c.b.add(new THREE.SphereGeometry(0.05, 8, 6), c.m.darkLacquer, M(ux, f.y + 2.58, uz))
+      c.col.box(x, f.y + 0.25, z, f.rot === 0 || Math.abs(f.rot - Math.PI) < 0.01 ? 1.6 : 0.5, 0.5, f.rot === 0 || Math.abs(f.rot - Math.PI) < 0.01 ? 0.5 : 1.6)
+    }
+    const nPots = pick(vr, [1, 2, 2, 3])
+    for (let k = 0; k < nPots; k++) {
+      const lx = (k % 2 ? 1 : -1) * (W / 2 - 0.5 - Math.floor(k / 2) * 0.55)
+      if (shop === 'tea' && lx < 0) continue
+      const [x, z] = fx(f, lx, -0.35)
+      const r = range(vr, 0.12, 0.17)
+      c.b.add(new THREE.CylinderGeometry(r, r * 0.8, r * 1.6, 10), c.m.darkLacquer, M(x, f.y + r * 0.8, z), { tint: pick(vr, ['#6b4a36', '#3a3f4a', '#8a5a3a']) })
+      // 小さな葉のかたまりを 3 つ（ひとつの大きな玉にしない）
+      for (let q = 0; q < 3; q++) {
+        const a = (q / 3) * Math.PI * 2 + vr() * 2
+        const pr = r * range(vr, 0.7, 0.95)
+        c.b.add(new THREE.IcosahedronGeometry(pr, 1), c.m.puffGreen, M(x + Math.cos(a) * r * 0.55, f.y + r * 1.6 + pr * 0.8 + q * r * 0.25, z + Math.sin(a) * r * 0.55, vr(), vr(), 0, 1, 0.8, 1), {
+          tint: new THREE.Color('#ffffff').multiplyScalar(range(vr, 0.75, 1.0)),
+        })
+      }
+      if (vr() < 0.5) {
+        // 小さな花
+        for (let q = 0; q < 4; q++) {
+          const a = (q / 4) * Math.PI * 2 + vr()
+          c.b.add(new THREE.SphereGeometry(r * 0.28, 6, 4), c.m.plain, M(x + Math.cos(a) * r * 1.1, f.y + r * 1.6 + r * 1.6, z + Math.sin(a) * r * 1.1), { tint: pick(vr, ['#f5a3c0', '#ffffff', '#f6d24a', '#e8606c']), cast: false })
+        }
+      }
     }
   }
   // 2階の手すり
@@ -203,6 +274,39 @@ export function genbeiWorkshop(c: Ctx, f: Frame): void {
     }
     const [ax, az] = fx(f, lx, -0.65)
     woodBox(c, ax, f.y + 5.05, az, 0.14, 0.14, 2.2, { rotY: f.rot, tint: WOOD.dark })
+  }
+  // 軒から吊るした歯車（大小）と、店先のからくり人形
+  for (const [lx, r, drop] of [
+    [-4.3, 0.32, 0.9],
+    [-1.2, 0.22, 0.6],
+    [2.1, 0.28, 0.75],
+    [4.6, 0.2, 0.55],
+  ] as const) {
+    const [x, z] = fx(f, lx, -0.9)
+    const topY = f.y + 3.35
+    c.b.add(new THREE.CylinderGeometry(0.01, 0.01, drop, 4), c.m.iron, M(x, topY - drop / 2, z), { cast: false })
+    const gy = topY - drop - r
+    c.b.add(new THREE.CylinderGeometry(r, r, 0.06, 14), c.m.brass, M(x, gy, z, Math.PI / 2, f.rot, 0), { cast: false })
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2
+      const [tx, tz] = fx(f, lx + Math.cos(a) * (r + 0.035), -0.9)
+      c.b.add(rbox(0.06, 0.07, 0.06, 0), c.m.brass, M(tx, gy + Math.sin(a) * (r + 0.035), tz, 0, f.rot, a), { cast: false })
+    }
+    c.b.add(new THREE.CylinderGeometry(r * 0.3, r * 0.3, 0.08, 10), c.m.iron, M(x, gy, z, Math.PI / 2, f.rot, 0), { cast: false })
+  }
+  // からくり人形（木の箱の体・丸い頭・赤い前掛け）
+  for (const [lx, lz, ly, s2, rot] of [
+    [3.25, -1.1, 0.75, 1.0, 0.3],
+    [2.45, -0.9, 0.5, 0.8, -0.2],
+    [-2.3, -1.3, 0.55, 0.9, 0.5],
+  ] as const) {
+    const [x, z] = fx(f, lx, lz)
+    const yy = f.y + ly
+    c.b.add(rbox(0.16 * s2, 0.2 * s2, 0.12 * s2, 0.02), c.m.wood, M(x, yy + 0.1 * s2, z, 0, f.rot + rot, 0), { tint: WOOD.honey, texM: 0.6 })
+    c.b.add(new THREE.SphereGeometry(0.075 * s2, 12, 9), c.m.plain, M(x, yy + 0.27 * s2, z), { tint: '#f4e2c8' })
+    c.b.add(new THREE.SphereGeometry(0.078 * s2, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), c.m.darkLacquer, M(x, yy + 0.285 * s2, z), { tint: '#2a1a12' })
+    c.b.add(rbox(0.13 * s2, 0.1 * s2, 0.02, 0), c.m.lacquerRed, M(x - Math.sin(f.rot + rot) * 0.065 * s2, yy + 0.08 * s2, z - Math.cos(f.rot + rot) * 0.065 * s2, 0, f.rot + rot, 0), { tint: '#ffffff' })
+    for (const e of [-1, 1]) c.b.add(new THREE.SphereGeometry(0.025 * s2, 8, 6), c.m.brass, M(x + Math.cos(f.rot + rot) * e * 0.1 * s2, yy + 0.12 * s2, z - Math.sin(f.rot + rot) * e * 0.1 * s2))
   }
   // 店先の歯車飾り（壁に立てかけ）と道具
   for (const [lx, r, ly] of [

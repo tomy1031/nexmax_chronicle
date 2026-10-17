@@ -17,6 +17,7 @@ import {
   paintBlossomCard,
   paintLeafCard,
   paintNoiseNormal,
+  loadLetteringFonts,
   tex,
   type FabricDesign,
   type SignSpec,
@@ -107,11 +108,13 @@ export function makeFoliage(mat: THREE.MeshStandardMaterial, sway: number): THRE
 }
 
 export async function createMaterialLibrary(aniso: number) {
+  // 看板・幟・提灯の文字は筆文字フォントで描くので、テクスチャを描く前に読み込みを待つ
   const [deckPBR, stonePBR, cobblePBR, plasterPBR] = await Promise.all([
     loadPBR('wood_floor_deck', aniso),
     loadPBR('japanese_stone_wall', aniso),
     loadPBR('cobblestone_floor_04', aniso),
     loadPBR('white_plaster_02', aniso),
+    loadLetteringFonts(),
   ])
   const woodP = paintWoodGrain()
   const plasterP = paintPlaster()
@@ -174,7 +177,8 @@ export async function createMaterialLibrary(aniso: number) {
   const shoji = std({ map: shojiT.map, emissiveMap: shojiT.emissiveMap, emissive: new THREE.Color('#ffb060'), emissiveIntensity: 1.1, roughness: 0.9 })
   const interior = std({ color: '#3a2416', roughness: 0.9, emissive: new THREE.Color('#8a4a18'), emissiveIntensity: 0.8 })
   const castleWhite = std({ ...plasterT, color: '#ffffff', roughness: 0.85 })
-  const castleRoof = std({ ...roofT, color: '#557479', roughness: 0.55, metalness: 0.3, side: THREE.DoubleSide })
+  // 銅板葺きの緑青（大坂城のような青緑）
+  const castleRoof = std({ map: roofT.map, normalMap: roofT.normalMap, normalScale: new THREE.Vector2(0.7, 0.7), color: '#86c7b9', roughness: 0.82, metalness: 0.05, envMapIntensity: 0.45, side: THREE.DoubleSide })
   const grass = std({ color: '#7fa24a', roughness: 0.95, normalMap: ironN, normalScale: new THREE.Vector2(1.2, 1.2) })
   const rock = std({ ...wallT, color: '#c9b9a2', roughness: 1 })
   const plain = std({ color: '#ffffff', roughness: 0.8 })

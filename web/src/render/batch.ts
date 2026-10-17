@@ -154,13 +154,112 @@ export function scaleUV(g: THREE.BufferGeometry, su: number, sv: number): void {
 
 const rboxCache = new Map<string, THREE.BufferGeometry>()
 
-/** 角の丸い箱（面取り）。r は角の半径。 */
+/**
+ * 角を面取りした箱（6 面＋12 本の面取り帯＋8 つの角の三角＝44 三角形）。
+ * RoundedBoxGeometry（108 三角形）より軽く、面取りの帯が光を拾うので見た目はほぼ同じ。
+ * UV は実寸 1m の箱投影（Batch の box 投影で上書きされることが多い）。
+ */
+export function chamferBox(w: number, h: number, d: number, r: number): THREE.BufferGeometry {
+  const half = [w / 2, h / 2, d / 2]
+  const inner = [half[0] - r, half[1] - r, half[2] - r]
+  const pos: number[] = []
+  const nor: number[] = []
+  const uv: number[] = []
+  /** 面 a（符号 sa）上の、他の 2 軸の符号 s による頂点 */
+  const fv = (a: number, s: number[]): number[] => {
+    const p = [0, 0, 0]
+    for (let i = 0; i < 3; i++) p[i] = i === a ? s[i] * half[i] : s[i] * inner[i]
+    return p
+  }
+  const tri = (p0: number[], p1: number[], p2: number[]) => {
+    const ux = p1[0] - p0[0]
+    const uy = p1[1] - p0[1]
+    const uz = p1[2] - p0[2]
+    const vx = p2[0] - p0[0]
+    const vy = p2[1] - p0[1]
+    const vz = p2[2] - p0[2]
+    let nx = uy * vz - uz * vy
+    let ny = uz * vx - ux * vz
+    let nz = ux * vy - uy * vx
+    const cx = p0[0] + p1[0] + p2[0]
+    const cy = p0[1] + p1[1] + p2[1]
+    const cz = p0[2] + p1[2] + p2[2]
+    let q = [p0, p1, p2]
+    if (nx * cx + ny * cy + nz * cz < 0) {
+      q = [p0, p2, p1]
+      nx = -nx
+      ny = -ny
+      nz = -nz
+    }
+    const l = Math.hypot(nx, ny, nz) || 1
+    nx /= l
+    ny /= l
+    nz /= l
+    const ax = Math.abs(nx)
+    const ay = Math.abs(ny)
+    const az = Math.abs(nz)
+    for (const p of q) {
+      pos.push(p[0], p[1], p[2])
+      nor.push(nx, ny, nz)
+      if (ay >= ax && ay >= az) uv.push(p[0], p[2])
+      else if (ax >= az) uv.push(p[2], p[1])
+      else uv.push(p[0], p[1])
+    }
+  }
+  const quad = (a: number[], b: number[], c: number[], e: number[]) => {
+    tri(a, b, c)
+    tri(a, c, e)
+  }
+  const S = [-1, 1]
+  // 6 面
+  for (let a = 0; a < 3; a++) {
+    const u = (a + 1) % 3
+    const v = (a + 2) % 3
+    for (const sa of S) {
+      const s = (su: number, sv: number) => {
+        const k = [0, 0, 0]
+        k[a] = sa
+        k[u] = su
+        k[v] = sv
+        return fv(a, k)
+      }
+      quad(s(-1, -1), s(1, -1), s(1, 1), s(-1, 1))
+    }
+  }
+  // 12 本の面取り帯（軸 e に平行な辺）
+  for (let e = 0; e < 3; e++) {
+    const u = (e + 1) % 3
+    const v = (e + 2) % 3
+    for (const su of S) {
+      for (const sv of S) {
+        const k0 = [0, 0, 0]
+        const k1 = [0, 0, 0]
+        k0[u] = su
+        k0[v] = sv
+        k0[e] = -1
+        k1[u] = su
+        k1[v] = sv
+        k1[e] = 1
+        quad(fv(u, k0), fv(u, k1), fv(v, k1), fv(v, k0))
+      }
+    }
+  }
+  // 8 つの角
+  for (const sx of S) for (const sy of S) for (const sz of S) tri(fv(0, [sx, sy, sz]), fv(1, [sx, sy, sz]), fv(2, [sx, sy, sz]))
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  return g
+}
+
+/** 角の丸い箱（面取り）。r は角の半径。seg>1 のときだけ RoundedBoxGeometry（なめらかな丸み）を使う。 */
 export function rbox(w: number, h: number, d: number, r = 0.03, seg = 1): THREE.BufferGeometry {
   const rr = Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001)
   const key = `${w.toFixed(3)}|${h.toFixed(3)}|${d.toFixed(3)}|${rr.toFixed(3)}|${seg}`
   let g = rboxCache.get(key)
   if (!g) {
-    g = rr > 0.002 ? new RoundedBoxGeometry(w, h, d, seg, rr) : new THREE.BoxGeometry(w, h, d)
+    g = rr > 0.002 ? (seg > 1 ? new RoundedBoxGeometry(w, h, d, seg, rr) : chamferBox(w, h, d, rr)) : new THREE.BoxGeometry(w, h, d)
     rboxCache.set(key, g)
   }
   return g

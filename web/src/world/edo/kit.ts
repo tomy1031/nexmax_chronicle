@@ -197,25 +197,33 @@ export function railing(
 
 // ------------------------------------------------------------------ 提灯
 
-let lanternBody: THREE.BufferGeometry | null = null
-function lanternGeo(): THREE.BufferGeometry {
-  if (!lanternBody) {
+const lanternBodies = new Map<string, THREE.BufferGeometry>()
+function lanternGeo(low = false): THREE.BufferGeometry {
+  const key = low ? 'low' : 'high'
+  let g = lanternBodies.get(key)
+  if (!g) {
     const pts: THREE.Vector2[] = []
-    const N = 10
+    const N = low ? 4 : 10
     for (let i = 0; i <= N; i++) {
       const t = i / N
       const bulge = Math.sin(Math.PI * t)
       pts.push(new THREE.Vector2(0.11 + 0.11 * Math.pow(bulge, 0.7), -0.24 + 0.48 * t))
     }
-    lanternBody = new THREE.LatheGeometry(pts, 14)
+    g = new THREE.LatheGeometry(pts, low ? 7 : 14)
+    lanternBodies.set(key, g)
   }
-  return lanternBody
+  return g
 }
 
-/** 吊り提灯（y は提灯の中心）。 */
-export function lantern(c: Ctx, x: number, y: number, z: number, o: { kind?: 'cream' | 'red'; s?: number; cord?: number; light?: boolean; rotY?: number } = {}): void {
+/** 吊り提灯（y は提灯の中心）。low=true は遠景用の軽い形（上下の枠・紐なし）。 */
+export function lantern(c: Ctx, x: number, y: number, z: number, o: { kind?: 'cream' | 'red'; s?: number; cord?: number; light?: boolean; rotY?: number; low?: boolean } = {}): void {
   const s = o.s ?? 1
   const mat = o.kind === 'red' ? c.m.paperRed : c.m.paperCream
+  if (o.low) {
+    c.b.add(lanternGeo(true), mat, M(x, y, z, 0, o.rotY ?? range(c.rng, 0, 6.28), 0, s), { cast: false })
+    if (o.light ?? true) c.lights.push({ pos: new THREE.Vector3(x, y - 0.05, z), color: o.kind === 'red' ? '#ff7a40' : '#ffae5a', intensity: 3.5 * s, dist: 7 })
+    return
+  }
   c.b.add(lanternGeo(), mat, M(x, y, z, 0, o.rotY ?? range(c.rng, 0, 6.28), 0, s), { cast: false })
   c.b.add(new THREE.CylinderGeometry(0.13 * s, 0.14 * s, 0.06 * s, 10), c.m.darkLacquer, M(x, y + 0.255 * s, z), { cast: false })
   c.b.add(new THREE.CylinderGeometry(0.14 * s, 0.13 * s, 0.06 * s, 10), c.m.darkLacquer, M(x, y - 0.255 * s, z), { cast: false })

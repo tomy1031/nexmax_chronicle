@@ -9,7 +9,27 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { drawGear, makeCanvas } from '../render/textures'
 
 export type CharacterName = 'nexmax' | 'genbei' | 'oharu'
-export type Pose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave'
+export type Pose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave' | 'run' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'dash'
+
+/** 仮モデルが持つ基本のポーズへ寄せる（新しいポーズは近いものとして扱う） */
+type BasePose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave'
+function basePose(p: Pose): BasePose {
+  switch (p) {
+    case 'run':
+    case 'dash':
+      return 'walk'
+    case 'swing':
+    case 'pulled':
+    case 'fire':
+      return 'hold'
+    case 'jump':
+    case 'fall':
+    case 'land':
+      return 'idle'
+    default:
+      return p
+  }
+}
 
 export interface Character {
   name: CharacterName
@@ -48,33 +68,55 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
   const root = new THREE.Group()
   root.name = name
   const inner = new THREE.Group()
-  // glTF は +Z が正面 → -Z 向きにそろえる
-  inner.rotation.y = Math.PI
+  // モデル処理（scripts/process-model.mjs）で -Z 向きに焼き込み済みなので回さない
   inner.add(scene)
   root.add(inner)
   scene.updateMatrixWorld(true)
   const box = new THREE.Box3().setFromObject(scene)
   const size = box.getSize(new THREE.Vector3())
   const s = size.y > 0 ? h / size.y : 1
-  scene.scale.setScalar(s)
+  scene.scale.multiplyScalar(s)
   scene.updateMatrixWorld(true)
   box.setFromObject(scene)
   const center = box.getCenter(new THREE.Vector3())
   scene.position.x -= center.x
   scene.position.z -= center.z
   scene.position.y -= box.min.y
+  scene.updateMatrixWorld(true)
+  const meshes: THREE.Mesh[] = []
   scene.traverse((o) => {
     const m = o as THREE.Mesh
-    if (m.isMesh) {
-      m.castShadow = true
-      m.receiveShadow = true
-      const mats = Array.isArray(m.material) ? m.material : [m.material]
-      for (const mat of mats) {
-        const sm = mat as THREE.MeshStandardMaterial
-        if (sm.map) sm.map.anisotropy = 8
-      }
-    }
+    if (m.isMesh) meshes.push(m)
   })
+  for (const m of meshes) {
+    m.castShadow = true
+    m.receiveShadow = true
+    // Tripo はアルベドだけを焼くので、つやを抑えた標準マテリアルへ置き換える（volume/transmission も外す）
+    const conv = (mat: THREE.Material): THREE.Material => {
+      const src = mat as THREE.MeshPhysicalMaterial
+      const out = new THREE.MeshStandardMaterial({
+        name: src.name,
+        map: src.map ?? null,
+        normalMap: src.normalMap ?? null,
+        color: src.color ? src.color.clone() : new THREE.Color('#ffffff'),
+        vertexColors: src.vertexColors,
+        roughness: 0.8,
+        metalness: 0,
+        envMapIntensity: 0.8,
+      })
+      if (out.map) {
+        out.map.anisotropy = 8
+        out.map.colorSpace = THREE.SRGBColorSpace
+      }
+      return out
+    }
+    m.material = Array.isArray(m.material) ? m.material.map(conv) : conv(m.material)
+    // 細い輪郭線（濃い茶）：ワールドでおよそ 4mm になるよう、メッシュの拡大を打ち消す
+    const ws = new THREE.Vector3()
+    m.getWorldScale(ws)
+    const k = Math.max(1e-6, (ws.x + ws.y + ws.z) / 3)
+    addOutline(m, (0.004 * (h / 1.6)) / k, '#2a1a12', false, true)
+  }
   const mixer = clips.length ? new THREE.AnimationMixer(scene) : null
   const find = (re: RegExp) => clips.find((c) => re.test(c.name.toLowerCase()))
   const idle = find(/idle|stand|breath/) ?? clips[0]
@@ -92,8 +134,8 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
   const hand = new THREE.Object3D()
   hand.position.set(0.18 * (h / 1.05), 0.55 * (h / 1.05), -0.25 * (h / 1.05))
   root.add(hand)
-  let t = 0
-  let pose: Pose = 'idle'
+  let t = Math.random() * 10
+  let pose: BasePose = 'idle'
   return {
     name,
     root,
@@ -101,7 +143,7 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
     height: h,
     handAnchor: hand,
     setPose(p) {
-      pose = p
+      pose = basePose(p)
     },
     setAim() {},
     update(dt, speed) {
@@ -110,11 +152,27 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
         play(speed > 0.3 && walk ? walk : idle)
         if (current && walk && current.getClip() === walk) current.timeScale = Math.max(0.6, speed / 2.2)
         mixer.update(dt)
-      } else {
-        // クリップが無い場合の簡易な揺れ
-        inner.position.y = Math.abs(Math.sin(t * 9)) * 0.04 * Math.min(1, speed / 3)
-        inner.rotation.z = Math.sin(t * 2) * 0.02 + Math.sin(t * 9) * 0.03 * Math.min(1, speed / 3)
-        if (pose === 'hold') inner.rotation.x = 0.08
+        return
+      }
+      // リグの無い静的メッシュ：呼吸（Y に約 1%）と小さな揺れ。ポーズは向き・傾きで示す
+      const walkK = Math.min(1, speed / 3)
+      const breath = Math.sin(t * 2.1)
+      inner.scale.set(1 - breath * 0.004, 1 + breath * 0.01, 1 - breath * 0.004)
+      inner.position.y = Math.abs(Math.sin(t * 9)) * 0.04 * walkK
+      inner.rotation.set(0, 0, Math.sin(t * 0.9) * 0.012 + Math.sin(t * 9) * 0.03 * walkK)
+      if (pose === 'crank') {
+        // ハンドルを回す：前へかがみ、押し引きのリズムで前後に揺れる
+        const c = Math.sin(t * 1.6)
+        inner.rotation.x = -0.1 - c * 0.04
+        inner.rotation.y = c * 0.05
+        inner.position.z = -0.03 * c
+      } else if (pose === 'wave') {
+        inner.rotation.z += Math.sin(t * 4) * 0.035
+        inner.position.y += Math.abs(Math.sin(t * 4)) * 0.015
+      } else if (pose === 'hold') {
+        inner.rotation.x = -0.08
+      } else if (pose === 'walk') {
+        inner.rotation.x = -0.05 * walkK
       }
     },
   }
@@ -122,9 +180,6 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
 
 // ------------------------------------------------------------------ 仮モデル共通
 
-function plastic(color: string, rough = 0.32): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({ color, roughness: rough, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18 })
-}
 function cloth(color: string, map?: THREE.Texture): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.88, map: map ?? null })
 }
@@ -238,7 +293,7 @@ function placeholder(name: CharacterName, h: number): Character {
   const natural = name === 'nexmax' ? 1.05 : name === 'genbei' ? 1.6 : 1.25
   rig.root.scale.setScalar(h / natural)
   root.add(rig.root)
-  let pose: Pose = name === 'genbei' ? 'crank' : name === 'oharu' ? 'wave' : 'idle'
+  let pose: BasePose = name === 'genbei' ? 'crank' : name === 'oharu' ? 'wave' : 'idle'
   let t = Math.random() * 10
   let walkPhase = 0
   let aim: THREE.Vector3 | null = null
@@ -263,7 +318,7 @@ function placeholder(name: CharacterName, h: number): Character {
     height: h,
     handAnchor: rig.hand,
     setPose(p) {
-      pose = p
+      pose = basePose(p)
     },
     setAim(target) {
       aim = target ? target.clone() : null
@@ -283,12 +338,11 @@ function placeholder(name: CharacterName, h: number): Character {
       rig.legL.rotation.set(0, 0, 0)
       rig.legR.rotation.set(0, 0, 0)
       if (pose === 'hold') {
-        // 両腕を対象へ突き出して踏ん張る
-        const [yl, pl] = aimAngles(rig.armL)
+        // NMClaw は右腕だけ：右腕を対象へ突き出し、左手は右の前腕に添えて踏ん張る
         const [yr, pr] = aimAngles(rig.armR)
         const shake = Math.sin(t * 14) * 0.015
-        rig.armL.rotation.set(Math.PI / 2 + pl + shake, yl + 0.12, 0)
         rig.armR.rotation.set(Math.PI / 2 + pr + shake, yr - 0.08, 0)
+        rig.armL.rotation.set(Math.PI / 2 + pr - 0.35 + shake, yr - 0.55, 0)
         rig.legL.rotation.set(0.5, 0, -0.12)
         rig.legR.rotation.set(-0.55, 0, 0.12)
         rig.body.rotation.x = 0.1
@@ -326,166 +380,267 @@ function placeholder(name: CharacterName, h: number): Character {
 }
 
 // ------------------------------------------------------------------ ネクマックス
+// 原画（assets_src/reference/nexmax_original.png）準拠：パステルの空色・大きな丸い頭・上辺が中央でくぼむ白い顔プレート・
+// ヘルメットに描いた眉・黒い丸目・小さく開いたオレンジの口・楕円の耳パッド・アンテナなし・
+// 玉をつないだ細い手足・指のある小さな手・半球の足・胸の青い山形ロゴ・黒い輪郭線。
+// 右腕の前腕に NMClaw（ワイヤー射出の爪）を収納：手首に小さな射出リングだけ見せる。
+
+/** 原画（2000px 四方、表示 1932px）上の寸法 → m（全高 1230px = 1.05m） */
+const NX = {
+  k: 1.05 / 1230,
+  headCx: 960,
+  headCy: 715,
+  headRx: 462,
+  headRy: 345,
+}
+const NX_HEAD = { rx: 0.395, ry: 0.295, rz: 0.34 }
+/** 顔パッチ（頭の楕円体の前面）の範囲 */
+const NX_PATCH = { ph: 1.1, t0: 0.45, t1: 2.55 }
 
 function nexmaxFace(): THREE.CanvasTexture {
-  const [c, ctx] = makeCanvas(512, 512)
-  // 角丸の白いフェイスプレート（周囲は透明）
-  ctx.clearRect(0, 0, 512, 512)
-  ctx.fillStyle = '#ffffff'
-  const r = 150
-  ctx.beginPath()
-  ctx.moveTo(40 + r, 30)
-  ctx.lineTo(472 - r, 30)
-  ctx.quadraticCurveTo(472, 30, 472, 30 + r)
-  ctx.lineTo(472, 482 - r)
-  ctx.quadraticCurveTo(472, 482, 472 - r, 482)
-  ctx.lineTo(40 + r, 482)
-  ctx.quadraticCurveTo(40, 482, 40, 482 - r)
-  ctx.lineTo(40, 30 + r)
-  ctx.quadraticCurveTo(40, 30, 40 + r, 30)
-  ctx.closePath()
-  ctx.fill()
-  ctx.strokeStyle = '#2a3550'
-  ctx.lineWidth = 8
-  ctx.stroke()
-  // 頬のほんのりした陰
-  const g = ctx.createRadialGradient(256, 300, 80, 256, 300, 280)
-  g.addColorStop(0, 'rgba(255,255,255,0)')
-  g.addColorStop(1, 'rgba(170,190,215,0.35)')
+  const W = 1024
+  const H = 736
+  const [c, ctx] = makeCanvas(W, H)
+  ctx.clearRect(0, 0, W, H)
+  // 原画の正面図の座標 → 楕円体の前面パッチの UV（キャンバス座標）
+  const P = (X: number, Y: number): [number, number] => {
+    const nx = (X - NX.headCx) / NX.headRx
+    const ny = Math.max(-0.999, Math.min(0.999, (NX.headCy - Y) / NX.headRy))
+    const th = Math.acos(ny)
+    const a = Math.asin(Math.max(-1, Math.min(1, nx / Math.sin(th))))
+    return [((a + NX_PATCH.ph) / (2 * NX_PATCH.ph)) * W, ((th - NX_PATCH.t0) / (NX_PATCH.t1 - NX_PATCH.t0)) * H]
+  }
+  type Pt = [number, number]
+  const quad = (out: Pt[], a: Pt, ctl: Pt, b: Pt, n = 16) => {
+    for (let i = 1; i <= n; i++) {
+      const t = i / n
+      const u = 1 - t
+      out.push([u * u * a[0] + 2 * u * t * ctl[0] + t * t * b[0], u * u * a[1] + 2 * u * t * ctl[1] + t * t * b[1]])
+    }
+  }
+  const path = (pts: Pt[], close: boolean) => {
+    ctx.beginPath()
+    pts.forEach(([x, y], i) => {
+      const [u, v] = P(x, y)
+      if (i === 0) ctx.moveTo(u, v)
+      else ctx.lineTo(u, v)
+    })
+    if (close) ctx.closePath()
+  }
+  // 顔プレート：上辺は中央でなだらかにくぼむ。下の角は大きく丸い。
+  const Lx = 648
+  const Rx = 1338
+  const T = 500
+  const r = 72
+  const plate: Pt[] = [[Lx + r, T]]
+  for (let X = Lx + r; X <= Rx - r; X += 6) plate.push([X, T + 50 * Math.exp(-(((X - 960) / 58) ** 2))])
+  quad(plate, [Rx - r, T], [Rx, T], [Rx, T + r])
+  plate.push([Rx, 790])
+  quad(plate, [Rx, 790], [Rx, 925], [1180, 932])
+  quad(plate, [1180, 932], [960, 950], [740, 927])
+  quad(plate, [740, 927], [Lx, 920], [Lx, 790])
+  plate.push([Lx, T + r])
+  quad(plate, [Lx, T + r], [Lx, T], [Lx + r, T])
+  path(plate, true)
+  const g = ctx.createLinearGradient(0, P(0, 520)[1], 0, P(0, 940)[1])
+  g.addColorStop(0, '#ffffff')
+  g.addColorStop(1, '#eef2f6')
   ctx.fillStyle = g
   ctx.fill()
-  // 目（縦長の黒い楕円＋ハイライト）
-  for (const ex of [196, 316]) {
-    ctx.fillStyle = '#111522'
-    ctx.beginPath()
-    ctx.ellipse(ex, 225, 25, 44, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = '#ffffff'
-    ctx.beginPath()
-    ctx.ellipse(ex + 7, 208, 8, 12, 0, 0, Math.PI * 2)
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = '#11131a'
+  ctx.lineWidth = 13
+  ctx.stroke()
+  // 目（少し縦長の黒い丸）
+  for (const [ex, ey] of [
+    [885, 722],
+    [1110, 727],
+  ] as const) {
+    const pts: Pt[] = []
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2
+      pts.push([ex + Math.cos(a) * 50, ey + Math.sin(a) * 57])
+    }
+    path(pts, true)
+    ctx.fillStyle = '#0d0f14'
     ctx.fill()
   }
-  // 口（開いた笑顔）
-  ctx.fillStyle = '#7a1d24'
-  ctx.beginPath()
-  ctx.moveTo(206, 318)
-  ctx.quadraticCurveTo(256, 330, 306, 314)
-  ctx.quadraticCurveTo(300, 392, 256, 394)
-  ctx.quadraticCurveTo(212, 392, 206, 318)
-  ctx.closePath()
+  // 口（小さく開いた、角の丸い逆三角形）
+  const mouth: Pt[] = [[946, 848]]
+  quad(mouth, [946, 848], [994, 858], [1042, 850], 10)
+  quad(mouth, [1042, 850], [1036, 892], [994, 906], 10)
+  quad(mouth, [994, 906], [952, 890], [946, 848], 10)
+  path(mouth, true)
+  ctx.fillStyle = '#f26f50'
   ctx.fill()
-  ctx.fillStyle = '#e8606c'
-  ctx.beginPath()
-  ctx.ellipse(258, 374, 28, 15, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = '#2a1a1e'
-  ctx.lineWidth = 6
-  ctx.beginPath()
-  ctx.moveTo(206, 318)
-  ctx.quadraticCurveTo(256, 330, 306, 314)
+  ctx.lineWidth = 7
   ctx.stroke()
+  // 眉（ヘルメットの上に描いた短い弧）
+  ctx.lineWidth = 15
+  for (const [a, ctl, b] of [
+    [
+      [815, 448],
+      [852, 404],
+      [905, 432],
+    ],
+    [
+      [1092, 464],
+      [1140, 418],
+      [1182, 456],
+    ],
+  ] as Array<[Pt, Pt, Pt]>) {
+    const pts: Pt[] = [a]
+    quad(pts, a, ctl, b, 14)
+    path(pts, false)
+    ctx.stroke()
+  }
+  return canvasTex(c)
+}
+
+/** 胸の山形ロゴ（濃淡 2 色の青） */
+function nexmaxLogo(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 200)
+  ctx.clearRect(0, 0, 256, 200)
+  const poly = (pts: Array<[number, number]>, col: string) => {
+    ctx.fillStyle = col
+    ctx.beginPath()
+    pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)))
+    ctx.closePath()
+    ctx.fill()
+  }
+  poly([[8, 190], [8, 86], [92, 190]], '#1d5fab')
+  poly([[8, 190], [52, 70], [128, 190]], '#2c79c6')
+  poly([[70, 190], [150, 92], [214, 190]], '#3b93dc')
+  poly([[132, 190], [248, 10], [248, 190]], '#1d5fab')
+  poly([[180, 190], [248, 96], [248, 190]], '#2c79c6')
   return canvasTex(c)
 }
 
 function buildNexmax(): Rig {
-  const blue = plastic('#3d9cf0', 0.3)
-  const blueDark = plastic('#2f7fd0', 0.35)
-  const grey = new THREE.MeshPhysicalMaterial({ color: '#8f9aa8', roughness: 0.35, metalness: 0.55, clearcoat: 0.3 })
-  const white = plastic('#f7f8fa', 0.35)
-  const black = new THREE.MeshStandardMaterial({ color: '#15171c', roughness: 0.4 })
-  const faceMat = new THREE.MeshPhysicalMaterial({ map: nexmaxFace(), alphaTest: 0.5, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2 })
+  const sky = new THREE.MeshPhysicalMaterial({ color: '#7cbdf0', roughness: 0.52, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.45, envMapIntensity: 0.6 })
+  const ringMat = new THREE.MeshPhysicalMaterial({ color: '#5aa4dc', roughness: 0.35, metalness: 0.2, clearcoat: 0.5, clearcoatRoughness: 0.25 })
+  const nozzle = new THREE.MeshStandardMaterial({ color: '#1b2a3c', roughness: 0.4, metalness: 0.4 })
+  const faceMat = new THREE.MeshStandardMaterial({ map: nexmaxFace(), alphaTest: 0.5, roughness: 0.42, envMapIntensity: 0.5 })
+  const logoMat = new THREE.MeshStandardMaterial({ map: nexmaxLogo(), alphaTest: 0.5, roughness: 0.45, polygonOffset: true, polygonOffsetFactor: -2 })
   const root = new THREE.Group()
   const body = new THREE.Group()
-  const baseY = 0.36
+  const baseY = 0.23 // 腰の高さ
   body.position.y = baseY
   root.add(body)
-  // 胴（丸い）
-  const torso = mesh(new RoundedBoxGeometry(0.3, 0.24, 0.22, 4, 0.1), blue, 0, 0.1, 0)
-  body.add(torso)
-  // 胸の V
-  const vShape = new THREE.Shape()
-  vShape.moveTo(-0.07, 0.05)
-  vShape.lineTo(0, -0.04)
-  vShape.lineTo(0.07, 0.05)
-  vShape.lineTo(0.045, 0.05)
-  vShape.lineTo(0, -0.005)
-  vShape.lineTo(-0.045, 0.05)
-  vShape.closePath()
-  const vm = mesh(new THREE.ExtrudeGeometry(vShape, { depth: 0.01, bevelEnabled: false }), plastic('#9fd2ff', 0.3), 0, 0.13, -0.116)
-  vm.rotation.y = Math.PI
-  body.add(vm)
-  // 腰の関節
-  body.add(sphere(0.075, grey, 0, -0.02, 0))
-  // 首
-  body.add(mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.07, 16), grey, 0, 0.245, 0))
-  // 頭
+  // 胴（上が広い丸い台形）
+  const torsoProf = [
+    [0.0, -0.006],
+    [0.06, 0.0],
+    [0.092, 0.02],
+    [0.105, 0.06],
+    [0.13, 0.12],
+    [0.14, 0.163],
+    [0.126, 0.19],
+    [0.08, 0.205],
+    [0.0, 0.211],
+  ].map(([x, y]) => new THREE.Vector2(x, y))
+  body.add(mesh(new THREE.LatheGeometry(torsoProf, 28), sky, 0, 0, 0, 1, 1, 0.72))
+  // 胸のロゴ
+  const logo = mesh(new THREE.PlaneGeometry(0.088, 0.069), logoMat, 0, 0.118, -0.0935)
+  logo.rotation.y = Math.PI
+  logo.rotation.x = 0.12
+  logo.castShadow = false
+  logo.userData.noOutline = true
+  body.add(logo)
+  // 首（短い）
+  body.add(mesh(new THREE.CylinderGeometry(0.04, 0.046, 0.075, 18), sky, 0, 0.215, 0))
+  // 頭（首を支点に回す）
   const head = new THREE.Group()
-  head.position.set(0, 0.44, 0)
+  head.position.set(0, 0.2, 0)
   body.add(head)
-  head.add(sphere(0.25, blue, 0, 0, 0, 1.0, 0.95, 0.94, 40))
-  const face = mesh(new THREE.SphereGeometry(0.252, 40, 30, Math.PI * 1.5 - 0.95, 1.9, 0.62, 1.75), faceMat, 0, -0.005, -0.004, 1.0, 0.95, 0.95)
+  const hc = 0.756 - baseY - 0.2 // 首から頭の中心まで
+  head.add(sphere(1, sky, 0, hc, 0, NX_HEAD.rx, NX_HEAD.ry, NX_HEAD.rz, 48))
+  // 顔プレート（楕円体の前面パッチに原画の顔を投影したテクスチャ）
+  const face = mesh(
+    new THREE.SphereGeometry(1, 56, 40, Math.PI * 1.5 - NX_PATCH.ph, NX_PATCH.ph * 2, NX_PATCH.t0, NX_PATCH.t1 - NX_PATCH.t0),
+    faceMat,
+    0,
+    hc,
+    0,
+    NX_HEAD.rx + 0.003,
+    NX_HEAD.ry + 0.003,
+    NX_HEAD.rz + 0.003,
+  )
+  face.userData.noOutline = true
   head.add(face)
-  // 耳（円筒）
-  for (const e of [-1, 1]) {
-    const ear = mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.1, 28), blue, e * 0.235, 0.0, 0.02)
-    ear.rotation.z = Math.PI / 2
-    head.add(ear)
-    const cap = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 24), blueDark, e * 0.29, 0.0, 0.02)
-    cap.rotation.z = Math.PI / 2
-    head.add(cap)
-    const ring = mesh(new THREE.TorusGeometry(0.075, 0.012, 8, 28), grey, e * 0.287, 0.0, 0.02)
-    ring.rotation.y = Math.PI / 2
-    head.add(ring)
-    // 触角
-    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(e * 0.05, 0.22, -0.06), new THREE.Vector3(e * 0.07, 0.33, -0.08), new THREE.Vector3(e * 0.12, 0.33, -0.17))
-    head.add(mesh(new THREE.TubeGeometry(curve, 12, 0.007, 6), black))
-    head.add(sphere(0.016, black, e * 0.12, 0.33, -0.17, 1, 1, 1, 10))
-  }
-  // 腕
+  // 耳パッド（楕円）
+  for (const e of [-1, 1]) head.add(sphere(1, sky, e * (NX_HEAD.rx - 0.012), hc - 0.005, 0.03, 0.066, 0.098, 0.082, 24))
+  // 腕：玉をつないだ細い腕。右腕（+X）の前腕に NMClaw を収納
   const arm = (e: number) => {
+    const right = e > 0
     const g = new THREE.Group()
-    g.position.set(e * 0.17, 0.17, 0)
-    g.add(sphere(0.05, grey, 0, 0, 0))
-    const upper = capsule(0.048, 0.07, blue)
-    upper.position.set(e * 0.02, -0.08, 0)
-    g.add(upper)
-    g.add(sphere(0.038, grey, e * 0.025, -0.155, 0))
-    const fore = capsule(0.05, 0.06, blue)
-    fore.position.set(e * 0.028, -0.22, 0)
-    g.add(fore)
-    g.add(sphere(0.066, white, e * 0.03, -0.3, 0, 1, 0.95, 1))
+    g.position.set(e * 0.145, 0.17, 0)
+    g.add(sphere(0.034, sky, 0, 0, 0, 1, 1, 1, 20))
+    g.add(sphere(0.032, sky, e * 0.008, -0.062, 0, 1, 1.35, 1, 20))
+    g.add(sphere(0.022, sky, e * 0.012, -0.112, 0, 1, 1, 1, 16))
+    g.add(sphere(right ? 0.044 : 0.04, sky, e * 0.016, -0.166, 0, 1, 1.3, 1, 22))
+    g.add(sphere(0.02, sky, e * 0.018, -0.217, 0, 1, 1, 1, 14))
+    // 手：手のひら＋指 3 本＋親指
+    const hx = e * 0.02
+    g.add(sphere(0.028, sky, hx, -0.248, 0, 0.9, 1.0, 0.78, 18))
+    for (const [fx, tilt] of [
+      [-0.012, -0.32],
+      [0.0, 0.0],
+      [0.012, 0.32],
+    ] as const) {
+      const f = capsule(0.0085, 0.022, sky)
+      f.position.set(hx + fx, -0.282, -0.004)
+      f.rotation.z = tilt
+      g.add(f)
+    }
+    const th = capsule(0.008, 0.018, sky)
+    th.position.set(hx - e * 0.016, -0.255, -0.02)
+    th.rotation.set(0.9, 0, e * 0.4)
+    g.add(th)
+    if (right) {
+      // 手首の射出リングと、前腕の先の小さな射出口
+      const ring = mesh(new THREE.TorusGeometry(0.027, 0.0075, 10, 28), ringMat, e * 0.018, -0.214, 0)
+      ring.rotation.x = Math.PI / 2
+      ring.userData.noOutline = true
+      g.add(ring)
+      const port = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.006, 14), nozzle, e * 0.018, -0.2, -0.038)
+      port.rotation.x = Math.PI / 2
+      port.userData.noOutline = true
+      g.add(port)
+    }
     return g
   }
   const armL = arm(-1)
   const armR = arm(1)
   body.add(armL, armR)
-  // 脚
+  // 脚：玉をつないだ細い脚＋半球の足
   const leg = (e: number) => {
     const g = new THREE.Group()
-    g.position.set(e * 0.09, -0.04, 0)
-    const thigh = capsule(0.055, 0.06, blue)
-    thigh.position.set(0, -0.07, 0)
-    g.add(thigh)
-    g.add(sphere(0.04, grey, 0, -0.15, 0))
-    g.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.08, 12), grey, 0, -0.2, 0))
-    const boot = mesh(new RoundedBoxGeometry(0.16, 0.13, 0.25, 4, 0.06), blue, 0, -0.26, -0.035)
-    g.add(boot)
-    g.add(mesh(new RoundedBoxGeometry(0.165, 0.03, 0.255, 2, 0.012), blueDark, 0, -0.315, -0.035))
+    g.position.set(e * 0.075, 0, 0)
+    g.add(sphere(0.028, sky, 0, -0.005, 0, 1, 1, 1, 16))
+    g.add(sphere(0.03, sky, 0, -0.046, 0, 1, 1.3, 1, 18))
+    g.add(sphere(0.02, sky, 0, -0.086, 0, 1, 1, 1, 14))
+    g.add(sphere(0.029, sky, 0, -0.12, 0, 1, 1.25, 1, 18))
+    g.add(mesh(new THREE.SphereGeometry(1, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), sky, 0, -0.23, -0.012, 0.056, 0.085, 0.072))
+    const sole = mesh(new THREE.CircleGeometry(1, 24), sky, 0, -0.2295, -0.012, 0.056, 0.072, 1)
+    sole.rotation.x = Math.PI / 2
+    g.add(sole)
     return g
   }
   const legL = leg(-1)
   const legR = leg(1)
   body.add(legL, legR)
-  // 手元（ビームの始点）
+  // 手元（NMClaw のワイヤーの射出点：右手首の射出口）
   const hand = new THREE.Object3D()
-  hand.position.set(0.03, -0.33, -0.02)
+  hand.position.set(0.018, -0.205, -0.04)
   armR.add(hand)
   mergeRig(root)
-  // 輪郭線は頭と胴の青い部分だけ（ドローコール節約）
-  for (const m of [...head.children, ...body.children]) {
-    const mesh = m as THREE.Mesh
-    if (mesh.isMesh && mesh.material === blue) addOutline(mesh, 0.005, '#16203a', false, true)
-  }
+  // 黒い輪郭線（原画の太い線）：空色の部分すべて
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (m.isMesh && m.material === sky && !m.userData.noOutline) addOutline(m, m.parent === head ? 0.0075 : 0.0048, '#11131a', false, true)
+  })
   return { root, body, head, armL, armR, legL, legR, hand, baseY }
 }
 

@@ -1,0 +1,8 @@
+Yuji Boku / Yuji Syuku (c) 2021 The Yuji Project Authors (https://github.com/Kinutafontfactory/Yuji)
+License: SIL Open Font License 1.1 (OFL-YujiBoku.txt / OFL-YujiSyuku.txt)
+Source: Google Fonts (fonts.googleapis.com css2 API, text= subset), downloaded 2026-10-17
+Files: YujiBoku-subset.woff2, YujiSyuku-subset.woff2 (subset of the characters below; other glyphs fall back to the serif font)
+To add characters, re-download with the css2 API: https://fonts.googleapis.com/css2?family=Yuji+Boku&text=<characters>
+
+Characters:
+ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをんゔゕゖゝゞァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶヷヸヹヺーヽヾ々〆、。・「」『』（）〜！？源兵衛仕掛横丁茶屋団子小間物細工水門酒蕎麦宿米薬呉服両替油菓飴甘味処湯床髪結魚八百豆腐鍛冶大本古着傘提灯扇刃鋳金銀銭店商舗堂庵亭楼館寺社神宮稲荷鳥居橋川堀町通坂城天守閣江戸浪速難波道頓船舟港市場祭花桜春夏秋冬月日星空風雨雪山海竹松梅福寿万千円文一二三四五六七九十上下中東西南北左右前後入出口名所御用歯車機械時計組職人匠技術未来過去現在環黒白赤青光影夢心力護鉱石異次元記憶絵図番主号飯焼餅紙筆墨硯書画骨董玩具形面軸滑輪縄桶樽箱瀬陶器漆塗錦織染反木綿糸針鍵錠鉄鋼銅釘鋸鉋槌斧鎌鍬農菜漬噌醤塩砂糖昆布鰹節干司麩羅鰻蒲牛鍋田楽饅頭羊羹煎最善哉汁粉冷氷瓜蜜柑柿栗芋種問質太荒乾官畳表経師仏線香蝋燭火打袋足草履駄帯櫛簪紅鏡化粧免営業休売切品新登特価安値良等極祖家老創年代享保禄宝永正徳手作直卸饂飩素麺鮨押握浮島都回廊仲友達約束録残修理助協

@@ -7,3 +7,7 @@ export_credentials.cfg
 .DS_Store
 # Test / capture output
 tests/output/
+# three.js 版
+web/node_modules/
+web/dist/
+assets_src/tripo/

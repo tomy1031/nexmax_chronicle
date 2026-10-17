@@ -11,3 +11,4 @@ tests/output/
 web/node_modules/
 web/dist/
 assets_src/tripo/
+web/.vitest/

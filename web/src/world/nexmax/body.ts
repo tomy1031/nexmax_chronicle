@@ -81,7 +81,7 @@ function torsoR(y: number): number {
 }
 
 /** 胴の背中の表面（背面から投影） */
-const torsoBack: Surface = (x, y, out, n) => {
+export const torsoBack: Surface = (x, y, out, n) => {
   const r = torsoR(y)
   if (Math.abs(x) >= r) return false
   const z = TORSO_Z * Math.sqrt(r * r - x * x)
@@ -106,8 +106,8 @@ export function torsoLogoUV(): { u: number; v: number; w: number; h: number } {
 }
 
 export const ORE_CENTER: V2 = [0, fy(490)]
-const ORE_R = 36 * PX
-const ORE_RIM_R = 41 * PX
+export const ORE_R = 36 * PX
+export const ORE_RIM_R = 41 * PX
 
 /** 胴（＋首・鉱石の窓の縁）。胴の回転中心からのローカル座標。頂点色は白（色はテクスチャ） */
 export function buildTorso(): THREE.BufferGeometry {
@@ -341,36 +341,8 @@ export function buildForearm(right: boolean): { geo: THREE.BufferGeometry; ring:
       18,
     )
     parts.push(fore)
-    // 射出口：手首の端の、手の甲側（+X）に小さなノズル。先端に暗い穴
-    const nozzle = lathe(
-      [
-        [0, 0.004],
-        [0.0145, 0.004],
-        [0.0145, -0.008],
-        [0.0135, -0.0115],
-        [0.0085, -0.012],
-        [0.0075, -0.008],
-        [0, -0.008],
-      ],
-      14,
-    )
-    {
-      const pos = nozzle.attributes.position
-      const col = new Float32Array(pos.count * 3)
-      const body = new THREE.Color(NX_COLORS.body)
-      const hole = new THREE.Color('#1f3c64')
-      for (let i = 0; i < pos.count; i++) {
-        const isHole = pos.getY(i) < -0.0075 && Math.hypot(pos.getX(i), pos.getZ(i)) < 0.009
-        const c = isHole ? hole : body
-        col[i * 3] = c.r
-        col[i * 3 + 1] = c.g
-        col[i * 3 + 2] = c.b
-      }
-      nozzle.setAttribute('color', new THREE.BufferAttribute(col, 3))
-    }
-    nozzle.translate(0.033, -0.146, 0)
-    parts.push(nozzle)
-    muzzle.set(0.033, -0.158, 0)
+    // 射出口は手首の先（こぶしの正面）：nexmaxModel が手首の子として置く。ここでは手首の口の中心を返す
+    muzzle.set(0, -0.147, 0)
     // 光る輪（別メッシュ・発光）：溝にはまる
     const tor = new THREE.TorusGeometry(0.0522, 0.006, 8, 30)
     tor.rotateX(Math.PI / 2)

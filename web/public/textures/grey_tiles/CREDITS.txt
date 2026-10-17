@@ -1,0 +1,3 @@
+Grey Tiles by Amal Kumar — Poly Haven (https://polyhaven.com/a/grey_tiles)
+License: CC0 1.0 (public domain). 1k JPG: diff / nor (OpenGL) / arm = AO+Rough+Metal. Real-world size 2.2m x 2.2m.
+Used by: 2086 Nanba Town walkways and building panels (src/stages/future2086).

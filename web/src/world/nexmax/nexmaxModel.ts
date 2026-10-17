@@ -1,7 +1,7 @@
 // 主人公ネクマックス（初号機・アンテナなし）：コードで組んだ剛体パーツ＋手続きアニメーション。
 // 見本：assets_src/reference/clean/nexmax_game_turnaround.png（正面・側面・背面）。
 // 階層：root → scaler → body（つぶれ・傾き）→ hips → torso → head / 肩 → 肘 → 手首、hips → 股関節 → 膝 → 足首。
-// 原点は足元、正面は -Z。右腕の前腕に NMClaw（ワイヤー射出器）：手の甲側の射出口が handAnchor。
+// 原点は足元、正面は -Z。右腕の前腕に NMClaw（ワイヤー射出器）：こぶしの正面（前腕の軸の延長上）の射出口が handAnchor（ローカル -Y がワイヤーの向き）。
 // ドローコールは約 21（爪を出すと +2）、三角形は約 2.5 万（反転ハル輪郭線を含む）。
 import * as THREE from 'three'
 import type { Character, Pose } from '../characters'
@@ -34,15 +34,37 @@ import {
   J,
   torsoLogoUV,
 } from './body'
-import { withHull } from './geom'
+import { merge as mergeGeos, withHull } from './geom'
 import { buildEyes, buildFeatures, buildHelmet, buildPlate, EXPRESSIONS, EYE_CENTER_Y, HEAD_PIVOT_Y, type Expression } from './head'
 import { createNexmaxMaterials, makeTorsoTexture, type NexmaxMaterials } from './materials'
+import {
+  PROD_COLORS,
+  PROD_LIFT,
+  PROD_PROPORTIONS,
+  buildAntenna,
+  buildHatch,
+  buildLedEyes,
+  createProductionMaterials,
+  makeProductionTorsoTexture,
+  paintProductionHelmet,
+  recolorBody,
+} from './production'
 
 export type { NexmaxPose } from './anim'
 export type NexmaxExpression = Expression
 export { ALL_POSES as NEXMAX_POSES }
 
+/** protagonist = 初号機（アンテナなし・背中に特殊鉱石・右腕に NMClaw）、production = 2086 年の量産型 */
+export type NexmaxVariant = 'protagonist' | 'production'
+
+export type NexmaxOptions = {
+  variant?: NexmaxVariant
+  /** 量産型の胸の製造番号（NX-086 など） */
+  serial?: number
+}
+
 export interface NexmaxCharacter extends Character {
+  readonly variant: NexmaxVariant
   setPose(p: NexmaxPose | Pose): void
   /** 爪の開閉と、射出口から出ているか（boolean でも 0..1 でも可） */
   setClaw(open: boolean | number, extended: boolean | number): void
@@ -62,6 +84,9 @@ export interface NexmaxCharacter extends Character {
 
 /** 見本の寸法そのままの全高（m） */
 const NATURAL_HEIGHT = 1.2
+
+/** 狙うときの胴のひねりの上限（rad、腰と合わせて約 20°） */
+const TWIST_LIMIT = 0.35
 
 // ------------------------------------------------------------------ 乱数（プレビューで再現できるよう固定シード）
 
@@ -124,16 +149,23 @@ function solid(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Mat
   return m
 }
 
-export function createNexmax(height = 1.2): NexmaxCharacter {
+export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxCharacter {
+  const variant: NexmaxVariant = opts.variant ?? 'protagonist'
+  const prod = variant === 'production'
   const logo = torsoLogoUV()
-  const torsoTex = makeTorsoTexture({ logoU: logo.u, logoV: logo.v, logoW: logo.w, logoH: logo.h })
+  const logoSpec = { logoU: logo.u, logoV: logo.v, logoW: logo.w, logoH: logo.h }
+  const torsoTex = prod ? makeProductionTorsoTexture(logoSpec, opts.serial ?? 86) : makeTorsoTexture(logoSpec)
   const mats = createNexmaxMaterials(torsoTex)
+  const pm = prod ? createProductionMaterials() : null
+  /** 部品の塗り：主人公はそのまま、量産型は本体の青を指定色へ */
+  const tone = (g: THREE.BufferGeometry, color: string) => (prod ? recolorBody(g, color) : g)
 
   const root = new THREE.Group()
-  root.name = 'nexmax'
+  root.name = prod ? 'nexmax-production' : 'nexmax'
   const scaler = new THREE.Group()
   scaler.name = 'nexmax-scale'
   scaler.scale.setScalar(height / NATURAL_HEIGHT)
+  if (prod) scaler.position.y = PROD_LIFT * (height / NATURAL_HEIGHT)
   root.add(scaler)
   const body = group(scaler, 0, 0, 0, 'body')
 
@@ -141,44 +173,57 @@ export function createNexmax(height = 1.2): NexmaxCharacter {
   const hips = group(body, 0, J.hips, 0, 'hips', 'YXZ')
   const torso = group(hips, 0, J.torsoPivot - J.hips, 0, 'torso', 'YXZ')
   solid(torso, buildTorso(), mats.torso, mats, true, 'torso')
-  const ore = solid(torso, buildOre(), mats.ore, mats, false, 'ore')
+  const ore = prod ? solid(torso, buildHatch(), pm!.hatch, mats, false, 'hatch') : solid(torso, buildOre(), mats.ore, mats, false, 'ore')
   ore.castShadow = false
+  if (prod) torso.scale.copy(PROD_PROPORTIONS.torso)
 
   // --- 頭
   const head = group(torso, 0, HEAD_PIVOT_Y - J.torsoPivot, 0, 'head', 'YXZ')
-  const helmetGeo = buildHelmet()
-  helmetGeo.translate(0, -HEAD_PIVOT_Y, 0)
-  solid(head, helmetGeo, mats.body, mats, true, 'helmet')
+  const helmetBase = buildHelmet()
+  if (prod) paintProductionHelmet(helmetBase)
+  helmetBase.translate(0, -HEAD_PIVOT_Y, 0)
+  let antennaTip: THREE.Mesh | null = null
+  if (prod) {
+    head.scale.setScalar(PROD_PROPORTIONS.head)
+    const ant = buildAntenna()
+    solid(head, mergeParts([helmetBase, ant.body]), mats.body, mats, true, 'helmet')
+    antennaTip = solid(head, ant.tip, pm!.tip, mats, false, 'antennaTip')
+    antennaTip.castShadow = false
+  } else solid(head, helmetBase, mats.body, mats, true, 'helmet')
   const plateGeo = buildPlate()
   plateGeo.translate(0, -HEAD_PIVOT_Y, 0)
-  const plate = solid(head, plateGeo, mats.plate, mats, false, 'plate')
+  const plate = solid(head, plateGeo, prod ? pm!.visor : mats.plate, mats, false, 'plate')
   plate.castShadow = false
   const eyePivot = group(head, 0, EYE_CENTER_Y - HEAD_PIVOT_Y, 0, 'eyes')
   const eyeGeos = {} as Record<Expression, THREE.BufferGeometry>
   const featGeos = {} as Record<Expression, THREE.BufferGeometry>
+  // 量産型は表情を変えない（LED の目だけ）。表情の切り替えで主人公の目に戻らないよう、全部同じ形にする
+  const led = prod ? buildLedEyes().translate(0, -EYE_CENTER_Y, 0) : null
   for (const e of EXPRESSIONS) {
-    eyeGeos[e] = buildEyes(e).translate(0, -EYE_CENTER_Y, 0)
+    eyeGeos[e] = led ?? buildEyes(e).translate(0, -EYE_CENTER_Y, 0)
     featGeos[e] = buildFeatures(e, true).translate(0, -HEAD_PIVOT_Y, 0)
   }
-  const eyes = solid(eyePivot, eyeGeos.happy, mats.eyes, mats, false, 'eyeballs')
+  const eyes = solid(eyePivot, eyeGeos.happy, prod ? pm!.led : mats.eyes, mats, false, 'eyeballs')
   eyes.castShadow = false
   const features = solid(head, featGeos.happy, mats.features, mats, false, 'features')
   features.castShadow = false
+  if (prod) features.visible = false
 
   // --- 腕
   const shY = J.shoulder.y - J.torsoPivot
   // 肩は「ひねり → 外へ開く → 前後に振る」の順（XZY）。腕を上げても外開きの向きが変わらない
   const shR = group(torso, J.shoulder.x, shY, 0, 'shoulderR', 'XZY')
   const shL = group(torso, -J.shoulder.x, shY, 0, 'shoulderL', 'XZY')
-  const upperGeo = buildUpperArm()
+  const upperGeo = tone(buildUpperArm(), PROD_COLORS.blue)
   solid(shR, upperGeo, mats.body, mats, true, 'upperArmR')
   solid(shL, upperGeo.clone(), mats.body, mats, true, 'upperArmL')
   const elR = group(shR, 0, -J.upperLen, 0, 'elbowR')
   const elL = group(shL, 0, -J.upperLen, 0, 'elbowL')
-  const foreR = buildForearm(true)
+  // 量産型の右腕にはワイヤー射出器が無い（両腕とも普通の前腕）
+  const foreR = buildForearm(!prod)
   const foreL = buildForearm(false)
-  solid(elR, foreR.geo, mats.body, mats, true, 'forearmR')
-  solid(elL, foreL.geo, mats.body, mats, true, 'forearmL')
+  solid(elR, tone(foreR.geo, PROD_COLORS.white), mats.body, mats, true, 'forearmR')
+  solid(elL, tone(foreL.geo, PROD_COLORS.white), mats.body, mats, true, 'forearmL')
   if (foreR.ring) {
     const ring = solid(elR, foreR.ring, mats.ring, mats, false, 'clawRing')
     ring.castShadow = false
@@ -186,10 +231,10 @@ export function createNexmax(height = 1.2): NexmaxCharacter {
   const wrR = group(elR, 0, -J.lowerLen, 0, 'wristR')
   const wrL = group(elL, 0, -J.lowerLen, 0, 'wristL')
   const handGeo = {
-    rOpen: withHull(buildHand(false, 0)),
-    rFist: withHull(buildHand(false, 1)),
-    lOpen: withHull(buildHand(true, 0)),
-    lFist: withHull(buildHand(true, 1)),
+    rOpen: withHull(tone(buildHand(false, 0), PROD_COLORS.blue)),
+    rFist: withHull(tone(buildHand(false, 1), PROD_COLORS.blue)),
+    lOpen: withHull(tone(buildHand(true, 0), PROD_COLORS.blue)),
+    lFist: withHull(tone(buildHand(true, 1), PROD_COLORS.blue)),
   }
   const handR = solid(wrR, handGeo.rOpen, mats.body, mats, false, 'handR')
   handR.customDepthMaterial = mats.hullDepth
@@ -197,10 +242,12 @@ export function createNexmax(height = 1.2): NexmaxCharacter {
   handL.customDepthMaterial = mats.hullDepth
 
   // --- 射出口と爪
+  // 射出口は右のこぶしの正面の中心（前腕の軸の延長上）。ワイヤーと爪は手の甲や横ではなく、
+  // パンチの向き（手首のローカル -Y）へまっすぐ出る。手首の子なので、狙うポーズで手首を伸ばすと前腕の軸と一直線になる
   const muzzle = new THREE.Object3D()
   muzzle.name = 'nmclawMuzzle'
-  muzzle.position.copy(foreR.muzzle)
-  elR.add(muzzle)
+  muzzle.position.set(0, fistFrontY(handGeo.rFist) - 0.004, 0)
+  wrR.add(muzzle)
   const claw = new THREE.Group()
   claw.name = 'nmclawHead'
   muzzle.add(claw)
@@ -217,17 +264,21 @@ export function createNexmax(height = 1.2): NexmaxCharacter {
   const hipYl = J.hip.y - J.hips
   const hipR = group(hips, J.hip.x, hipYl, 0, 'hipR', 'ZXY')
   const hipL = group(hips, -J.hip.x, hipYl, 0, 'hipL', 'ZXY')
-  const thighGeo = buildThigh()
+  const thighGeo = tone(buildThigh(), PROD_COLORS.white)
   solid(hipR, thighGeo, mats.body, mats, true, 'thighR')
   solid(hipL, thighGeo.clone(), mats.body, mats, true, 'thighL')
+  if (prod) {
+    hipR.scale.set(1, PROD_PROPORTIONS.leg, 1)
+    hipL.scale.set(1, PROD_PROPORTIONS.leg, 1)
+  }
   const knR = group(hipR, 0, -J.thighLen, 0, 'kneeR')
   const knL = group(hipL, 0, -J.thighLen, 0, 'kneeL')
-  const shinGeo = buildShin()
+  const shinGeo = tone(buildShin(), PROD_COLORS.blue)
   solid(knR, shinGeo, mats.body, mats, true, 'shinR')
   solid(knL, shinGeo.clone(), mats.body, mats, true, 'shinL')
   const anR = group(knR, 0, -J.shinLen, 0, 'ankleR')
   const anL = group(knL, 0, -J.shinLen, 0, 'ankleL')
-  const footGeo = buildFoot()
+  const footGeo = tone(buildFoot(), PROD_COLORS.white)
   solid(anR, footGeo, mats.body, mats, true, 'footR')
   solid(anL, footGeo.clone(), mats.body, mats, true, 'footL')
 
@@ -257,7 +308,34 @@ export function createNexmax(height = 1.2): NexmaxCharacter {
     claw,
     prongs,
   }
-  return animate(root, parts, mats, height, { eyeGeos, featGeos, handGeo })
+  const extra: Extra = { variant, antennaTip, pm }
+  return animate(root, parts, mats, height, { eyeGeos, featGeos, handGeo }, extra)
+}
+
+/** こぶしの正面（手首から前腕の軸に沿って一番先の面）の y。軸の近くの頂点のうち一番下 */
+function fistFrontY(g: THREE.BufferGeometry): number {
+  const pos = g.attributes.position
+  let minAll = 0
+  let minAxis = Infinity
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i)
+    const y = pos.getY(i)
+    const z = pos.getZ(i)
+    if (y < minAll) minAll = y
+    if (Math.hypot(x, z) < 0.018 && y < minAxis) minAxis = y
+  }
+  return minAxis === Infinity ? minAll : minAxis
+}
+
+/** 量産型の部品をつなぐ（属性をそろえて結合） */
+function mergeParts(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  return mergeGeos(list)
+}
+
+type Extra = {
+  variant: NexmaxVariant
+  antennaTip: THREE.Mesh | null
+  pm: ReturnType<typeof createProductionMaterials> | null
 }
 
 // ------------------------------------------------------------------ アニメーション
@@ -284,7 +362,7 @@ const _v2 = new THREE.Vector3()
 const _v3 = new THREE.Vector3()
 const _m = new THREE.Matrix4()
 
-function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: number, G: Geos): NexmaxCharacter {
+function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: number, G: Geos, X: Extra): NexmaxCharacter {
   const rand = rng(1031)
   let pose: NexmaxPose = 'idle'
   let activeSlot: Slot = 'ground'
@@ -339,8 +417,10 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
   const ps = new THREE.Vector3()
   const pivot = new THREE.Vector3()
 
+  const prod = X.variant === 'production'
   const character: NexmaxCharacter = {
     name: 'nexmax',
+    variant: X.variant,
     root,
     placeholder: false,
     height,
@@ -396,6 +476,7 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
       })
       for (const g of [...Object.values(G.eyeGeos), ...Object.values(G.featGeos), ...Object.values(G.handGeo)]) g.dispose()
       mats.dispose()
+      X.pm?.dispose()
       root.removeFromParent()
     },
     update(dtIn, moveSpeed) {
@@ -463,6 +544,13 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
       const pulse = 0.84 + 0.16 * Math.sin(t * 2.3)
       mats.ore.color.setScalar(0.32 + 0.82 * oreLevel * pulse)
       mats.ring.color.setScalar(1.3 + 0.35 * clawExt + 0.08 * Math.sin(t * 3.1))
+      if (prod && X.pm) {
+        // アンテナの先は通信中のように 2 回ずつ点滅、LED の目はゆっくり明滅
+        const ph = (t * 0.8) % 1
+        const blink = ph < 0.08 || (ph > 0.16 && ph < 0.24) ? 3.2 : 1.0
+        X.pm.tip.color.setScalar(blink)
+        X.pm.led.color.setScalar(2.2 + 0.25 * Math.sin(t * 1.7))
+      }
       // 手の形
       if (!fistR && blended.fist > 0.58) fistR = true
       else if (fistR && blended.fist < 0.42) fistR = false
@@ -498,7 +586,11 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
       // ほぼ真上（振り子の支点など）では水平の向きが不安定なので効かせない
       const horiz = Math.hypot(tmp.x, tmp.z)
       const flat = Math.min(1, Math.max(0, horiz / (Math.abs(tmp.y - 0.6) + 0.3) - 0.3))
-      torsoYaw += Math.max(-0.75, Math.min(0.75, yaw * 0.5)) * p.aim * flat
+      torsoYaw += Math.max(-TWIST_LIMIT, Math.min(TWIST_LIMIT, yaw * 0.5)) * p.aim * flat
+      // 胴のひねりは控えめに（腰と合わせて ±20° まで）。体ごと狙いへ向けるのはゲーム側（root の向き）
+      const total = p.hipsYaw + torsoYaw
+      const clamped = Math.max(-TWIST_LIMIT, Math.min(TWIST_LIMIT, total))
+      torsoYaw += (clamped - total) * Math.min(1, p.aim)
     }
     P.torso.rotation.set(p.torsoPitch, torsoYaw, p.torsoRoll)
     P.head.rotation.set(p.headPitch, p.headYaw, p.headRoll)
@@ -539,12 +631,16 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
         P.torso.worldToLocal(tmp).sub(P.shR.position)
         if (tmp.lengthSq() > 1e-6) {
           tmp.normalize()
-          tmp.x += p.aimSide
+          // 肩から対象へまっすぐ（肘・手首も伸ばす）＝こぶしの正面の射出口が対象を正面に向く。
+          // 真上に近い対象（振り子の支点・高い金具）だけ、大きな頭に腕がめり込まないよう外へ逃がす
+          const steep = THREE.MathUtils.smoothstep(tmp.y, 0.55, 0.92)
+          tmp.x += p.aimSide * steep
           tmp.normalize()
           armBasis(tmp, qa)
           P.shR.quaternion.slerp(qa, p.aim)
           P.elR.rotation.x *= 1 - p.aim
           P.wrR.rotation.x *= 1 - p.aim
+          P.wrR.rotation.z *= 1 - p.aim
         }
       }
     }

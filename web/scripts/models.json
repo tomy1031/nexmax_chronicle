@@ -15,6 +15,7 @@
     { "name": "genbei",    "height": 1.6,  "tris": 20000, "notes": "源兵衛。人型・立ち姿。" },
     { "name": "oharu",     "height": 1.25, "tris": 18000, "notes": "お春。人型・立ち姿(子供サイズ)。" },
     { "name": "matsui",    "height": 1.7,  "tris": 20000, "notes": "松井。人型・立ち姿。" },
+    { "name": "saeki",     "height": 1.6,  "tris": 20000, "notes": "佐伯玲奈（2026年・NEXTMAKE ラボの技術者）。人型・立ち姿。" },
     { "name": "sora",      "height": 1.55, "tris": 20000, "notes": "ソラ（2086年・23歳の技術者、新仕様 v2.3）。人型・立ち姿。" },
     { "name": "gear",      "height": 2.8,  "tris": 12000, "notes": "歯車。直径≒2.8m を高さとして指定。足元(最下点)が y=0。中心原点が欲しければ pivot を center に。" },
     { "name": "machiya",   "height": 6,    "tris": 25000, "notes": "町家(建物)。軒先までの高さ。" },

@@ -57,6 +57,27 @@ const RETICLE_SHAPES: Record<ReticleCategory, string> = {
 
 const el = <T extends HTMLElement = HTMLDivElement>(root: HTMLElement, sel: string) => root.querySelector(sel) as T
 
+/** 台詞の話者ごとの見た目（名前の色） */
+const BARK_CLASS: Record<string, string> = {
+  おはる: 'oharu',
+  源兵衛: 'genbei',
+  マツイ社長: 'matsui',
+  佐伯: 'saeki',
+  ネクマックス: 'nexmax',
+  ソラ: 'sora',
+  システム: 'system',
+}
+
+/** IDO（歴史案内）のパネルの中身 */
+export type IdoPanelContent = {
+  title: string
+  sub: string
+  body: string
+  /** 昔の町の絵（キャンバス） */
+  image?: HTMLCanvasElement | null
+  foot?: string
+}
+
 export class Hud {
   private readonly root: HTMLDivElement
   private readonly stats: HTMLDivElement
@@ -88,6 +109,9 @@ export class Hud {
   private readonly flashEl: HTMLDivElement
   private readonly pause: HTMLDivElement
   private readonly menu: HTMLDivElement
+  private readonly eraCard: HTMLDivElement
+  private readonly ido: HTMLDivElement
+  private eraCardTimer = 0
   private statsVisible = false
   private hintKey = ''
   private retCategory: ReticleCategory | null = null
@@ -179,6 +203,17 @@ export class Hud {
           <div class="panel-foot"><kbd>Tab</kbd>：閉じる</div>
         </div>
       </div>
+      <div class="hud-eracard" hidden><div class="ec-line"></div><div class="ec-year"></div><div class="ec-place"></div><div class="ec-sub"></div></div>
+      <div class="hud-ido" hidden>
+        <div class="ido-card">
+          <div class="ido-head"><span class="ido-logo">IDO</span><span class="ido-title"></span></div>
+          <div class="ido-sub"></div>
+          <div class="ido-image"></div>
+          <div class="ido-body"></div>
+          <div class="ido-foot"></div>
+          <div class="ido-scan"></div>
+        </div>
+      </div>
       <div class="hud-stats"></div>
     `
     ui.appendChild(this.root)
@@ -212,6 +247,8 @@ export class Hud {
     this.flashEl = el(r, '.hud-flash')
     this.pause = el(r, '.hud-pause')
     this.menu = el(r, '.hud-menu')
+    this.eraCard = el(r, '.hud-eracard')
+    this.ido = el(r, '.hud-ido')
     this.setObjective('大歯車を支えて、水門を直そう', '桟橋から照準を歯車へ向けて J でつかむ')
     void this.useBrushTitleIfAvailable()
   }
@@ -329,7 +366,7 @@ export class Hud {
     }
     const b = document.createElement('div')
     b.dataset.key = key
-    b.className = `bark ${speaker === 'おはる' ? 'oharu' : speaker === '源兵衛' ? 'genbei' : 'system'}`
+    b.className = `bark ${BARK_CLASS[speaker] ?? 'system'}`
     b.innerHTML = `<span class="bark-who">${escapeHtml(speaker)}</span><span class="bark-text">${escapeHtml(text)}</span>`
     this.barks.appendChild(b)
     while (this.barks.children.length > 3) this.barks.firstElementChild?.remove()
@@ -410,8 +447,77 @@ export class Hud {
     this.menu.hidden = !on
   }
 
+  /**
+   * 方位磁針（未来の HUD 用の入口）。毎フレーム、カメラの向き（yaw：カメラが置かれる側の角度、0 = 南）・
+   * 目標の位置（ワールド、無ければ null）・プレイヤーの位置を受け取る。この HUD では何も表示しない。
+   */
+  setCompass(cameraYaw: number, target: { x: number; y: number; z: number } | null, player: { x: number; y: number; z: number }): void {
+    void cameraYaw
+    void target
+    void player
+  }
+
+  // ---------------------------------------------------------------- 時空移動（時代カード）・IDO
+
+  /** 到着した時代のカード（例：2026年／大阪・なんば） */
+  showEraCard(year: string, place: string, sub = '', seconds = 3.4, tint = '#8fd8ff'): void {
+    ;(this.eraCard.querySelector('.ec-year') as HTMLDivElement).textContent = year
+    ;(this.eraCard.querySelector('.ec-place') as HTMLDivElement).textContent = place
+    ;(this.eraCard.querySelector('.ec-sub') as HTMLDivElement).textContent = sub
+    this.eraCard.style.setProperty('--ec-tint', tint)
+    this.eraCard.hidden = false
+    this.eraCard.classList.remove('show', 'out')
+    void this.eraCard.offsetWidth
+    this.eraCard.classList.add('show')
+    this.eraCardTimer = seconds
+  }
+
+  /** IDO の歴史案内パネルを出す */
+  showIdo(c: IdoPanelContent): void {
+    ;(this.ido.querySelector('.ido-title') as HTMLSpanElement).textContent = c.title
+    ;(this.ido.querySelector('.ido-sub') as HTMLDivElement).textContent = c.sub
+    ;(this.ido.querySelector('.ido-body') as HTMLDivElement).textContent = c.body
+    ;(this.ido.querySelector('.ido-foot') as HTMLDivElement).textContent = c.foot ?? ''
+    const img = this.ido.querySelector('.ido-image') as HTMLDivElement
+    img.innerHTML = ''
+    if (c.image) img.appendChild(c.image)
+    img.hidden = !c.image
+    this.ido.hidden = false
+    this.ido.classList.remove('show', 'out')
+    this.setIdoGlitch(0)
+    void this.ido.offsetWidth
+    this.ido.classList.add('show')
+  }
+
+  /** パネルのゆがみ（鉱石が反応して、映像の向こうに本物の町が見え始める）0〜1 */
+  setIdoGlitch(v: number): void {
+    this.ido.style.setProperty('--glitch', v.toFixed(3))
+    this.ido.classList.toggle('glitch', v > 0.01)
+  }
+
+  hideIdo(): void {
+    if (this.ido.hidden) return
+    this.ido.classList.add('out')
+    setTimeout(() => {
+      if (this.ido.classList.contains('out')) this.ido.hidden = true
+    }, 350)
+  }
+
+  get idoVisible(): boolean {
+    return !this.ido.hidden && !this.ido.classList.contains('out')
+  }
+
   /** 毎フレーム：お知らせ・演出の時間切れ */
   tick(dt: number): void {
+    if (this.eraCardTimer > 0) {
+      this.eraCardTimer -= dt
+      if (this.eraCardTimer <= 0) {
+        this.eraCard.classList.add('out')
+        setTimeout(() => {
+          if (this.eraCardTimer <= 0) this.eraCard.hidden = true
+        }, 700)
+      }
+    }
     if (this.toastTimer > 0) {
       this.toastTimer -= dt
       if (this.toastTimer <= 0) this.toastEl.hidden = true
@@ -493,6 +599,11 @@ export class LoadingOverlay {
     ui.appendChild(this.el)
     this.bar = this.el.querySelector('.loading-fill') as HTMLDivElement
     this.msg = this.el.querySelector('.loading-msg') as HTMLDivElement
+  }
+
+  /** 読み込む時代の表示（例「2026年　大阪・なんば」） */
+  setEra(text: string): void {
+    ;(this.el.querySelector('.loading-era') as HTMLDivElement).textContent = text
   }
 
   set(progress: number, msg: string): void {

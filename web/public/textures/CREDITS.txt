@@ -1,6 +1,7 @@
 Textures and HDRIs from Poly Haven (https://polyhaven.com/) — CC0 1.0 (public domain, commercial use OK, no attribution required).
 textures (1k JPG: diff / nor (OpenGL) / arm = AO+Rough+Metal):
   weathered_brown_planks, wood_floor_deck, rough_wood, white_plaster_02,
-  japanese_stone_wall, grey_roof_tiles_02, cobblestone_floor_04
+  japanese_stone_wall, grey_roof_tiles_02, cobblestone_floor_04,
+  large_grey_tiles, laminate_floor_02 (2026 stage)
 hdri (1k .hdr in web/public/hdri, 2k originals in assets_src/hdri):
   kloppenheim_06_puresky, kloofendal_48d_partly_cloudy_puresky

@@ -1,0 +1,85 @@
+/* ゲームのシェルの表示：時空移動の演出・時代カード・IDO の歴史案内パネル・話者の色（style.css の HUD に合わせる） */
+
+/* ---------------------------------------------------------------- 話者の色 */
+.bark.matsui .bark-who { color: #ffcf6a; }
+.bark.saeki .bark-who { color: #9fdcff; }
+.bark.nexmax .bark-who { color: #7fd2ff; }
+.bark.sora .bark-who { color: #c9a8ff; }
+.bark.system .bark-who { color: #b9c6e8; }
+
+/* ---------------------------------------------------------------- 時空移動 */
+.travel-fx { position: absolute; inset: 0; z-index: 8; pointer-events: auto; }
+.travel-fx canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.travel-card {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;
+  min-width: min(440px, 80vw); padding: 2.4vh 2.4vw; border-radius: 18px;
+  background: rgba(10, 18, 40, 0.55); border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35); backdrop-filter: blur(6px);
+  animation: travel-card-in 0.4s ease-out;
+}
+@keyframes travel-card-in { from { opacity: 0; transform: translate(-50%, -46%); } }
+.travel-label { font-weight: 800; letter-spacing: 0.4em; font-size: clamp(12px, 1vw, 16px); opacity: 0.85; }
+.travel-dest { margin-top: 0.6vh; font-weight: 800; font-size: clamp(20px, 2.1vw, 34px); letter-spacing: 0.08em; text-shadow: 0 2px 8px rgba(0, 40, 80, 0.6); }
+.travel-bar { margin: 1.4vh auto 0; height: 8px; width: 100%; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.travel-fill { height: 100%; width: 0; background: linear-gradient(90deg, #ffffff, #bdf2ff); box-shadow: 0 0 10px #ffffff; transition: width 0.2s; }
+.travel-msg { margin-top: 0.8vh; font-size: 12px; opacity: 0.85; min-height: 1.2em; }
+
+/* ---------------------------------------------------------------- 時代カード（到着時） */
+.hud-eracard {
+  --ec-tint: #8fd8ff;
+  position: absolute; left: 50%; top: 30vh; transform: translateX(-50%); text-align: center; pointer-events: none;
+  padding: 2.2vh 4vw 2.4vh; min-width: min(520px, 80vw);
+  background: radial-gradient(ellipse at 50% 50%, rgba(10, 18, 40, 0.72), rgba(10, 18, 40, 0) 72%);
+}
+.hud-eracard.show { animation: ec-in 0.9s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.hud-eracard.out { opacity: 0; transition: opacity 0.7s; }
+@keyframes ec-in { from { opacity: 0; letter-spacing: 0.6em; filter: blur(6px); } }
+.ec-line { width: 64%; height: 2px; margin: 0 auto 1.2vh; background: linear-gradient(90deg, transparent, var(--ec-tint), transparent); box-shadow: 0 0 12px var(--ec-tint); }
+.ec-year { font-weight: 800; font-size: clamp(34px, 4.4vw, 76px); letter-spacing: 0.12em; color: #fff; text-shadow: 0 0 18px var(--ec-tint), 0 3px 0 rgba(0, 0, 0, 0.35); }
+.ec-place { margin-top: 0.4vh; font-weight: 800; font-size: clamp(18px, 1.9vw, 32px); letter-spacing: 0.3em; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.ec-sub { margin-top: 1vh; font-weight: 500; font-size: clamp(12px, 1vw, 17px); letter-spacing: 0.12em; opacity: 0.9; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6); }
+
+/* ---------------------------------------------------------------- IDO の歴史案内パネル */
+.hud-ido { --glitch: 0; position: absolute; left: 3vw; top: 26vh; pointer-events: none; }
+.ido-card {
+  position: relative; width: min(500px, 42vw); padding: 2.2vh 2vw 2vh; border-radius: 18px; overflow: hidden;
+  background: linear-gradient(160deg, rgba(248, 250, 255, 0.97), rgba(226, 236, 252, 0.95));
+  color: #14223f; border: 2px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(60, 140, 255, 0.35), 0 18px 48px rgba(0, 10, 40, 0.45);
+  transform: translateX(calc(var(--glitch) * 6px)) skewX(calc(var(--glitch) * -4deg));
+  filter: hue-rotate(calc(var(--glitch) * 90deg)) saturate(calc(1 + var(--glitch) * 1.4));
+}
+.hud-ido.show .ido-card { animation: ido-in 0.35s cubic-bezier(0.2, 1.2, 0.4, 1); }
+.hud-ido.out .ido-card { opacity: 0; transform: scale(0.96); transition: opacity 0.3s, transform 0.3s; }
+@keyframes ido-in { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
+.ido-head { display: flex; align-items: center; gap: 0.8vw; }
+.ido-logo { font-weight: 800; font-size: clamp(16px, 1.4vw, 24px); letter-spacing: 0.08em; color: #fff; background: linear-gradient(135deg, #2f6fe0, #4fb4ff); padding: 0.2vh 0.7vw; border-radius: 8px; }
+.ido-title { font-weight: 800; font-size: clamp(16px, 1.4vw, 24px); }
+.ido-sub { margin-top: 0.6vh; font-weight: 800; color: #2f5fc0; font-size: clamp(12px, 1vw, 17px); }
+.ido-image { margin-top: 1.2vh; border-radius: 10px; overflow: hidden; border: 1px solid rgba(20, 40, 80, 0.25); line-height: 0; }
+.ido-image canvas { width: 100%; height: auto; display: block; }
+.ido-body { margin-top: 1.2vh; font-weight: 500; font-size: clamp(12px, 0.95vw, 16px); line-height: 1.65; }
+@media (max-width: 760px) { .hud-ido { left: 50%; transform: translateX(-50%); top: 22vh; } .ido-card { width: 88vw; } }
+.ido-foot { margin-top: 1vh; font-size: clamp(10px, 0.8vw, 13px); opacity: 0.6; }
+.ido-scan { position: absolute; inset: 0; pointer-events: none; opacity: calc(var(--glitch) * 1.2);
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 220, 255, 0.0) 0 3px, rgba(120, 220, 255, 0.35) 3px 4px),
+    radial-gradient(circle at 50% 50%, rgba(255, 210, 140, calc(var(--glitch) * 0.8)), rgba(255, 140, 60, 0) 60%);
+  mix-blend-mode: screen; }
+.hud-ido.glitch .ido-card { animation: ido-shake 0.12s steps(2) infinite; }
+@keyframes ido-shake {
+  0% { clip-path: inset(0 0 0 0); }
+  50% { clip-path: inset(calc(var(--glitch) * 12%) 0 calc(var(--glitch) * 6%) 0); }
+  100% { clip-path: inset(0 0 calc(var(--glitch) * 10%) 0); }
+}
+
+/* ---------------------------------------------------------------- 選択肢（2086 年の IDO 展示など） */
+.game-choice {
+  position: absolute; left: 50%; top: 58vh; transform: translateX(-50%); min-width: min(520px, 86vw);
+  padding: 1.6vh 1.6vw; border-radius: 16px; background: linear-gradient(160deg, rgba(14, 24, 52, 0.94), rgba(30, 40, 90, 0.9));
+  border: 1px solid rgba(180, 160, 255, 0.5); box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45); animation: travel-card-in 0.3s ease-out;
+}
+.gc-title { font-weight: 800; font-size: clamp(13px, 1.05vw, 18px); color: #d8ccff; margin-bottom: 0.8vh; }
+.gc-opt { font-weight: 800; font-size: clamp(14px, 1.15vw, 20px); padding: 0.6vh 0.8vw; border-radius: 10px; opacity: 0.78; }
+.gc-opt.on { opacity: 1; background: rgba(160, 140, 255, 0.25); color: #ffffff; }
+.gc-foot { margin-top: 0.8vh; font-size: clamp(11px, 0.85vw, 14px); opacity: 0.75; }

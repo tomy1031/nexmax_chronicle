@@ -723,11 +723,226 @@ export function registerInteriorArt(a: SignAtlas): void {
 
 // ------------------------------------------------------------------ IDO パネルの絵（昔の大坂の川沿いの町）
 
-/** IDO のパネルに出す「昔の町」の絵（浮世絵ふうの手描き）。record=true は源兵衛の水門絵図の写し */
-export function paintIdoImage(kind: 'karakuri' | 'record' | 'info'): HTMLCanvasElement {
+/** マツイ社長のタブレットに出す構想スケッチ（導入編 6-2「絵もある」）。白い紙にネクマックスと書き込み */
+export function paintSketchTablet(): HTMLCanvasElement {
+  const W = 512
+  const H = 384
+  const [c, g] = makeCanvas(W, H)
+  whiteboardBase(g, 0, 0, W, H)
+  hand(g, 'NEXMAX 構想スケッチ', W * 0.06, H * 0.1, H * 0.07)
+  drawNexmaxSketch(g, W * 0.34, H * 0.6, H * 0.74)
+  hand(g, '名前：ネクマックス', W * 0.6, H * 0.34, H * 0.052)
+  hand(g, '人と一緒に', W * 0.6, H * 0.47, H * 0.058, '#c0392b')
+  hand(g, '働くロボット', W * 0.6, H * 0.56, H * 0.058, '#c0392b')
+  hand(g, '丸い頭・胸のマーク', W * 0.6, H * 0.69, H * 0.045)
+  hand(g, '2026.10  マツイ', W * 0.6, H * 0.88, H * 0.045, '#7a8090')
+  return c
+}
+
+/** セピアの古い写真の仕上げ（粒子・周辺減光・白いふち） */
+function oldPhotoFinish(g: CanvasRenderingContext2D, W: number, H: number, rng: () => number, tone: string, border: string): void {
+  for (let i = 0; i < 5000; i++) {
+    g.fillStyle = rng() < 0.5 ? 'rgba(255,240,210,0.08)' : 'rgba(30,20,10,0.1)'
+    g.fillRect(rng() * W, rng() * H, 1.5, 1.5)
+  }
+  const vg = g.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.62)
+  vg.addColorStop(0, 'rgba(0,0,0,0)')
+  vg.addColorStop(1, tone)
+  g.fillStyle = vg
+  g.fillRect(0, 0, W, H)
+  // ひっかき傷
+  g.strokeStyle = 'rgba(255,248,230,0.25)'
+  g.lineWidth = 1
+  for (let i = 0; i < 6; i++) {
+    const x = rng() * W
+    g.beginPath()
+    g.moveTo(x, rng() * H * 0.3)
+    g.lineTo(x + (rng() - 0.5) * 12, H * (0.6 + rng() * 0.4))
+    g.stroke()
+  }
+  g.strokeStyle = border
+  g.lineWidth = 10
+  g.strokeRect(5, 5, W - 10, H - 10)
+}
+
+/** 石標 A：100年前（1926年ごろ）のなんば ― 道頓堀の芝居小屋の通りと幟（セピアの写真ふう） */
+function paintOld1926(g: CanvasRenderingContext2D, W: number, H: number): void {
+  const rng = mulberry32(19)
+  const sky = g.createLinearGradient(0, 0, 0, H * 0.5)
+  sky.addColorStop(0, '#d9c7a3')
+  sky.addColorStop(1, '#efe2c4')
+  g.fillStyle = sky
+  g.fillRect(0, 0, W, H)
+  // 川（手前）
+  g.fillStyle = '#9c8a6a'
+  g.fillRect(0, H * 0.7, W, H * 0.3)
+  g.strokeStyle = 'rgba(240,228,200,0.35)'
+  for (let i = 0; i < 14; i++) {
+    const y = H * (0.73 + rng() * 0.25)
+    const x = rng() * W
+    g.beginPath()
+    g.moveTo(x, y)
+    g.lineTo(x + 30 + rng() * 40, y)
+    g.stroke()
+  }
+  // 向こう岸の芝居小屋（屋根の上の大きな櫓・看板）
+  let x = -10
+  let k = 0
+  while (x < W) {
+    const w = 70 + rng() * 60
+    const h = H * (0.28 + rng() * 0.16)
+    const base = H * 0.66
+    g.fillStyle = k % 2 ? '#6e5a40' : '#5a4832'
+    g.fillRect(x, base - h, w, h)
+    // 瓦屋根
+    g.fillStyle = '#3e3226'
+    g.beginPath()
+    g.moveTo(x - 5, base - h)
+    g.lineTo(x + w / 2, base - h - H * 0.06)
+    g.lineTo(x + w + 5, base - h)
+    g.fill()
+    // 櫓（芝居小屋の印）と絵看板
+    if (k % 2 === 0) {
+      g.fillStyle = '#4a3a28'
+      g.fillRect(x + w * 0.3, base - h - H * 0.12, w * 0.4, H * 0.07)
+      g.fillStyle = '#d8c8a4'
+      g.fillRect(x + w * 0.12, base - h * 0.78, w * 0.76, h * 0.22)
+      g.fillStyle = '#5a4630'
+      for (let j = 0; j < 4; j++) g.fillRect(x + w * (0.18 + j * 0.17), base - h * 0.74, w * 0.1, h * 0.14)
+    }
+    // 窓と提灯の列
+    g.fillStyle = '#e8d8b4'
+    for (let j = 0; j < 5; j++) {
+      g.beginPath()
+      g.ellipse(x + w * (0.12 + j * 0.19), base - h * 0.42, 5, 7, 0, 0, Math.PI * 2)
+      g.fill()
+    }
+    x += w + 4
+    k++
+  }
+  // 幟（ずらっと並ぶ縦長の旗）
+  for (let i = 0; i < 26; i++) {
+    const px = 12 + i * 27 + rng() * 8
+    const top = H * (0.18 + rng() * 0.08)
+    g.strokeStyle = '#3a2e20'
+    g.lineWidth = 2
+    g.beginPath()
+    g.moveTo(px, top)
+    g.lineTo(px, H * 0.67)
+    g.stroke()
+    g.fillStyle = i % 3 === 0 ? '#c8b48c' : i % 3 === 1 ? '#efe4c8' : '#a8946c'
+    g.fillRect(px + 1, top + 4, 11, H * 0.24)
+  }
+  // 岸の人々（帽子と着物のシルエット）と電柱
+  for (let i = 0; i < 30; i++) {
+    const px = rng() * W
+    const py = H * 0.69
+    g.fillStyle = 'rgba(50,38,26,0.85)'
+    g.fillRect(px - 3, py - 16, 7, 14)
+    g.beginPath()
+    g.arc(px + 0.5, py - 19, 3.6, 0, Math.PI * 2)
+    g.fill()
+  }
+  g.strokeStyle = '#3a2e20'
+  g.lineWidth = 3
+  for (const px of [W * 0.2, W * 0.55, W * 0.88]) {
+    g.beginPath()
+    g.moveTo(px, H * 0.05)
+    g.lineTo(px, H * 0.69)
+    g.stroke()
+    g.beginPath()
+    g.moveTo(px - 14, H * 0.1)
+    g.lineTo(px + 14, H * 0.1)
+    g.stroke()
+  }
+  g.lineWidth = 1
+  g.beginPath()
+  g.moveTo(0, H * 0.12)
+  g.quadraticCurveTo(W * 0.38, H * 0.18, W, H * 0.11)
+  g.stroke()
+  // 手前の小舟
+  g.fillStyle = '#4a3a28'
+  g.beginPath()
+  g.moveTo(W * 0.3, H * 0.86)
+  g.quadraticCurveTo(W * 0.4, H * 0.92, W * 0.52, H * 0.85)
+  g.closePath()
+  g.fill()
+  oldPhotoFinish(g, W, H, rng, 'rgba(70,46,20,0.55)', '#f2ead8')
+}
+
+/** 石標 B：1970年 万博のころの道頓堀 ― ネオンの看板と人の波（色あせたカラー写真ふう） */
+function paintExpo1970(g: CanvasRenderingContext2D, W: number, H: number): void {
+  const rng = mulberry32(70)
+  const sky = g.createLinearGradient(0, 0, 0, H * 0.6)
+  sky.addColorStop(0, '#2a3a5a')
+  sky.addColorStop(1, '#7a6a7a')
+  g.fillStyle = sky
+  g.fillRect(0, 0, W, H)
+  // ビルと看板
+  let x = -6
+  while (x < W) {
+    const w = 60 + rng() * 70
+    const h = H * (0.35 + rng() * 0.3)
+    const base = H * 0.68
+    g.fillStyle = `hsl(${20 + rng() * 30},12%,${22 + rng() * 10}%)`
+    g.fillRect(x, base - h, w, h)
+    // 光る看板（縦・横）
+    const hue = [0, 30, 50, 190, 320, 140][Math.floor(rng() * 6)]
+    g.fillStyle = `hsl(${hue},85%,62%)`
+    g.shadowColor = `hsl(${hue},90%,60%)`
+    g.shadowBlur = 12
+    if (rng() < 0.5) g.fillRect(x + w * 0.62, base - h * 0.95, w * 0.22, h * 0.7)
+    else g.fillRect(x + w * 0.1, base - h * 0.9, w * 0.8, h * 0.18)
+    g.shadowBlur = 0
+    // 窓
+    g.fillStyle = 'rgba(255,220,150,0.55)'
+    for (let r = 0; r < 4; r++) for (let j = 0; j < 3; j++) if (rng() < 0.6) g.fillRect(x + w * (0.1 + j * 0.18), base - h * (0.2 + r * 0.14), w * 0.1, h * 0.06)
+    x += w + 3
+  }
+  // 「EXPO'70」の垂れ幕（文字は控えめに）
+  g.fillStyle = '#f4f0e0'
+  g.fillRect(W * 0.36, H * 0.12, W * 0.28, H * 0.09)
+  g.fillStyle = '#c0301e'
+  g.font = `900 ${H * 0.06}px ${GOTHIC}`
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillText("EXPO '70", W * 0.5, H * 0.165)
+  // 川と橋の上の人の波
+  g.fillStyle = '#2a3440'
+  g.fillRect(0, H * 0.74, W, H * 0.26)
+  g.fillStyle = 'rgba(255,200,120,0.25)'
+  for (let i = 0; i < 40; i++) g.fillRect(rng() * W, H * (0.76 + rng() * 0.22), 20 + rng() * 30, 2)
+  g.fillStyle = '#5a4a40'
+  g.fillRect(0, H * 0.66, W, H * 0.06)
+  for (let i = 0; i < 140; i++) {
+    const px = rng() * W
+    const py = H * (0.66 + rng() * 0.03)
+    g.fillStyle = `hsl(${rng() * 360},${30 + rng() * 40}%,${25 + rng() * 30}%)`
+    g.fillRect(px - 3, py - 12, 6, 12)
+    g.fillStyle = '#1e1612'
+    g.beginPath()
+    g.arc(px, py - 15, 3, 0, Math.PI * 2)
+    g.fill()
+  }
+  // 色あせ（黄色く、コントラストを落とす）
+  g.fillStyle = 'rgba(230,190,120,0.18)'
+  g.fillRect(0, 0, W, H)
+  oldPhotoFinish(g, W, H, rng, 'rgba(60,40,30,0.45)', '#f6f2e6')
+}
+
+/** IDO のパネルに出す「昔の町」の絵。record は源兵衛の水門絵図の写し、old1926・expo1970 は石標 A・B の古い写真 */
+export function paintIdoImage(kind: 'karakuri' | 'record' | 'info' | 'old1926' | 'expo1970'): HTMLCanvasElement {
   const W = 720
   const H = 300
   const [c, g] = makeCanvas(W, H)
+  if (kind === 'old1926') {
+    paintOld1926(g, W, H)
+    return c
+  }
+  if (kind === 'expo1970') {
+    paintExpo1970(g, W, H)
+    return c
+  }
   const rng = mulberry32(kind === 'record' ? 9 : 4)
   if (kind === 'record') {
     // 和紙に墨の絵図：水門・大歯車・歯止め

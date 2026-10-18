@@ -24,8 +24,9 @@ import type { EraId } from '../core/eras'
 import type { DialogueLine } from './dialogueQueue'
 import type { StageKey, TravelRequest, TravelVerdict } from './travel'
 import type { RiftFx } from './riftFx'
+import type { CineShot } from './cinematic'
 
-export type { StageKey, TravelRequest }
+export type { StageKey, TravelRequest, CineShot }
 
 /** 到着地点（足元の位置・向き・カメラ） */
 export type SpawnPoint = { pos: THREE.Vector3; facing: number; camYaw: number; camPitch: number }
@@ -114,6 +115,19 @@ export type StageRuntime = {
   save(checkpoint: string): void
   /** プレイヤー操作を止める（イベント中） */
   setControlLocked(on: boolean): void
+  /**
+   * カメラの演出（cinematic.ts の CineShot）：操作を止め、プレイのカメラから shot へなめらかに寄って保持し、戻る。
+   * その間はキー案内・照準を隠し、上下に黒帯、shot.marker があれば目印（光る輪・光の柱・名前の札）を出す。
+   * 会話（dialogue）は同時に流せる（F は会話の早送り。会話が無く shot.skippable なら F・Space・J で戻りに入る）。
+   * 戻り終わると resolve（時空移動などで打ち切られたときもすぐ resolve）。再生中に呼ぶと、そのときのカメラから次へ寄る
+   */
+  cinematic(shot: CineShot): Promise<void>
+  /** 再生中のショットの保持を切り上げて戻りに入る（hold: Infinity のショットはこれで終わる）。fast で戻りを短く */
+  endCinematic(fast?: boolean): void
+  /** カメラの演出中か */
+  readonly inCinematic: boolean
+  /** 画面の揺れ（0〜1 くらい。少しずつ収まる。プレイ中にも使える） */
+  shake(amount: number): void
   readonly playTime: number
 }
 

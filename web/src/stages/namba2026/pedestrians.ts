@@ -106,6 +106,11 @@ export class Pedestrians {
     }
   }
 
+  /** 歩く人の足元の位置（動いていく本物の参照。読むだけ。町の人の吹き出し mobTalk2026.ts 用） */
+  get positions(): ReadonlyArray<Readonly<THREE.Vector3>> {
+    return this.walkers.map((w) => w.root.position)
+  }
+
   /** obstacles：ぶつからないようにする相手（プレイヤー・仲間）。進む先にいたら立ち止まって引き返す */
   update(dt: number, obstacles: readonly THREE.Vector3[] = []): void {
     for (const w of this.walkers) {

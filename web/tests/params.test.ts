@@ -79,8 +79,9 @@ describe("dialogue_2026.json / dialogue_1726.json", () => {
 
   it("仕様の台詞（§5.1・§5.3・§10）と佐伯の台詞が入っている", () => {
     const all = db26.keys().flatMap((k) => db26.lines(k).map((l) => l.text));
-    expect(all).toContain("ネクマックス？　その名前、僕が考えたんやけど……まだ作ってへんで。");
-    expect(all).toContain("気分転換になるかもしれん。IDOのデモを見てみる？ このあたり、すごいからくりがあったって話があるんや。");
+    // 導入編の改訂（docs/シナリオ改訂案_導入編_v1.md 6-2・6-6）：社長のほうから気づく／こっちの IDO が帰る手がかり
+    expect(all).toContain("もしかして……君、ネクマックス？");
+    expect(all.some((t) => t.includes("こっちのIDOが帰る手がかりになるかもしれん"))).toBe(true);
     expect(all).toContain("できることが一つ増えたな。");
     expect(all.some((t) => t.includes("ここだけなら、今の道具で直せます。"))).toBe(true);
     expect(db17.lines("genbei_first_meet")[0].text).toBe("お前、また来たんか！");

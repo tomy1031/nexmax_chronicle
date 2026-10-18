@@ -12,6 +12,7 @@ import { registerInteriorArt, registerStreetArt } from './artwork'
 import { buildGround, buildRailings, buildBridge, buildNorthSide, buildSouthSide, buildFar } from './street'
 import { buildNextmake, type NextmakeParts } from './nextmake'
 import { buildIdo, type IdoMarker } from './ido'
+import { buildAlley } from './alley'
 import { buildNambaClaw, type NambaClaw } from './clawTargets'
 import { Pedestrians } from './pedestrians'
 import type { NCtx } from './kit'
@@ -22,7 +23,10 @@ export type NambaScene = {
   colliders: ColliderList
   lights: LightSpot[]
   claw: NambaClaw
+  /** IDO の石標 A（NEXTMAKE の前。帰りもここ） */
   ido: IdoMarker
+  /** 石標 A・B・C（導入編 6-6） */
+  idos: { a: IdoMarker; b: IdoMarker; c: IdoMarker }
   nextmake: NextmakeParts
   pedestrians: Pedestrians
   update(dt: number, t: number): void
@@ -83,7 +87,9 @@ export async function buildNambaScene(q: QualitySettings, aniso: number, progres
   progress(0.5, 'NEXTMAKE を組み立て中…')
   await yieldFrame()
   const nextmake = buildNextmake(c)
-  const ido = buildIdo(c)
+  const ido = buildIdo(c, N.IDO, 0)
+  const idos = { a: ido, b: buildIdo(c, N.IDO_B, 0), c: buildIdo(c, N.IDO_C, Math.PI) }
+  buildAlley(c)
   const claw = buildNambaClaw(c)
   progress(0.58, '遠くの町並みを組み立て中…')
   await yieldFrame()
@@ -99,7 +105,6 @@ export async function buildNambaScene(q: QualitySettings, aniso: number, progres
     { x0: -23, x1: 23, z: -10.0, n: 2 },
   ])
   root.add(pedestrians.group)
-  void N
   const obstacles: THREE.Vector3[] = []
   return {
     obstacles,
@@ -108,13 +113,16 @@ export async function buildNambaScene(q: QualitySettings, aniso: number, progres
     lights: c.lights,
     claw,
     ido,
+    idos,
     nextmake,
     pedestrians,
     update(dt: number, t: number) {
       for (const u of c.updaters) u(dt, t)
       pedestrians.update(dt, obstacles)
       nextmake.update(dt, t)
-      ido.update(dt, t)
+      idos.a.update(dt, t)
+      idos.b.update(dt, t)
+      idos.c.update(dt, t)
     },
   }
 }

@@ -1,0 +1,59 @@
+/* 導入編の画面の重ね物（introOverlay2086.ts）：回想・白いかすみ・試みの一覧 */
+
+/* ---------------------------------------------------------------- 1-0 回想（HUD より上） */
+.intro-flashback { position: fixed; inset: 0; z-index: 7; background: #000; overflow: hidden; pointer-events: none; opacity: 1; }
+.intro-flashback .ifb-photo { position: absolute; inset: -4%; transform-origin: 58% 52%; will-change: transform, opacity; opacity: 0; }
+.intro-flashback .ifb-photo canvas,
+.intro-flashback .ifb-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.intro-flashback .ifb-photo img { opacity: 0; transition: opacity 0.8s; }
+.intro-flashback .ifb-photo img.on { opacity: 1; }
+/* 古い記憶の色：少しあせた青と、縁の暗がり */
+.intro-flashback .ifb-tone { position: absolute; inset: 0; background: radial-gradient(ellipse at 55% 50%, rgba(0, 0, 0, 0) 38%, rgba(0, 4, 12, 0.88) 100%); mix-blend-mode: normal; }
+.intro-flashback .ifb-tint { position: absolute; inset: 0; background: rgba(60, 90, 140, 0.22); mix-blend-mode: color; }
+.intro-flashback .ifb-grain {
+  position: absolute; inset: -50%; opacity: 0.12; pointer-events: none;
+  background-image: repeating-radial-gradient(circle at 17% 32%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1px 3px), repeating-radial-gradient(circle at 71% 64%, rgba(255, 255, 255, 0.35) 0 1px, transparent 1px 4px);
+  animation: ifb-grain 0.5s steps(4) infinite;
+}
+@keyframes ifb-grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-3%, 2%); } 50% { transform: translate(2%, -2%); } 75% { transform: translate(-1%, -3%); } 100% { transform: translate(0, 0); } }
+.intro-flashback .ifb-place {
+  position: absolute; left: 6vw; top: 9vh; color: #dbe8ff; font-family: var(--ui-font); font-weight: 800; letter-spacing: 0.2em;
+  font-size: clamp(13px, 1.2vw, 20px); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8); opacity: 0; transition: opacity 1.2s;
+}
+.intro-flashback .ifb-place b { display: block; font-size: 1.7em; letter-spacing: 0.3em; margin-bottom: 0.3em; color: #ffffff; }
+.intro-flashback .ifb-quote {
+  position: absolute; left: 50%; bottom: 12vh; transform: translateX(-50%); width: min(1000px, 86vw); text-align: center;
+  color: #fff; font-family: var(--ui-font); opacity: 0; transition: opacity 1.4s;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9);
+}
+.intro-flashback .ifb-quote .who { display: block; font-weight: 800; font-size: clamp(14px, 1.2vw, 20px); letter-spacing: 0.2em; color: #dcc8ff; margin-bottom: 0.5em; }
+.intro-flashback .ifb-quote .line { font-weight: 800; font-size: clamp(18px, 2vw, 34px); letter-spacing: 0.06em; }
+.intro-flashback .on { opacity: 1; }
+.intro-flashback .ifb-white { position: absolute; inset: 0; background: #ffffff; opacity: 0; }
+.intro-flashback .ifb-skip { position: absolute; right: 3vw; bottom: 4vh; color: rgba(255, 255, 255, 0.55); font-family: var(--ui-font); font-weight: 800; font-size: 12px; letter-spacing: 0.15em; }
+
+/* ---------------------------------------------------------------- 4章③ 町の外：白くかすむ */
+.intro-whiteout { position: fixed; inset: 0; z-index: 6; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 60%, #ffffff 0%, #f6f8ff 55%, #e6ecf8 100%); }
+
+/* ---------------------------------------------------------------- 4章 試みの一覧（右上・目標の下） */
+.intro-attempts {
+  position: absolute; right: 2.3vw; top: calc(var(--nx-top, 0px) + 17.5vh); width: min(330px, 30vw); pointer-events: none;
+  padding: 1.2vh 1vw 1.3vh; border-radius: 10px; color: #eaf4ff; font-family: var(--ui-font);
+  background: linear-gradient(160deg, rgba(8, 20, 48, 0.82), rgba(16, 34, 80, 0.72));
+  border: 1px solid rgba(127, 233, 255, 0.55); box-shadow: 0 0 14px rgba(80, 200, 255, 0.25), 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.4s, transform 0.4s; opacity: 0; transform: translateX(12px);
+}
+.intro-attempts.on { opacity: 1; transform: none; }
+.intro-attempts .ia-title { font-weight: 800; font-size: clamp(11px, 0.85vw, 14px); letter-spacing: 0.14em; color: #9fe8ff; margin-bottom: 0.7vh; }
+.intro-attempts .ia-item { display: flex; align-items: center; gap: 0.6em; font-weight: 800; font-size: clamp(12px, 0.95vw, 16px); padding: 0.35vh 0; opacity: 0.92; }
+.intro-attempts .ia-box { flex: none; width: 1.1em; height: 1.1em; border-radius: 4px; border: 2px solid rgba(160, 230, 255, 0.85); display: grid; place-items: center; font-size: 0.85em; line-height: 1; }
+.intro-attempts .ia-item.done { opacity: 0.6; }
+.intro-attempts .ia-item.done .ia-box { background: #5fe0a8; border-color: #5fe0a8; color: #06281a; }
+.intro-attempts .ia-item.done .ia-label { text-decoration: line-through; text-decoration-thickness: 2px; }
+.intro-attempts .ia-item.active { color: #ffe9a0; opacity: 1; }
+.intro-attempts .ia-item.active .ia-box { border-color: #ffd447; box-shadow: 0 0 8px #ffd447; }
+@media (max-width: 760px), (max-height: 520px) {
+  .intro-attempts { width: min(250px, 34vw); top: 24vh; padding: 0.8vh 0.8vw; }
+  .intro-attempts .ia-title { font-size: 10px; margin-bottom: 0.3vh; }
+  .intro-attempts .ia-item { font-size: 11px; padding: 0.1vh 0; }
+}

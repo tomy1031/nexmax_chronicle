@@ -1,0 +1,141 @@
+/* 町の人（モブ）の吹き出し（world/mobTalk.ts）。HUD（ui/future/hudFuture.css）と同じ紺のガラス＋細い水色の線、白い字、平ら。
+   大きさは HUD と同じく 1600×900 を基準に min(幅/1600, 高さ/900) 倍（--u）。スマホでも読めるよう文字は 11px より小さくしない。
+   位置は JS が .nx-mob-bubble の transform（頭の上の点）だけを書き換える。.on で出る（透明度と小さな拡大）。 */
+
+.nx-mob-layer {
+  --u: min(0.0625vw, 0.11111vh);
+  --mob-line: #5ee6ff;
+  --mob-line-dim: rgba(104, 222, 255, 0.55);
+  --mob-glass-a: rgba(20, 74, 156, 0.7);
+  --mob-glass-b: rgba(3, 16, 52, 0.86);
+  --mob-acc: #ff4fd8;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: 'M PLUS 1p', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 2026（いまのなんば）：HUD の 2026 と同じ青緑 */
+.nx-mob-layer.nx-mob-2026 {
+  --mob-line: #4ee6dc;
+  --mob-line-dim: rgba(112, 232, 224, 0.5);
+  --mob-glass-a: rgba(16, 66, 82, 0.72);
+  --mob-glass-b: rgba(3, 16, 26, 0.86);
+  --mob-acc: #ffffff;
+}
+
+/* 1726（江戸の大坂）：HUD の 1726 と同じ藍＋金、朱のさし色 */
+.nx-mob-layer.nx-mob-1726 {
+  --mob-line: #f3c865;
+  --mob-line-dim: rgba(243, 200, 101, 0.5);
+  --mob-glass-a: rgba(36, 48, 140, 0.72);
+  --mob-glass-b: rgba(8, 10, 52, 0.86);
+  --mob-acc: #ff5b3a;
+}
+
+.nx-mob-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  will-change: transform;
+}
+
+.nx-mob-card {
+  position: absolute;
+  left: 0;
+  bottom: max(9px, calc(16 * var(--u)));
+  box-sizing: border-box;
+  width: max-content;
+  max-width: max(176px, calc(330 * var(--u)));
+  padding: max(5px, calc(8 * var(--u))) max(9px, calc(15 * var(--u))) max(5px, calc(8 * var(--u))) max(11px, calc(18 * var(--u)));
+  font: 700 max(11px, calc(18 * var(--u))) / 1.5 'M PLUS 1p', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  color: #f4fbff;
+  text-shadow: 0 1px 2px rgba(0, 10, 30, 0.9);
+  word-break: auto-phrase;
+  line-break: strict;
+  background: linear-gradient(180deg, var(--mob-glass-a), var(--mob-glass-b));
+  border: 1px solid var(--mob-line-dim);
+  border-radius: max(2px, calc(4 * var(--u)));
+  box-shadow: 0 0 max(4px, calc(10 * var(--u))) rgba(40, 170, 255, 0.28), inset 0 1px 0 rgba(200, 245, 255, 0.18);
+  opacity: 0;
+  transform: translateX(-50%) translateY(max(3px, calc(6 * var(--u)))) scale(0.9);
+  transform-origin: 50% 100%;
+  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+/* 左の細い光の帯（HUD の目標の帯と同じ言葉づかい） */
+.nx-mob-card::before {
+  content: '';
+  position: absolute;
+  left: max(4px, calc(7 * var(--u)));
+  top: 22%;
+  bottom: 22%;
+  width: max(2px, calc(3 * var(--u)));
+  border-radius: 2px;
+  background: var(--mob-line);
+  box-shadow: 0 0 max(3px, calc(6 * var(--u))) var(--mob-line);
+}
+
+/* 右上の小さなさし色 */
+.nx-mob-card::after {
+  content: '';
+  position: absolute;
+  right: max(5px, calc(8 * var(--u)));
+  top: -1px;
+  width: max(10px, calc(18 * var(--u)));
+  height: 2px;
+  background: var(--mob-acc);
+  opacity: 0.85;
+}
+
+.nx-mob-text {
+  position: relative;
+  display: block;
+}
+
+/* 吹き出しの付け根：頭の上の点へ下りる細い線と小さな点 */
+.nx-mob-stem {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: max(9px, calc(16 * var(--u)));
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, var(--mob-line-dim), var(--mob-line));
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.nx-mob-stem::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  width: max(4px, calc(6 * var(--u)));
+  height: max(4px, calc(6 * var(--u)));
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--mob-line);
+  box-shadow: 0 0 max(3px, calc(6 * var(--u))) var(--mob-line);
+}
+
+.nx-mob-bubble.on .nx-mob-card {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.nx-mob-bubble.on .nx-mob-stem {
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nx-mob-card,
+  .nx-mob-stem {
+    transition: opacity 0.15s linear;
+  }
+}

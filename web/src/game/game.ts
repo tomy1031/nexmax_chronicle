@@ -32,6 +32,8 @@ import { applyEnvironment, type AppliedEnvironment } from './env'
 import { disposeObject3D } from './dispose'
 import { DialogueQueue, lineDuration, type DialogueLine } from './dialogueQueue'
 import { createStage, DEFAULT_STAGE, STAGE_INFO } from './registry'
+import { CineDirector, autoFramePosition, type CineShot } from './cinematic'
+import { CineMarkerFx } from './cineMarker'
 import type { Stage, StageLoadContext, StageRuntime, StageWorld } from './stage'
 
 /** 読み込み表示を更新するために 1 フレーム譲る（非表示タブで rAF が止まっても進むよう setTimeout も併用） */
@@ -80,6 +82,8 @@ type Active = {
   camRig: CameraRig
   claw: ClawSystem
   rt: StageRuntime
+  /** 解放済み（古いステージの非同期の続きが、新しいステージで会話・演出を始めないように） */
+  dead?: boolean
 }
 
 /** 時代ごとに登場する話者（HUD の顔アイコンを読み込み時に先に作る） */
@@ -117,6 +121,12 @@ export class Game {
   private readonly lanternLights: THREE.PointLight[] = []
   private nexmax!: Character
   private active: Active | null = null
+  /** カメラの演出（rt.cinematic）とその目印・上下の黒帯 */
+  private readonly cine = new CineDirector()
+  private readonly cineMarker: CineMarkerFx
+  private readonly cineBars: HTMLDivElement
+  private readonly cineAuto = new THREE.Vector3()
+  private readonly cineDir = new THREE.Vector3()
   private adaptive!: AdaptiveResolution
   // 進行中の状態
   private shotIndex = -1
@@ -171,6 +181,13 @@ export class Game {
     }
     this.travelFx = new TravelFx(ui)
     this.scene.add(this.rift.group)
+    // カメラの演出：黒帯は #ui のいちばん下（HUD の後ろ）、目印はシェルが 1 組だけ持つ
+    this.cineBars = document.createElement('div')
+    this.cineBars.className = 'cine-bars'
+    this.cineBars.innerHTML = '<div class="cine-bar top"></div><div class="cine-bar bottom"></div>'
+    ui.insertBefore(this.cineBars, ui.firstChild)
+    this.cineMarker = new CineMarkerFx(ui)
+    this.scene.add(this.cineMarker.group)
     // 提灯などの点光源（数は固定：近い候補へ毎回移す。ステージをまたいで使い回す）
     for (let i = 0; i < 6; i++) {
       const pl = new THREE.PointLight('#ffae5a', 0, 7, 2)
@@ -325,6 +342,7 @@ export class Game {
     this.fireTimer = 0
     this.controlLocked = false
     this.departT = 0
+    this.endCineUi()
     this.hud.setPaused(false)
     this.hud.setMenu(false)
     this.hud.setGate(null)
@@ -386,8 +404,10 @@ export class Game {
     claw.beam.update(0, sp.pos.clone().add(new THREE.Vector3(0, 0.6, 0)), sp.pos.clone().add(new THREE.Vector3(0, 0.6, -2)))
     const riftWasShown = this.rift.visible
     if (!riftWasShown) this.rift.warm(true, sp.pos)
+    this.cineMarker.warm(true, sp.pos)
     await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 6000))])
     if (!riftWasShown) this.rift.warm(false, sp.pos)
+    this.cineMarker.warm(false, sp.pos)
     claw.beam.setActive(beamWasActive)
     env.sky.position.copy(this.camera.position)
     for (let i = 0; i < 2; i++) {
@@ -399,7 +419,10 @@ export class Game {
   }
 
   private unloadStage(a: Active): void {
+    a.dead = true
+    this.cancelCinematic()
     this.endDialogue()
+    this.hud.clearDialog()
     this.hud.hideIdo()
     this.hud.setGate(null)
     this.hud.setReticle({ mode: 'idle' })
@@ -463,18 +486,26 @@ export class Game {
       oreGlow: (v) => {
         this.oreGlow = Math.max(this.oreGlow, v)
       },
-      travel: (req) => this.requestTravel(req),
-      dialogue: (lines) => this.startDialogue(lines),
+      travel: (req) => (a.dead ? { ok: false, reason: '' } : this.requestTravel(req)),
+      dialogue: (lines) => (a.dead ? Promise.resolve() : this.startDialogue(lines)),
       get talking() {
         return g.talk !== null
       },
-      say: (speaker, text, seconds) => this.hud.say(speaker, text, seconds),
+      say: (speaker, text, seconds) => {
+        if (!a.dead) this.hud.say(speaker, text, seconds)
+      },
       save: (checkpoint) => {
         this.saver.save(this.story, a.stage.era, checkpoint)
       },
       setControlLocked: (on) => {
         this.controlLocked = on
       },
+      cinematic: (shot) => (a.dead ? Promise.resolve() : this.startCinematic(a, shot)),
+      endCinematic: (fast) => this.cine.release(fast),
+      get inCinematic() {
+        return g.cine.active
+      },
+      shake: (amount) => this.cine.addShake(amount),
       get playTime() {
         return g.playTime
       },
@@ -485,6 +516,7 @@ export class Game {
     const from = this.active?.stage.key ?? null
     const v = this.travel.start(from, req, (n) => this.story.get(n))
     if (!v.ok) return v
+    this.cancelCinematic()
     this.active?.claw.reset()
     this.story.timeline.addMetric('time_travels')
     this.travelFx.begin(from ? eraTint(stageEra(from)) : eraTint(stageEra(req.to)), eraTint(stageEra(req.to)), STAGE_INFO[req.to].label)
@@ -620,7 +652,7 @@ export class Game {
     }
     const frozen = this.shotIndex === -1 && (this.paused || this.menuOpen)
     this.touch?.setPlaying(this.shotIndex === -1 && !frozen && !this.travel.busy)
-    this.touch?.setLocked(this.controlLocked)
+    this.touch?.setLocked(this.controlLocked || this.cine.active)
     this.touch?.setOverlay(this.shotIndex === -1 && !this.travel.busy ? (this.paused ? 'pause' : this.menuOpen ? 'menu' : null) : null)
     const ndt = frozen ? 0 : dt
     this.nexmax.update(ndt, this.shotIndex === -1 || !shots ? player.speed : shots.nexmaxSpeed(this.shotIndex))
@@ -649,7 +681,7 @@ export class Game {
           left: { name: this.equipment.left ? PART_NAMES[this.equipment.left] : null, selected: this.equipment.selected === 'left' },
         })
       }
-      if (this.touch) this.hud.setClawPrompt(this.clawLabel, u.selected !== null && !active)
+      if (this.touch) this.hud.setClawPrompt(this.clawLabel, u.selected !== null && !active && !this.cine.active)
       if (frozen || this.travel.busy) this.hud.setHints([])
     }
     this.rift.update(ndt, this.camera)
@@ -669,6 +701,7 @@ export class Game {
   private setMode(a: Active, idx: number): void {
     const shots = a.stage.shots
     if (!shots) return
+    this.cancelCinematic()
     if (this.shotIndex === -1 && idx !== -1) this.savedPlayer.copy(a.player.position)
     this.paused = false
     this.menuOpen = false
@@ -705,34 +738,39 @@ export class Game {
     this.playTime += dt
     this.story.timeline.play_time += dt
     claw.aim(this.camera)
-    if (frame.pressed.has('select_left')) {
+    // カメラの演出中：操作を止める（F は会話の早送り、会話が無ければ飛ばせるショットを飛ばす）
+    const cineOn = this.cine.active
+    if (cineOn) this.cineInput(frame)
+    else if (frame.pressed.has('select_left')) {
       hud.toast(selectArm(this.equipment, 'left').message)
       hud.pulseArm('left')
     }
-    if (frame.pressed.has('select_right')) {
+    if (!cineOn && frame.pressed.has('select_right')) {
       hud.toast(selectArm(this.equipment, 'right').message)
       hud.pulseArm('right')
     }
-    if (frame.pressed.has('open_hub')) {
+    if (!cineOn && frame.pressed.has('open_hub')) {
       const r = canOpenHub({ unlocked: false, atSafePoint: false, wireMoving: claw.wire.isWireMoving(), airborne: !player.grounded && !player.isExternal, inCombat: false })
       hud.toast(r.message)
     }
     this.attackToastCooldown -= dt
-    if (frame.pressed.has('attack') && this.attackToastCooldown <= 0) {
+    if (!cineOn && frame.pressed.has('attack') && this.attackToastCooldown <= 0) {
       hud.toast('基本攻撃は戦闘の実装後に使えます')
       this.attackToastCooldown = 2
     }
-    if (frame.pressed.has('interact')) {
+    if (!cineOn && frame.pressed.has('interact')) {
       if (this.talk) this.tickDialogue(0, true)
       else stage.interact(rt)
     }
-    const locked = this.controlLocked
+    const locked = this.controlLocked || cineOn
     const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, clawArm(this.equipment) !== null, this.camera)
     player.update(dt, { move: locked ? ZERO_AXIS : frame.move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
     claw.update(dt, frame, camRig.yaw)
     this.faceClawTarget(a, frame, dt)
     stage.update(dt, frame, rt)
-    camRig.update(dt, frame.look, player.position, this.input.mouseDX, this.input.mouseDY)
+    if (this.cine.active) camRig.update(dt, ZERO_AXIS, player.position)
+    else camRig.update(dt, frame.look, player.position, this.input.mouseDX, this.input.mouseDY)
+    this.applyCine(dt)
 
     // ネクマックスの位置・向き・ポーズ
     const nexmax = this.nexmax
@@ -770,13 +808,78 @@ export class Game {
     const hints = this.computeHints(a)
     if (this.touch) {
       // スマホ：J・Space・F・R の言葉はボタンへ、移動・カメラなどは指の動きの案内に
-      const v = this.touch.applyHints(hints, { interact: this.talk ? null : this.interactLabel(a), canSwitch: claw.candidateCount > 1 && claw.wire.phase === 'idle' })
+      const v = this.touch.applyHints(hints, { interact: this.talk || this.cine.active ? null : this.interactLabel(a), canSwitch: !this.cine.active && claw.candidateCount > 1 && claw.wire.phase === 'idle' })
       hud.setHints(v.hud)
       this.clawLabel = v.claw
     } else hud.setHints(hints)
     const o = stage.objective(rt)
     hud.setObjective(o.title, o.sub)
     hud.setCompass(camRig.yaw, stage.objectiveTarget?.(rt) ?? null, player.position)
+  }
+
+  // ================================================================ カメラの演出（rt.cinematic）
+
+  private startCinematic(a: Active, shot: CineShot): Promise<void> {
+    if (this.shotIndex >= 0 || this.travel.busy || this.active !== a) return Promise.resolve()
+    const auto = shot.from ? null : this.frameFrom(a, shot.look)
+    const p = this.cine.start(shot, this.camera, auto)
+    if (shot.marker) this.cineMarker.show(shot.marker.pos, shot.marker.label, shot.marker.color)
+    else this.cineMarker.hide()
+    this.cineBars.classList.toggle('on', shot.letterbox !== false)
+    this.hud.setPlayUiVisible(false)
+    this.hud.setReticle({ mode: 'idle' })
+    return p
+  }
+
+  /** from の無いショット：プレイヤー越しに目標を見る位置。目標からカメラへ光線を飛ばし、壁があれば手前に縮める */
+  private frameFrom(a: Active, look: THREE.Vector3): THREE.Vector3 {
+    const cam = autoFramePosition(a.player.position, look, this.cineAuto)
+    const dir = this.cineDir.subVectors(cam, look)
+    const len = dir.length()
+    if (len > 0.8) {
+      dir.divideScalar(len)
+      const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
+      const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
+      if (hit !== null) cam.copy(start).addScaledVector(dir, Math.max(0.5, hit - 0.4))
+    }
+    return cam
+  }
+
+  /** ショット中の入力：F は会話の早送り。会話が無く、飛ばせるショットなら F・Space・J で戻りに入る */
+  private cineInput(frame: ActionFrame): void {
+    if (frame.pressed.has('interact') && this.talk) {
+      this.tickDialogue(0, true)
+      return
+    }
+    if (!this.talk && this.cine.skippable && (frame.pressed.has('interact') || frame.pressed.has('jump') || frame.pressed.has('claw_fire'))) this.cine.release(true)
+  }
+
+  /** CameraRig の後：ショットを混ぜ、目印を置き、揺れを足す */
+  private applyCine(dt: number): void {
+    if (this.cine.active) {
+      const done = this.cine.apply(dt, this.camera)
+      if (done) this.endCineUi()
+      else if (this.cine.current?.marker) {
+        // CameraRig の lookAt が古い姿勢で行列を作っているので、札の投影の前に作り直す
+        this.camera.updateMatrixWorld()
+        const w = this.cine.weight
+        const op = this.cine.phase === 'hold' ? 1 : Math.min(1, Math.max(0, (w - 0.35) / 0.5))
+        const { w: vw, h: vh } = this.view
+        this.cineMarker.update(this.camera, op, vw, vh)
+      }
+    }
+    this.cine.applyShake(dt, this.camera)
+  }
+
+  private cancelCinematic(): void {
+    this.cine.cancel(this.camera)
+    this.endCineUi()
+  }
+
+  private endCineUi(): void {
+    this.cineMarker.hide()
+    this.cineBars.classList.remove('on')
+    if (this.shotIndex < 0) this.hud.setPlayUiVisible(true)
   }
 
   /**
@@ -810,6 +913,7 @@ export class Game {
   private computeHints(a: Active): Hint[] {
     const { claw } = a
     if (this.talk) return [{ key: 'F', label: '次へ' }]
+    if (this.cine.active) return this.cine.skippable ? [{ key: 'F', label: 'スキップ' }] : []
     const w = claw.wire
     switch (w.phase) {
       case 'swinging':
@@ -826,11 +930,15 @@ export class Game {
           { key: '↑↓←→', label: 'カメラ' },
         ]
       case 'carrying':
-      case 'reeling':
+      case 'reeling': {
+        // 持ったまま渡せる相手がいれば「F：渡す」も出す（ステージの F の案内）
+        const give = a.stage.hints(a.rt)?.find((h) => h.key === 'F')
         return [
+          ...(give ? [give] : []),
           { key: 'J', label: '置く' },
           { key: 'WASD', label: '運ぶ' },
         ]
+      }
       case 'firing':
       case 'retracting':
       case 'miss':
@@ -890,6 +998,17 @@ export class Game {
       story: g.story,
       travel: (to: StageKey, spawn?: string, cause: TravelRequest['cause'] = 'debug') => g.requestTravel({ to, spawn, cause }),
       memory: () => ({ ...g.renderer.info.memory, programs: g.renderer.info.programs?.length ?? 0 }),
+      /** 開発用：カメラの演出を試す（座標は [x, y, z] の配列でよい） */
+      cine: (o: Record<string, unknown>) => {
+        const a = g.active
+        if (!a) return Promise.resolve()
+        const v = (x: unknown) => (Array.isArray(x) ? new THREE.Vector3(x[0], x[1], x[2]) : (x as THREE.Vector3 | undefined))
+        const m = o.marker as { pos: unknown; label: string } | undefined
+        const shot = { ...o, look: v(o.look)!, from: v(o.from), lookTo: v(o.lookTo), fromTo: v(o.fromTo), marker: m ? { ...m, pos: v(m.pos)! } : undefined } as CineShot
+        return a.rt.cinematic(shot)
+      },
+      endCine: (fast?: boolean) => g.cine.release(fast),
+      cineState: () => ({ active: g.cine.active, phase: g.cine.phase, w: +g.cine.weight.toFixed(3) }),
       debug: () => {
         const a = g.active
         const claw = a?.claw

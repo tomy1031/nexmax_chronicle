@@ -13,7 +13,10 @@ describe("storyObjective（v2.3）", () => {
     s.set("met_matsui", true);
     expect(presentObjective(f).target).toBe("saeki");
     s.set("met_saeki", true);
-    expect(presentObjective(f).target).toBe("ido");
+    // 導入編 6-6：腕を直したあと、表のマツイ社長に帰る方法を相談してから石標へ
+    expect(presentObjective(f).target).toBe("matsui");
+    s.set("ido_hint_heard", true);
+    expect(presentObjective(f).target).toBe("ido_markers");
     s.set("ido_qr_used", true);
     s.set("gate_repaired", true);
     s.set("genbei_drawing_found", true);
@@ -75,7 +78,17 @@ describe("2026年の進行（nambaBeat）", () => {
     expect(s.get("met_saeki")).toBe(true);
     expect(matsuiSpot((n) => s.get(n))).toBe("ido");
     expect(play(s, "saeki").dialogue).toBe("saeki_repeat");
-    const ido = play(s, "ido");
+    // 導入編 6-6：石標は、表の社長に相談するまで「社長に聞いてみよう」だけ。相談すると社長がついて歩き、
+    // 石標 A（NEXTMAKE の前）・B は昔の町を見るだけ、C（古い路地の奥）で 1726年へ
+    expect(play(s, "ido").dialogue).toBe("ido_ask_matsui");
+    const hint = play(s, "matsui");
+    expect(hint.dialogue).toBe("matsui_ido_hint");
+    expect(hint.follow).toBe(true);
+    expect(s.get("ido_hint_heard")).toBe(true);
+    const a = play(s, "ido");
+    expect(a.panel).toBe("old1926");
+    expect(a.travel).toBeUndefined();
+    const ido = play(s, "ido_c");
     expect(ido.panel).toBe("karakuri");
     expect(ido.travel).toEqual({ to: "1726", cause: "ido_qr", spawn: "arrive" });
     expect(s.get("ido_qr_used")).toBe(true);

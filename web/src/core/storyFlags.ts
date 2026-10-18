@@ -3,6 +3,9 @@
 // ここ（StoryState）に持ち、TimelineState のフラグと同じ名前空間で読み書きできるようにする。
 // ・TimelineState のフラグ：gate_repaired / genbei_drawing_found / drawing_confirmed / met_matsui / met_genbei …
 // ・v2.3 の追加：festival_morning_seen / orum_seen / ido_exhibit_used / ido_qr_used / met_saeki / genbei_story_told / fixture_made と周回数 loop_count
+// ・導入編の改訂（6・7 章）：ido_hint_heard / ido_a_seen / ido_b_seen / met_oharu / black_ring_seen
+// ・導入編の改訂（2086年 1〜5 章）：lens_installed / loop_noticed / try_cancel / try_alarm / try_escape / try_confront / confided
+//   （セーブに無い古いデータは false で読み込まれる＝互換）
 // 描画・DOM には依存しない純粋なロジック。
 
 import { Emitter } from "./emitter";
@@ -19,6 +22,20 @@ export const STORY_BOOL_FLAGS = [
   "met_saeki", // 2026年：ラボで佐伯に腕の取り付け部を見てもらった
   "genbei_story_told", // 2026年（帰還後）：マツイ社長に源兵衛と絵図のことを話した
   "fixture_made", // 2026年（帰還後）：佐伯が絵図から小さな固定具を試作した
+  // 導入編シナリオ改訂案 v1（docs/シナリオ改訂案_導入編_v1.md）の 6・7 章で増えた段階
+  "ido_hint_heard", // 2026年：マツイ社長から「こっちの IDO が帰る手がかりになるかも」と石標 3 本の話を聞いた（6-6）
+  "ido_a_seen", // 2026年：石標 A（NEXTMAKE の前・100年前のなんば）の QR を読んだ
+  "ido_b_seen", // 2026年：石標 B（橋のたもと・1970年の道頓堀）の QR を読んだ
+  "met_oharu", // 1726年：茶運び人形を追ってきたおはると出会い、工房へ案内された（7-3）
+  "black_ring_seen", // 1726年：夕暮れの川向こうの空に小さな黒い輪を見た（7-5）。このあと水門の危機
+  // 導入編シナリオ改訂案 v1 の 2086年 3〜5 章（stages/future2086/intro2086Story.ts）
+  "lens_installed", // 2086年 1-4：共鳴レンズのケースをソラに渡し、リングにはめた（このあと中継アンテナ）
+  "loop_noticed", // 2086年：繰り返していると気づいた（3章。腕を受け止めた）。このあと試み（4章）
+  "try_cancel", // 2086年 4章①：運営本部とソラに中止を頼んだが、夜は来た
+  "try_alarm", // 2086年 4章②：非常警報で早めに避難させたが、逃げた先から消えた
+  "try_escape", // 2086年 4章③：ソラと町の外へ出ようとしたが、広場へ戻された
+  "try_confront", // 2086年 4章④：夜、空の存在にクローを撃ったが、すり抜けた
+  "confided", // 2086年 5章：ソラに繰り返しを打ち明け、「信じるよ」と言ってもらった（記録の石標へ）
 ] as const;
 
 export type StoryBoolFlag = (typeof STORY_BOOL_FLAGS)[number];

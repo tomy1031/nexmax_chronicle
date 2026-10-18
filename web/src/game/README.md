@@ -23,6 +23,8 @@ three.js 版は **シェル（ずっと残るもの）＋ステージ（時代�
 - `env.ts` … 環境の適用と解放（PMREM のレンダーターゲットまで解放する）
 - `dispose.ts` … ルート配下のジオメトリ・マテリアル・テクスチャ（シェーダの uniform のテクスチャも）を解放
 - `dialogueQueue.ts` … 複数行の会話を順に出す（文字数で自動送り、F で早送り）
+- `cinematic.ts` … カメラの演出（`rt.cinematic(shot)`）の時間の進み・加減速・自動のカメラ位置・ディレクター（純粋な計算＋THREE の数学。`tests/cinematic.test.ts`）
+- `cineMarker.ts` … 演出中の目印（脈打つ光る輪・光の柱・名前の札）。シェルが 1 組だけ持って使い回す
 - `params.ts` … URL パラメータ
 - `future2086Adapter.ts` … 2086 年ステージ（別担当）をつなぐところ
 - `game.css` … 時空移動・時代カード・IDO パネル・話者の色
@@ -66,7 +68,27 @@ type StageWorld = {
 
 `StageRuntime`（`begin` 以降に渡る）：`scene`・`camera`・`renderer`・`post`・`hud`・`player`・`camRig`・`claw`・`phys`・
 `nexmax`（主人公の見た目。ステージは解放しない）・`equipment`・`story`・`rift`・`oreGlow(v)`（背中の鉱石）・
-`travel(req)`・`dialogue(lines)`（Promise）・`talking`・`say(speaker, text)`・`save(checkpoint)`・`setControlLocked(on)`・`playTime`。
+`travel(req)`・`dialogue(lines)`（Promise）・`talking`・`say(speaker, text)`・`save(checkpoint)`・`setControlLocked(on)`・`playTime`・
+`cinematic(shot)`（Promise）・`endCinematic(fast?)`・`inCinematic`・`shake(amount)`。
+
+### カメラの演出（`rt.cinematic`）
+
+```ts
+await rt.cinematic({
+  look: casePos,                 // 見せる点（必須）
+  from: camPos,                  // カメラの位置（省略するとプレイヤー越しに自動・壁に埋まらない）
+  lookTo, fromTo, panSec,        // 保持の間のパン・ドリー（任意）
+  inSec: 2, hold: 3, outSec: 1.6, // 寄る・保持（Infinity なら endCinematic() まで）・戻る
+  fov: 50,
+  marker: { pos: casePos, label: '共鳴レンズのケース', color: '#ffd447' },
+  shake: 0, skippable: false, letterbox: true,
+})
+```
+
+プレイのカメラ（CameraRig）の姿勢から shot の姿勢へ、位置は補間（遠いときは弧を描いて持ち上げる）・向きは slerp で寄り、戻るときもプレイの姿勢へ
+ぴったり戻る（飛ばない）。その間は操作を止め、照準・キー案内・コンパスを隠し、上下に細い黒帯（HUD の後ろ）。会話は同時に流せる（F は会話の早送り。
+会話が無く `skippable` なら F・Space・J で戻りに入る）。時空移動・ステージの解放・撮影ショット（P）で打ち切られ、そのときもすぐ resolve。
+look などの Vector3 は毎フレーム読むので、ステージが動かしてもよい（`shake` も同じ）。2086年の表は `stages/future2086/focusShots2086.ts`。
 
 ### 守ること
 
@@ -104,5 +126,7 @@ type StageWorld = {
 ## 2086 年ステージのつなぎ方（`future2086Adapter.ts`）
 
 `stages/future2086/` の組み立て（`{ root, colliders, claw, … }` を返す）と物語のモジュールを、`Stage` を実装した
-アダプタで包んで `createFutureStage()` から返す。IDO 展示で 2026 年へ行くときは
+アダプタで包んで `createFutureStage()` から返す。物語は導入編 1〜5 章の `intro2086Story.ts`（台詞 `intro_2086.json`）で、
+新しい演出（回想・レンズの受け渡し・アンテナと大画面・試みの一覧・町の外・QR と記録の石標など）とソラの動きは
+`introDirector2086.ts`、小物は `introProps2086.ts`。旧版の流れ `future2086Story.ts` はプレビュー（previewPlay.ts）と既存テスト用に残してある。IDO 展示で 2026 年へ行くときは
 `rt.travel({ to: '2026', cause: 'ido_exhibit', spawn: 'present_start' })`、2026 年から戻るときの到着地点 ID は `future_return`。

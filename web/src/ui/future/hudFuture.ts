@@ -918,6 +918,13 @@ export class HudFuture {
     this.scheduleDialogCheck()
   }
 
+  /** 会話ウィンドウを今すぐ空にする（時空移動でステージが替わるとき） */
+  clearDialog(): void {
+    clearTimeout(this.dlgTimer)
+    this.board.clear()
+    this.renderDialog()
+  }
+
   private scheduleDialogCheck(): void {
     clearTimeout(this.dlgTimer)
     const next = this.board.nextExpiry()

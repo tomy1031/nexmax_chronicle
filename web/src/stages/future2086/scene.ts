@@ -24,7 +24,7 @@ import { buildHoloAds } from './holoAds2086'
 import { buildClawTargets2086, type FutureClawWorld } from './clawTargets2086'
 import { FUTURE_ENVIRONMENTS, type FutureEnvironment } from './environment'
 import { buildFestival, buildFountain, holoSign } from './festival'
-import { buildCrowd } from './crowd'
+import { buildCrowd, type Crowd } from './crowd'
 import { createFutureMaterials, type FutureMaterials, type TimeOfDay } from './fmaterials'
 import { AttrBatch, type FCtx } from './kit2086'
 import { F, ZONES, yawTo, zoneAt, type Interactable, type Zone, type ZoneId } from './layout'
@@ -69,6 +69,8 @@ export type FutureScene = {
   orum: OrumParts
   debris: DebrisField
   units: Units
+  /** 祭りの人出（立っている人の一覧 crowd.standing を町の人のおしゃべり mobTalk2086.ts が読む） */
+  crowd: Crowd
   materials: FutureMaterials
   update(dt: number, t: number): void
   setTimeOfDay(mode: TimeOfDay): void
@@ -222,8 +224,8 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
     night_plaza: spawn(v(0.9, 0, 6.4), face(v(0.9, 0, 6.4), v(F.ORUM.x * 0.2, 0, F.ORUM.z * 0.2)), -0.1),
     // IDO 展示の前
     exhibit: spawn(portalFront.clone().add(v(0.8, 0, 0.8)), face(portalFront, booth.center), 0.18),
-    // 2026年から戻ってきた（展示のリングの前）
-    arrive_from_2026: spawn(portalFront.clone(), face(booth.center, portalFront), 0.22),
+    // 2026年から戻ってきた（記録の石標の列の外側で、ブース＝ソラの方を向く。カメラがリングや石標に入らないように）
+    arrive_from_2026: spawn(portalFront.clone().addScaledVector(booth.normal, 3.6), face(portalFront.clone().addScaledVector(booth.normal, 3.6), booth.center), 0.18),
   }
   const interactables: Interactable[] = [
     { id: 'sora', pos: soraBooth.clone(), reach: 2.6, label: '話す' },
@@ -261,6 +263,7 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
     orum,
     debris,
     units,
+    crowd,
     materials: fm,
     update(dt: number, t: number) {
       for (const u of c.updaters) u(dt, t)

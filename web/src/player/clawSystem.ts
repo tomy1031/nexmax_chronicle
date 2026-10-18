@@ -348,6 +348,17 @@ export class ClawSystem {
 
   // ---------------------------------------------------------------- 内部
 
+  /** 動かせる物を元の場所へ戻す（持っていれば外してから）。ステージの演出用（ループで朝に戻すなど） */
+  sendHomeById(id: string): void {
+    const m = this.movables.find((x) => x.def.id === id)
+    if (!m) return
+    if (this.carried === m) {
+      this.reset()
+      return
+    }
+    this.sendHome(m)
+  }
+
   private handle(e: WireEvent): void {
     switch (e.kind) {
       case 'connected': {

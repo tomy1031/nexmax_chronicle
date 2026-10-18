@@ -23,6 +23,8 @@ type Person = {
   walk?: { ax: number; az: number; bx: number; bz: number; speed: number; t0: number }
   /** 夜も残る（回廊の上・遠くの通り） */
   keepAtNight: boolean
+  /** 導入編の演出で個別に隠す人の印（introProps2086.ts の INTRO_CROWD）。無ければ常に出る */
+  tag?: string
   child: boolean
   role: Role
   /** 見た目の乱数（配置の乱数列は変えない） */
@@ -217,11 +219,40 @@ function crowdMaterial<T extends THREE.Material>(mat: T, key: string, palU: { va
   return mat
 }
 
+/** 立っている人 1 人（読み取り専用。話しかけ・吹き出しの相手を選ぶため。mobTalk2086.ts） */
+export type CrowdSpot = {
+  /** 足元の位置 */
+  readonly pos: Readonly<THREE.Vector3>
+  /** 頭のてっぺんまでの高さ（m） */
+  readonly top: number
+  readonly role: Exclude<Role, 'walker'>
+  readonly child: boolean
+  /** 夜（オルム）も残る（回廊の上・北の通り）。それ以外は夜に隠れる */
+  readonly keepAtNight: boolean
+}
+
 export type Crowd = {
   group: THREE.Group
   update(dt: number): void
   setNight(on: boolean): void
+  /** 立っている人の一覧（歩く人は入れない。見た目・配置には関係しない読み取り専用の写し） */
+  readonly standing: readonly CrowdSpot[]
+  /** 印（tag）の付いた人を隠す・出す（導入編：リングの中の体験客・運営本部の実行委員など） */
+  setHidden(tag: string, hidden: boolean): void
 }
+
+/** 導入編（docs/シナリオ改訂案_導入編_v1.md 1-2・4章）で足す人。配置の乱数列の最後に足すので、ほかの人の見た目・位置は変わらない */
+export const INTRO_CROWD: ReadonlyArray<{ tag: string; x: number; y: number; z: number; yaw: number; role: Exclude<Role, 'walker'>; child?: boolean }> = [
+  // リングの中で体験中の客（下の機械の箱の上に立つ。見回す）
+  { tag: 'ring_visitor', x: F.PORTAL.x + Math.sin(F.PORTAL.yaw) * 0.3, y: 0.725, z: F.PORTAL.z + Math.cos(F.PORTAL.yaw) * 0.3, yaw: F.PORTAL.yaw + Math.PI, role: 'booth' },
+  // 体験待ちの列（ブースの西の縁から南西へ）
+  { tag: 'queue', x: -11.0, y: 0, z: 1.7, yaw: 2.6, role: 'street' },
+  { tag: 'queue', x: -11.8, y: 0, z: 2.7, yaw: 2.6, role: 'street', child: true },
+  { tag: 'queue', x: -12.6, y: 0, z: 3.6, yaw: 2.55, role: 'street' },
+  { tag: 'queue', x: -13.3, y: 0, z: 4.5, yaw: 2.5, role: 'street' },
+  // 南の入口の運営本部（テントの机の向こう。広場を向く）
+  { tag: 'hq_staff', x: 6.4, y: 0, z: 17.6, yaw: 0, role: 'street' },
+]
 
 export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
   const rng = mulberry32(8086)
@@ -303,6 +334,12 @@ export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
     [-4, 16.5, 7, 9.5],
   ]
   walkers.forEach(([ax, az, bx, bz], i) => add(ax, az, 0, { walk: { ax, az, bx, bz, speed: range(rng, 0.9, 1.25), t0: i * 3.7 }, collide: false }))
+  // 導入編で足す人（印付き。最後に足す）
+  for (const x of INTRO_CROWD) {
+    add(x.x, x.z, x.yaw, { y: x.y, role: x.role, child: x.child, collide: x.y < 0.5 })
+    people[people.length - 1].tag = x.tag
+  }
+  const hiddenTags = new Set<string>()
 
   // ---------------------------------------------------------------- 見た目（色表）
   const N = people.length
@@ -562,7 +599,7 @@ export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
     const t = uTime.value
     for (let i = 0; i < N; i++) {
       const p = people[i]
-      let visible = !night || p.keepAtNight
+      let visible = (!night || p.keepAtNight) && !(p.tag && hiddenTags.has(p.tag))
       let yaw = p.yaw + Math.sin(t * 0.7 + p.ph) * 0.05
       let pitch = 0
       let roll = Math.sin(t * 0.9 + p.ph * 1.3) * 0.012
@@ -602,14 +639,25 @@ export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
     }
   }
   write()
+  const standing: CrowdSpot[] = []
+  for (const p of people) {
+    if (p.walk || p.role === 'walker') continue
+    standing.push({ pos: p.pos.clone(), top: p.pos.y + p.h * (p.child ? 1.04 : 1), role: p.role, child: p.child, keepAtNight: p.keepAtNight })
+  }
   return {
     group,
+    standing,
     update(dt: number) {
       void dt
       write()
     },
     setNight(on: boolean) {
       night = on
+      write()
+    },
+    setHidden(tag: string, hidden: boolean) {
+      if (hidden) hiddenTags.add(tag)
+      else hiddenTags.delete(tag)
       write()
     },
   }

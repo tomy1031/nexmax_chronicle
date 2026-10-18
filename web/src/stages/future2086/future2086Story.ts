@@ -77,6 +77,9 @@ export type StoryFlag = 'festival_morning_seen' | 'orum_seen' | 'ido_exhibit_use
 
 export type SoraSpot = 'booth' | 'exhibit' | 'night' | 'gate'
 
+/** カメラで見せる目標（focusShots2086.ts の表のキー） */
+export type FocusTarget = 'lens' | 'hook' | 'ring' | 'sky'
+
 export type StoryEffect =
   | { kind: 'step'; step: StoryStepId }
   /** 会話を 1 行ずつ出す。終わったら dialogue_done を送る */
@@ -97,6 +100,11 @@ export type StoryEffect =
   /** IDO の展示画面を裂け目へ（数秒かけて開く）。開ききったら fx_done('rift')（任意） */
   | { kind: 'rift'; open: boolean }
   | { kind: 'choice'; id: string; prompt: string; options: readonly ChoiceOption[] }
+  /**
+   * カメラで目標を見せる（シェルの rt.cinematic）。直後に dialogue が出ていれば、その会話が終わるまで目標を映して戻る。
+   * short：見せ直し・2 回目以降の短い版（飛ばせる）
+   */
+  | { kind: 'focus'; target: FocusTarget; short?: boolean }
   /** 古い腕のパーツを落とす小さな演出 */
   | { kind: 'drop_arm' }
   | { kind: 'flag'; name: StoryFlag }
@@ -121,6 +129,16 @@ export const IDO_CHOICE = {
 
 /** 夜の避難が長引いたら、失敗にせずループへ進める（秒） */
 export const EVADE_TIMEOUT = 40
+
+/** チュートリアル（レンズ・金具・吊り輪）で進まないまま経ったら、目標を短く見せ直す（秒） */
+export const FOCUS_REPLAY_SEC = 40
+
+/** 見せ直しの対象（ステップ → カメラの目標とソラのヒントの会話） */
+export const FOCUS_REPLAY: Partial<Record<StoryStepId, { target: FocusTarget; hint: string }>> = {
+  fetch_lens: { target: 'lens', hint: 'sora_hint_lens' },
+  climb_hook: { target: 'hook', hint: 'sora_hint_hook' },
+  swing_gap: { target: 'ring', hint: 'sora_hint_swing' },
+}
 
 /** ステップごとの目標（HUD 左上） */
 export const OBJECTIVES: Record<StoryStepId, Objective> = {
@@ -212,6 +230,8 @@ export class Future2086Story {
   loopCount: number
   /** 夜の避難の経過（秒） */
   evadeTime = 0
+  /** チュートリアルのステップで進まないままの時間（秒。見せ直しの判定） */
+  idleTime = 0
   debrisHits = 0
   /** 演出・会話・移動の要求（シェルが実行する） */
   onEffect: ((e: StoryEffect) => void) | null = null
@@ -309,7 +329,14 @@ export class Future2086Story {
 
   private go(step: StoryStepId): void {
     this.step = step
+    this.idleTime = 0
     this.emit({ kind: 'step', step })
+  }
+
+  /** 目標をカメラで見せて、その間にソラが説明する（会話が終わるとカメラが戻る） */
+  private focus(target: FocusTarget, key: string, short = false): void {
+    this.emit({ kind: 'focus', target, short: short || this.loopCount > 0 })
+    this.say(key)
   }
 
   private say(key: string): void {
@@ -320,6 +347,14 @@ export class Future2086Story {
   }
 
   private tick(dt: number): boolean {
+    const replay = FOCUS_REPLAY[this.step]
+    if (replay && !this.pendingDialogue && !this.choiceOpen) {
+      this.idleTime += dt
+      if (this.idleTime >= FOCUS_REPLAY_SEC) {
+        this.idleTime = 0
+        this.focus(replay.target, replay.hint, true)
+      }
+    }
     if (this.step === 'evade' && !this.pendingDialogue) {
       this.evadeTime += dt
       this.hitBark = Math.max(0, this.hitBark - dt)
@@ -359,7 +394,7 @@ export class Future2086Story {
   private reachWalkway(): boolean {
     if (this.step !== 'climb_hook') return false
     this.go('swing_gap')
-    this.say('walkway_up')
+    this.focus('ring', 'walkway_up')
     return true
   }
 
@@ -392,12 +427,15 @@ export class Future2086Story {
         this.say('prep_talk')
         return true
       case 'fetch_lens':
+        this.idleTime = 0
         this.say('sora_hint_lens')
         return true
       case 'climb_hook':
+        this.idleTime = 0
         this.say('sora_hint_hook')
         return true
       case 'swing_gap':
+        this.idleTime = 0
         this.say('sora_hint_swing')
         return true
       case 'loop_morning':
@@ -478,7 +516,11 @@ export class Future2086Story {
         if (this.step === 'talk_sora') {
           this.emit({ kind: 'flag', name: 'festival_morning_seen' })
           this.go('fetch_lens')
+          this.focus('lens', 'tut_lens')
         }
+        return true
+      case 'lens_thanks':
+        if (this.step === 'climb_hook') this.focus('hook', 'tut_hook')
         return true
       case 'swing_done':
         if (this.step === 'night') {

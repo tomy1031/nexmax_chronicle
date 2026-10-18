@@ -83,3 +83,29 @@
 .gc-opt { font-weight: 800; font-size: clamp(14px, 1.15vw, 20px); padding: 0.6vh 0.8vw; border-radius: 10px; opacity: 0.78; }
 .gc-opt.on { opacity: 1; background: rgba(160, 140, 255, 0.25); color: #ffffff; }
 .gc-foot { margin-top: 0.8vh; font-size: clamp(11px, 0.85vw, 14px); opacity: 0.75; }
+
+/* ---------------------------------------------------------------- カメラの演出（cinematic.ts）：上下の黒帯・目印の札 */
+/* 黒帯は #ui のいちばん下（HUD の後ろ・3D の前）。HUD の枠や会話は黒帯の上に重なる */
+.cine-bars { position: absolute; inset: 0; pointer-events: none; }
+.cine-bar { position: absolute; left: 0; right: 0; height: 8.5vh; background: #02040a; transform: scaleY(0); transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1); }
+.cine-bar.top { top: 0; transform-origin: top; box-shadow: 0 2px 18px rgba(0, 0, 0, 0.5); }
+.cine-bar.bottom { bottom: 0; transform-origin: bottom; box-shadow: 0 -2px 18px rgba(0, 0, 0, 0.5); }
+.cine-bars.on .cine-bar { transform: scaleY(1); }
+.cine-mark-label {
+  --cm-color: #7ff0ff;
+  position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform;
+  padding-bottom: 22px;
+}
+.cine-mark-label span {
+  display: block; white-space: nowrap; padding: 0.55em 1.1em; border-radius: 10px;
+  font-weight: 800; font-size: clamp(14px, 1.25vw, 22px); letter-spacing: 0.08em; color: #ffffff;
+  background: linear-gradient(160deg, rgba(8, 20, 48, 0.88), rgba(18, 36, 84, 0.82));
+  border: 2px solid var(--cm-color); box-shadow: 0 0 14px color-mix(in srgb, var(--cm-color) 60%, transparent), 0 6px 18px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--cm-color) 70%, transparent);
+  animation: cine-mark-in 0.5s cubic-bezier(0.2, 1.1, 0.3, 1);
+}
+.cine-mark-label::after {
+  content: ''; position: absolute; left: 50%; bottom: 0; width: 2px; height: 22px; transform: translateX(-50%);
+  background: linear-gradient(var(--cm-color), transparent);
+}
+@keyframes cine-mark-in { from { opacity: 0; transform: translateY(8px) scale(0.92); } }

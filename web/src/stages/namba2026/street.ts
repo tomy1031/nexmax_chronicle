@@ -268,12 +268,13 @@ export function buildSouthSide(c: NCtx): void {
   building(c, -27, -19, z, 1, 13, { main: 'udon_main', vert: 'udon_v', vertSide: -1, tint: '#efe8dc', shopLight: '#ffd6a8', lanternId: 'kushi_lantern' })
   building(c, -1, 7, z, 1, 12, { main: 'tako_main', vert: 'tako_v', tint: '#f0e6d6', shopLight: '#ffc890' })
   building(c, 7, 15, z, 1, 15.5, { main: 'kushi_main', vert: 'kushi_v', bill: 'osaka_wide', billSize: [6.4, 1.4], tint: '#e4dccf', shopLight: '#ffd090' })
-  building(c, 15, 24, z, 1, 11, { main: 'okonomi_main', vert: 'okonomi_v', vertSide: -1, tint: '#f2ece0', shopLight: '#ffc890', lanternId: 'tako_lantern' })
+  // 15〜18 は古い路地（alley.ts。奥に IDO の石標 C）
+  building(c, 18, 24, z, 1, 11, { main: 'okonomi_main', vert: 'okonomi_v', vertSide: -1, tint: '#f2ece0', shopLight: '#ffc890', lanternId: 'tako_lantern' })
   // 遊歩道の街灯・ベンチ・木・自販機
   for (const x of [-22.5, -14, -2, 7, 19]) streetLamp(c, x, N.CANAL_S + 0.95)
   bench(c, 1.6, N.CANAL_S + 1.3, Math.PI)
   bench(c, -16.8, N.CANAL_S + 1.3, Math.PI)
-  bench(c, 18.0, 9.6, 0)
+  bench(c, 20.6, 9.6, 0)
   tree(c, -23.4, 9.3, 0.95, 7)
   tree(c, 21.6, 9.0, 1.0, 8)
   vending(c, 5.6, N.FACADE_S - 0.45, Math.PI, '#d8382a')

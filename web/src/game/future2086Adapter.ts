@@ -1,7 +1,8 @@
 // 2086年 ナンバタウン（時代博覧祭）のステージ。中身は stages/future2086/（別の担当）をそのまま使い、
 // ここではシェルの Stage の形に包む（同じ担当の stages/future2086/previewPlay.ts の「遊ぶ」モードと同じつなぎ方）。
 // ・組み立て：buildFutureScene（root・当たり判定・NMClaw の対象・到着地点・NPC の立ち位置・オルム・破片・IDO の裂け目）
-// ・物語：Future2086Story（演出 StoryEffect を受け取って実行し、会話・選択・演出の終わりを送り返す）
+// ・物語：Intro2086Story（導入編 1〜5 章。演出 IntroEffect を受け取って実行し、会話・選択・演出の終わりを送り返す）
+//   新しい演出（回想・レンズの受け渡し・アンテナ・試み・QR など）とソラの動きは IntroDirector（stages/future2086/introDirector2086.ts）
 // ・IDO 展示で 2026年へ：story.onRequestTravel → rt.travel({ to: '2026', cause: 'ido_exhibit' })
 // 読み込みに失敗したときは仮の広場（PlaceholderFutureStage）を使う。
 import * as THREE from 'three'
@@ -16,22 +17,34 @@ import type { WireEvent } from '../player/clawLogic'
 import type { Hint } from '../ui/hud'
 import { skyEnvironment, type EnvTexture } from './env'
 import type { SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from './stage'
-import type { FutureScene, SoraSpotId } from '../stages/future2086/scene'
-import type { Future2086Story as StoryT, StoryEffect, StoryStepId } from '../stages/future2086/future2086Story'
+import type { FutureScene } from '../stages/future2086/scene'
+import type { FocusTarget, Intro2086Story as StoryT, IntroEffect, IntroInteract } from '../stages/future2086/intro2086Story'
+import type { IntroDirector as IntroDirectorT } from '../stages/future2086/introDirector2086'
+import type { IntroProps } from '../stages/future2086/introProps2086'
+import type { CineShot } from './cinematic'
 import type { LoopFx as LoopFxT } from '../stages/future2086/loopFx'
 import type { TimeOfDay } from '../stages/future2086/environment'
 import type { ZoneId } from '../stages/future2086/layout'
+import type { MobTalk2086 } from '../stages/future2086/mobTalk2086'
+import type { SwingArcPreview as SwingArcT } from '../stages/future2086/focusShots2086'
+import type { SkyTear as SkyTearT } from '../stages/future2086/skyTear2086'
+import type { CueLine, EmergenceSequence as EmergenceT } from '../stages/future2086/emergence2086'
 
 export async function createFutureStage(): Promise<Stage> {
   try {
-    const [sceneM, storyM, envM, fxM, matM] = await Promise.all([
+    const [sceneM, storyM, envM, fxM, matM, focusM, tearM, emergeM, propsM, introM] = await Promise.all([
       import('../stages/future2086/scene'),
-      import('../stages/future2086/future2086Story'),
+      import('../stages/future2086/intro2086Story'),
       import('../stages/future2086/environment'),
       import('../stages/future2086/loopFx'),
       import('../stages/future2086/fmaterials'),
+      import('../stages/future2086/focusShots2086'),
+      import('../stages/future2086/skyTear2086'),
+      import('../stages/future2086/emergence2086'),
+      import('../stages/future2086/introProps2086'),
+      import('../stages/future2086/introDirector2086'),
     ])
-    return new Future2086Stage({ sceneM, storyM, envM, fxM, matM })
+    return new Future2086Stage({ sceneM, storyM, envM, fxM, matM, focusM, tearM, emergeM, propsM, introM })
   } catch (e) {
     console.warn('[2086] stages/future2086 を読めないので仮の広場を使います', e)
     return new PlaceholderFutureStage()
@@ -40,10 +53,15 @@ export async function createFutureStage(): Promise<Stage> {
 
 type Mods = {
   sceneM: typeof import('../stages/future2086/scene')
-  storyM: typeof import('../stages/future2086/future2086Story')
+  storyM: typeof import('../stages/future2086/intro2086Story')
   envM: typeof import('../stages/future2086/environment')
   fxM: typeof import('../stages/future2086/loopFx')
   matM: typeof import('../stages/future2086/fmaterials')
+  focusM: typeof import('../stages/future2086/focusShots2086')
+  tearM: typeof import('../stages/future2086/skyTear2086')
+  emergeM: typeof import('../stages/future2086/emergence2086')
+  propsM: typeof import('../stages/future2086/introProps2086')
+  introM: typeof import('../stages/future2086/introDirector2086')
 }
 
 /** 選択肢（W/S・↑↓ で選び、F／J で決定。スマホでは選択肢をタップすると選んで決定） */
@@ -130,6 +148,9 @@ class Future2086Stage implements Stage {
   private fs!: FutureScene
   private sora!: Character
   private story!: StoryT
+  private props!: IntroProps
+  /** 導入編の演出・ソラの動き（begin で作る） */
+  private intro: IntroDirectorT | null = null
   private fx: LoopFxT | null = null
   private nightEnv: EnvTexture | null = null
   private dayEnv: THREE.Texture | null = null
@@ -138,8 +159,6 @@ class Future2086Stage implements Stage {
   private curtainAnim: { t: number; onBlack: () => void; done: () => void; fired: boolean } | null = null
   private orumAnim: { t: number; mode: 'appear' | 'swallow' } | null = null
   private riftT = -1
-  private soraSpot: SoraSpotId | 'escape' = 'booth'
-  private soraPathT = 0
   private lastZone: ZoneId | null = null
   private locked = false
   private talkToken = 0
@@ -147,6 +166,16 @@ class Future2086Stage implements Stage {
   private rt: StageRuntime | null = null
   private spawnId: string | null = null
   private ui: HTMLElement | null = null
+  /** 町の人のおしゃべり（吹き出し・F の会話。stages/future2086/mobTalk2086.ts。begin で遅れて読み込む） */
+  private mobs: MobTalk2086 | null = null
+  /** 目標を見せるカメラ（story の focus）。会話が続けばその終わりまで映す */
+  private focusRun: { token: number; t: number; minHold: number; talk: 'wait' | 'playing' | 'done'; ended: boolean; short: boolean; arc: SwingArcT | null } | null = null
+  private focusToken = 0
+  /** 夜空が割れる演出（空の板・色）と、その進行 */
+  private tear: SkyTearT | null = null
+  private emergence: EmergenceT | null = null
+  /** F で反応する相手（ソラ・作業台＋導入編の小物） */
+  private interactables: Array<{ id: IntroInteract; pos: THREE.Vector3; reach: number }> = []
 
   constructor(m: Mods) {
     this.m = m
@@ -176,6 +205,14 @@ class Future2086Stage implements Stage {
     ctx.progress(0.45, 'ナンバタウンを組み立て中…')
     await ctx.yieldFrame()
     this.fs = this.m.sceneM.buildFutureScene(mats, ctx.quality, { aniso })
+    // 導入編の小物（当たり判定は物理を作る前に足す）と、非常警報の柱（つかめる対象）
+    this.props = this.m.propsM.buildIntroProps(this.fs.root, this.fs.colliders)
+    this.fs.claw.targets.push(this.props.alarm.def)
+    this.fs.claw.movables.push(this.props.alarm.movable)
+    this.interactables = [
+      ...this.fs.interactables.filter((it) => it.id !== 'ido_exhibit').map((it) => ({ id: it.id as IntroInteract, pos: it.pos, reach: it.reach })),
+      ...this.props.interactables,
+    ]
     ctx.progress(0.6, 'ソラを読み込み中…')
     this.sora = await soraP
     this.fs.root.add(this.sora.root)
@@ -183,31 +220,29 @@ class Future2086Stage implements Stage {
     const night = this.m.envM.FUTURE_ENVIRONMENTS.night
     this.nightEnv = skyEnvironment(ctx.renderer, night.sky, night.sunDir)
     const f = (n: string) => ctx.story.get(n)
-    this.story = new this.m.storyM.Future2086Story({ start: this.m.storyM.startStepFromFlags(f), loopCount: ctx.story.loop_count })
+    this.story = new this.m.storyM.Intro2086Story({ start: this.m.storyM.introStartStep(f), loopCount: ctx.story.loop_count, flags: f })
     this.spawnId = ctx.spawnId
     return { root: this.fs.root, colliders: this.fs.colliders, claw: { targets: this.fs.claw.targets, movables: this.fs.claw.movables }, lights: this.fs.lights }
   }
 
   spawn(id: string | null): SpawnPoint {
     const sp = this.fs.spawns
-    const key = id && sp[id] ? id : this.m.storyM.spawnForStep(this.story.step)
+    const key = id && sp[id] ? id : this.m.storyM.introSpawn(this.story.step)
     return sp[key] ?? sp.start ?? Object.values(sp)[0]
   }
 
   private setTime(mode: TimeOfDay, rt: StageRuntime): void {
+    if (mode === 'morning') {
+      this.emergence?.cancel()
+      this.emergence = null
+      this.tear?.reset()
+    }
     this.fs.setTimeOfDay(mode)
+    if (mode === 'morning') this.intro?.resetMorning(rt)
     const maps: Partial<Record<TimeOfDay, THREE.Texture>> = {}
     if (this.dayEnv) maps.morning = this.dayEnv
     if (this.nightEnv) maps.night = this.nightEnv.texture
     this.m.envM.applyTimeOfDay(this.fs.environment, { scene: rt.scene, sky: rt.sky, sun: rt.sun.sun, hemi: rt.sun.hemi, post: rt.post, envMaps: maps })
-  }
-
-  private placeSora(spot: SoraSpotId): void {
-    this.soraSpot = spot
-    const s = this.fs.npcs.sora[spot]
-    this.sora.root.position.copy(s.pos)
-    this.sora.root.rotation.y = s.yaw
-    this.sora.setPose(s.pose)
   }
 
   private teleport(id: string, rt: StageRuntime): void {
@@ -222,38 +257,78 @@ class Future2086Stage implements Stage {
     this.rt = rt
     this.dayEnv = rt.scene.environment
     this.ui = rt.renderer.domElement.ownerDocument.getElementById('ui')
+    // 町の人のおしゃべり（読めなくても本編はそのまま）
+    void import('../stages/future2086/mobTalk2086')
+      .then((m) => {
+        if (this.rt === rt && !this.mobs) this.mobs = new m.MobTalk2086(this.fs, this.ui, rt.camera)
+      })
+      .catch((e) => console.warn('[2086] 町の人の台詞を読めませんでした', e))
     this.fx = new this.m.fxM.LoopFx(rt.camera, rt.scene)
     this.curtain = document.createElement('div')
     this.curtain.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:6;'
     document.body.appendChild(this.curtain)
+    this.intro = new this.m.introM.IntroDirector(this.fs, this.props, this.sora, this.story, this.ui, rt.camera)
     this.story.onEffect = (e) => this.onEffect(e, rt)
     this.story.onRequestTravel = () => {
       const v = rt.travel({ to: '2026', cause: 'ido_exhibit', spawn: 'present_start' })
       if (!v.ok) rt.hud.toast(v.reason)
     }
-    const step = this.story.step as StoryStepId
-    const isNight = step === 'night_orum' || step === 'evade'
+    this.tear = new this.m.tearM.SkyTear(this.fs.root)
+    const step = this.story.step
+    const isNight = this.m.storyM.isNightStep(step)
     this.setTime(isNight ? 'night' : 'morning', rt)
-    if (isNight) this.fs.setOrum({ show: 1, tomorrow: 0.5, dissolve: 0.4 })
-    this.placeSora(step === 'loop_morning' || step === 'go_booth' ? 'booth' : isNight ? 'night' : step === 'ido_exhibit' ? 'exhibit' : 'booth')
+    if (isNight) {
+      this.fs.setOrum({ show: 1, tomorrow: 0.5, dissolve: 0.4 })
+      this.tear.setFinal({ scene: rt.scene, sky: rt.sky, sun: rt.sun.sun, hemi: rt.sun.hemi, post: rt.post })
+    }
     this.story.begin()
-    rt.save(this.spawnId ?? this.m.storyM.spawnForStep(this.story.step))
+    rt.save(this.spawnId ?? this.m.storyM.introSpawn(this.story.step))
   }
 
-  private onEffect(e: StoryEffect, rt: StageRuntime): void {
+  private onEffect(e: IntroEffect, rt: StageRuntime): void {
+    if (this.intro?.handle(e, rt, (_t, shot) => this.startFocus('exhibit', false, rt, shot))) return
     switch (e.kind) {
       case 'dialogue': {
         const token = ++this.talkToken
         this.talkKey = e.key
-        void rt.dialogue(e.lines).then(() => {
+        const done = () => {
           if (token !== this.talkToken) return
           this.talkKey = null
           this.story.send({ kind: 'dialogue_done', key: e.key })
+        }
+        // 夜空が割れる演出中で、行に合図（cue）があれば演出に合わせて流す（演出と会話の両方が終わったら知らせる）
+        const em = this.emergence
+        if (em?.playing && (e.lines as readonly CueLine[]).some((l) => l.cue)) {
+          let talked = false
+          let shown = false
+          em.attachDialogue(e.lines as readonly CueLine[], () => {
+            talked = true
+            if (shown) done()
+          })
+          const prev = em.onDone
+          em.onDone = () => {
+            prev?.()
+            shown = true
+            if (talked) done()
+          }
+          break
+        }
+        // 目標を見せるカメラの直後の会話なら、会話が終わるまで映す
+        const fr = this.focusRun && this.focusRun.talk === 'wait' ? this.focusRun : null
+        if (fr) fr.talk = 'playing'
+        void rt.dialogue(e.lines).then(() => {
+          if (fr && this.focusRun === fr) fr.talk = 'done'
+          done()
         })
         break
       }
+      case 'focus':
+        // 見せ直し（short）は、ワイヤーで移動・ぶら下がり中なら映さない（ヒントの会話だけ）
+        if (e.short && rt.claw.wire.phase !== 'idle') break
+        this.startFocus(e.target, !!e.short || rt.story.loop_count > 0, rt)
+        break
       case 'say':
-        rt.say(e.speaker, e.text, 2.4)
+        rt.say(e.speaker, e.text, e.seconds ?? 2.4)
         break
       case 'lock':
         this.locked = e.on
@@ -266,21 +341,15 @@ class Future2086Stage implements Stage {
             this.setTime('night', rt)
             this.fs.setOrum({ show: 0, tomorrow: 1, swallow: 0, dissolve: 0 })
             this.teleport(e.spawn, rt)
-            this.placeSora(e.sora)
+            this.intro?.placeSora(e.sora)
             rt.hud.banner('― その夜 ―', 'success', 2.2)
           },
           done: () => this.story.send({ kind: 'fx_done', fx: 'night' }),
         }
         break
-      case 'sora':
-        if (e.spot === 'escape') {
-          this.soraSpot = 'escape'
-          this.soraPathT = 0
-          this.sora.setPose('walk')
-        } else this.placeSora(e.spot)
-        break
       case 'orum':
-        this.orumAnim = { t: 0, mode: e.action }
+        if (e.action === 'appear' && this.tear) this.startEmergence(rt, !!e.short)
+        else this.orumAnim = { t: 0, mode: e.action }
         break
       case 'debris':
         this.fs.debris.setActive(e.active)
@@ -293,7 +362,7 @@ class Future2086Stage implements Stage {
             this.setTime('morning', rt)
             this.orumAnim = null
             this.teleport(e.spawn, rt)
-            this.placeSora(e.sora)
+            this.intro?.placeSora(e.sora)
           },
           onDone: () => this.story.send({ kind: 'fx_done', fx: 'loop' }),
         })
@@ -313,21 +382,78 @@ class Future2086Stage implements Stage {
         break
       case 'flag':
         rt.story.set(e.name, true)
+        // 再開したときの段階と同じ到着地点を保存する
+        rt.save(this.m.storyM.introSpawn(this.m.storyM.introStartStep((n) => rt.story.get(n))))
         break
       case 'loop_count':
         while (rt.story.loop_count < e.value) rt.story.addLoop()
         break
-      case 'travel':
-      case 'step':
+      default:
         break
     }
   }
 
-  private nearInteract(rt: StageRuntime): 'sora' | 'ido_exhibit' | 'parts_table' | null {
-    let best: 'sora' | 'ido_exhibit' | 'parts_table' | null = null
+  /** 共鳴レンズのケースのいまの位置 */
+  private lensPos(): THREE.Vector3 {
+    const mv = this.fs.claw.movables.find((m) => m.def.id === this.fs.claw.ids.lens)
+    return mv ? mv.object.position.clone() : this.fs.markers.lens.clone()
+  }
+
+  /** 目標をカメラで見せる（focusShots2086 の表から）。直後の会話が終わるまで映して、プレイのカメラへ戻る */
+  private startFocus(target: FocusTarget, short: boolean, rt: StageRuntime, prebuilt?: CineShot): void {
+    const shot = prebuilt ?? this.m.focusM.focusShot(target, { player: rt.player.position.clone(), lens: this.lensPos(), sora: this.sora.root.position.clone(), short })
+    const minHold = (shot.inSec ?? 1.9) + (Number.isFinite(shot.hold) ? (shot.hold ?? 2) : 2)
+    // QR の場面（exhibit）は演出側が終わらせる
+    const manual = target === 'exhibit'
+    shot.hold = Infinity
+    this.focusRun?.arc?.dispose()
+    const token = ++this.focusToken
+    const arc = target === 'ring' ? new this.m.focusM.SwingArcPreview(this.fs.root) : null
+    const run = { token, t: 0, minHold, talk: (manual ? 'playing' : 'wait') as 'wait' | 'playing' | 'done', ended: manual, short, arc }
+    this.focusRun = run
+    void rt.cinematic(shot).then(() => {
+      run.arc?.dispose()
+      run.arc = null
+      if (this.focusRun === run) this.focusRun = null
+    })
+  }
+
+  private updateFocus(dt: number, rt: StageRuntime): void {
+    const fr = this.focusRun
+    if (!fr) return
+    fr.t += dt
+    // 会話が続かなかったら、ショットの保持の時間だけ映す
+    if (fr.talk === 'wait' && fr.t > 0.3) fr.talk = 'done'
+    if (!fr.ended && fr.talk === 'done' && fr.t >= fr.minHold) {
+      fr.ended = true
+      rt.endCinematic()
+    }
+    if (!rt.inCinematic && fr.t > 0.5) {
+      fr.arc?.dispose()
+      fr.arc = null
+      this.focusRun = null
+    }
+  }
+
+  /** 夜空が割れて、正体不明の存在が出てくる演出（emergence2086.ts）。short は 2 回目以降の短い版 */
+  private startEmergence(rt: StageRuntime, short: boolean): void {
+    if (!this.tear) return
+    this.emergence?.cancel()
+    const shot = this.m.focusM.focusShot('sky', { player: rt.player.position.clone(), lens: this.lensPos(), sora: this.sora.root.position.clone(), short })
+    const em = new this.m.emergeM.EmergenceSequence({ rt, orum: this.fs.orum, tear: this.tear, shot, short })
+    em.onDone = () => {
+      // 避難の間も、環の中の明日の街は消え続ける（orumAnim 'appear' の t = 5 から）
+      this.orumAnim = { t: 5, mode: 'appear' }
+      if (this.emergence === em) this.emergence = null
+    }
+    this.emergence = em
+  }
+
+  private nearInteract(rt: StageRuntime): IntroInteract | null {
+    let best: IntroInteract | null = null
     let bd = Infinity
     const p = rt.player.position
-    for (const it of this.fs.interactables) {
+    for (const it of this.interactables) {
       const pos = it.id === 'sora' ? this.sora.root.position : it.pos
       const d = Math.hypot(pos.x - p.x, pos.z - p.z)
       if (d < it.reach && d < bd && Math.abs(pos.y - p.y) < 1.5 && this.story.canInteract(it.id)) {
@@ -351,12 +477,13 @@ class Future2086Stage implements Stage {
     }
     if (this.blocked) return true
     const n = this.nearInteract(rt)
+    if (!n && this.mobs) return this.mobs.interact(rt) // 町の人（ソラ・展示が近くにいないときだけ）
     if (!n) return false
-    return this.story.send({ kind: 'interact', target: n })
+    return this.story.send({ kind: 'interact', target: n, item: n === 'sora' && this.intro?.hasLens(rt) ? 'lens' : undefined })
   }
 
   private get blocked(): boolean {
-    return this.locked || this.choice.open || (this.fx?.playing ?? false) || this.curtainAnim !== null
+    return this.locked || this.choice.open || (this.fx?.playing ?? false) || this.curtainAnim !== null || (this.intro?.flashbackPlaying ?? false)
   }
 
   hints(rt: StageRuntime): Hint[] | null {
@@ -364,9 +491,10 @@ class Future2086Stage implements Stage {
       { key: 'W／S', label: '選ぶ' },
       { key: 'F', label: '決定' },
     ]
-    if (this.fx?.playing) return []
+    if (this.fx?.playing || this.intro?.flashbackPlaying) return []
     const n = this.nearInteract(rt)
-    if (n) return [{ key: 'F', label: n === 'sora' ? '話す' : '調べる' }]
+    if (n) return [{ key: 'F', label: this.story.interactLabel(n) }]
+    if (this.mobs) return this.mobs.hints(this.story.hints(), rt) // 町の人が近ければ「F：話す」を足す
     return this.story.hints()
   }
 
@@ -375,19 +503,16 @@ class Future2086Stage implements Stage {
   }
 
   objectiveTarget(): THREE.Vector3 | null {
-    const step = this.story.step
     const mk = this.fs.markers
-    if (step === 'go_booth' || step === 'talk_sora' || step === 'loop_morning') return this.sora.root.position
-    if (step === 'fetch_lens') return mk.lens
-    if (step === 'climb_hook') return mk.hook
-    if (step === 'swing_gap') return mk.swing
-    if (step === 'evade') return mk.south_gate
-    if (step === 'ido_exhibit') return mk.exhibit
-    return null
+    return this.intro?.objectiveTarget(this.story.step, this.lensPos(), mk.hook, mk.swing) ?? null
   }
 
   onClawEvent(e: WireEvent): void {
-    if ('target' in e) this.story.send({ kind: 'claw', event: e.kind, targetId: e.target.id })
+    const id = 'target' in e ? e.target.id : null
+    if (id) this.story.send({ kind: 'claw', event: e.kind, targetId: id })
+    this.intro?.onClaw(e.kind, id)
+    // 立ち向かう夜：空へ撃った（届かないので空振りでよい）
+    if (this.intro?.confrontOn && (e.kind === 'fired' || e.kind === 'missed')) this.story.send({ kind: 'confront_shot' })
   }
 
   update(dt: number, frame: ActionFrame, rt: StageRuntime): void {
@@ -395,28 +520,17 @@ class Future2086Stage implements Stage {
     if (this.choice.takeTap()) this.pickChoice()
     rt.setControlLocked(this.blocked)
     this.story.send({ kind: 'tick', dt })
+    this.updateFocus(dt, rt)
+    this.emergence?.update(dt, rt.camera)
+    this.intro?.update(dt, frame, rt)
+    this.mobs?.update(dt, rt, this.blocked || this.story.busy || (this.intro?.evacuated ?? false)) // 町の人の吹き出し（会話・演出の間は出さない）
     const z = this.fs.zoneAt(rt.player.position)
     if (z !== this.lastZone) {
       this.lastZone = z
       if (z) this.story.send({ kind: 'zone', zone: z })
     }
-    // ソラ
-    if (this.soraSpot === 'escape') {
-      const path = this.fs.npcs.soraEscape
-      this.soraPathT = Math.min(path.length - 1, this.soraPathT + dt * 0.55)
-      const i = Math.min(path.length - 2, Math.floor(this.soraPathT))
-      const k = this.soraPathT - i
-      this.sora.root.position.lerpVectors(path[i], path[i + 1], k)
-      this.sora.root.rotation.y = Math.atan2(-(path[i + 1].x - path[i].x), -(path[i + 1].z - path[i].z))
-      if (this.soraPathT >= path.length - 1) this.placeSora('gate')
-    } else if (this.talkKey && this.story.step !== 'night_orum') {
-      const p = rt.player.position
-      const want = Math.atan2(-(p.x - this.sora.root.position.x), -(p.z - this.sora.root.position.z))
-      let d = want - this.sora.root.rotation.y
-      while (d > Math.PI) d -= Math.PI * 2
-      while (d < -Math.PI) d += Math.PI * 2
-      this.sora.root.rotation.y += d * Math.min(1, dt * 5)
-    }
+    // ソラ（立ち位置・ついてくる・止まる・逃げる）
+    this.intro?.updateSora(dt, rt, this.talkKey !== null && this.story.step !== 'night_orum' && this.story.step !== 'attempt_night')
     // オルム・破片・裂け目・暗転
     if (this.orumAnim) {
       this.orumAnim.t += dt
@@ -426,6 +540,7 @@ class Future2086Stage implements Stage {
     }
     if (this.fs.debris.active) {
       const r = this.fs.debris.update(dt, rt.player.position)
+      if (r.impact) rt.shake(0.2)
       if (r.hit && r.hitDir) {
         rt.player.velocity.x += r.hitDir.x * 5
         rt.player.velocity.z += r.hitDir.z * 5
@@ -456,20 +571,46 @@ class Future2086Stage implements Stage {
   }
 
   animate(dt: number, t: number, rt: StageRuntime): void {
-    this.sora.update(dt, this.soraSpot === 'escape' ? 3 : 0)
+    const arc = this.focusRun?.arc
+    if (arc) {
+      arc.update(dt, this.focusRun?.short ? 1.0 : 4.6)
+      if (this.focusRun?.ended) arc.fadeOut(dt)
+    }
+    this.sora.update(dt, this.intro?.soraSpeed ?? 0)
     if (!this.fs.debris.active) this.fs.debris.update(dt, null)
     if (this.fx) {
       this.fx.setAspect(rt.camera.aspect)
       this.fx.update(dt)
     }
     this.fs.update(dt, t)
+    this.intro?.animate(dt, rt)
+    this.mobs?.render(dt) // 町の人の吹き出しを頭の上へ（カメラが動いた後）
   }
 
   debug(): Record<string, unknown> {
-    return { step: this.story.step, loop: this.story.loopCount, zone: this.lastZone, choice: this.choice.open }
+    return {
+      step: this.story.step,
+      loop: this.story.loopCount,
+      zone: this.lastZone,
+      choice: this.choice.open,
+      attempts: [...this.story.attempts],
+      current: this.story.current,
+      pending: this.story.pending,
+      mobs: this.mobs?.debugInfo(),
+    }
   }
 
   dispose(): void {
+    this.mobs?.dispose() // 町の人の吹き出し（DOM）
+    this.mobs = null
+    this.focusRun?.arc?.dispose()
+    this.focusRun = null
+    this.emergence?.cancel()
+    this.emergence = null
+    this.tear?.dispose()
+    this.tear = null
+    this.intro?.dispose()
+    this.intro = null
     this.choice.close()
     this.curtain?.remove()
     this.curtain = null

@@ -12,7 +12,7 @@ export const BRUSH = '"Yuji Boku", "Hiragino Mincho ProN", "Yu Mincho", serif'
 
 /** 2086年のテクスチャに出てくる文字（フォントの先読み用） */
 export const FUTURE_TEXT =
-  '時代博覧祭なんばタウンNANBATOWNEXPO2086OSAKAIDO時を旅する大阪TIMEEXPERIENCEつなぎ、未来へ記憶次の時代へ。NEXMAX緊急事態オルムの侵攻を確認避難ゲート展示たこ焼そばりんご飴金魚すくい個円大坂万博1726197020262086ナンバタウン取扱注意FRAGILEかき氷わたあめ本日STAGE→←0123456789'
+  '時代博覧祭なんばタウンNANBATOWNEXPO2086OSAKAIDO時を旅する大阪TIMEEXPERIENCEつなぎ、未来へ記憶次の時代へ。NEXMAX緊急事態正体不明の存在を確認避難ゲート展示たこ焼そばりんご飴金魚すくい個円大坂万博1726197020262086ナンバタウン取扱注意FRAGILEかき氷わたあめ本日STAGE→←0123456789'
 
 export type UVRect = { u0: number; v0: number; u1: number; v1: number }
 
@@ -429,7 +429,7 @@ export function paintFabricAtlas(): CanvasAtlas {
 // ------------------------------------------------------------------ ホログラム看板
 
 /** 光る文字（影ぼかしで発光のにじみを描く） */
-function glowText(c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, px: number, color: string, glow: string, blur = 22, family = ROUNDED, spacing = 0): void {
+export function glowText(c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, px: number, color: string, glow: string, blur = 22, family = ROUNDED, spacing = 0): void {
   c.save()
   c.shadowColor = glow
   c.shadowBlur = blur
@@ -441,7 +441,7 @@ function glowText(c: CanvasRenderingContext2D, text: string, x: number, y: numbe
 }
 
 /** ホロの板（半透明の濃い地＋光る縁）。看板が昼の空でも読めるように */
-function holoPanel(c: CanvasRenderingContext2D, w: number, h: number, fill: string, edge: string, r = 26): void {
+export function holoPanel(c: CanvasRenderingContext2D, w: number, h: number, fill: string, edge: string, r = 26): void {
   c.save()
   roundRect(c, 10, 10, w - 20, h - 20, r)
   c.fillStyle = fill
@@ -511,7 +511,7 @@ export function paintHoloAtlas(): CanvasAtlas {
     c.textAlign = 'center'
     c.textBaseline = 'middle'
     glowText(c, '緊急事態', w * 0.6, h * 0.43, w * 0.6, 170, '#ffe3e6', '#ff2f45', 30)
-    glowText(c, 'オルムの侵攻を確認', w * 0.6, h * 0.69, w * 0.6, 58, '#ffc2c9', '#ff2f45', 14)
+    glowText(c, '正体不明の存在を確認', w * 0.6, h * 0.69, w * 0.6, 58, '#ffc2c9', '#ff2f45', 14)
   }, [0, 450])
 
   A.add('nanba_holo', 1000, 260, (c, w, h) => {

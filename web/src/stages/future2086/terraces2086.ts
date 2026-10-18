@@ -166,7 +166,7 @@ function outline(along: number, depth: number, waves: number, e: Edge, inset: nu
 }
 
 /** 床板：輪郭を押し出して、角を丸める。上面が y=0、厚みは下へ */
-function slabGeometry(pts: Array<[number, number]>, thick: number, bevel: number): THREE.BufferGeometry {
+export function slabGeometry(pts: Array<[number, number]>, thick: number, bevel: number): THREE.BufferGeometry {
   const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z)))
   const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.01, thick - bevel * 2), bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 3 })
   g.rotateX(Math.PI / 2)
@@ -175,7 +175,7 @@ function slabGeometry(pts: Array<[number, number]>, thick: number, bevel: number
 }
 
 /** 輪郭に沿った縦の帯（外向きの面）。u は長さ（m）/uScale、v は高さ（m）/vScale */
-function ribbon(pts: Array<[number, number]>, y0: number, y1: number, uScale = 1, vScale = 1): THREE.BufferGeometry {
+export function ribbon(pts: Array<[number, number]>, y0: number, y1: number, uScale = 1, vScale = 1): THREE.BufferGeometry {
   const n = pts.length
   const pos = new Float32Array(n * 2 * 3)
   const nor = new Float32Array(n * 2 * 3)

@@ -28,6 +28,9 @@ export const UNIT_SPECS: UnitSpec[] = [
   { id: 'unit_takoyaki', serial: 112, pos: v(F.STALLS.x + 0.15, 0.38, F.STALLS.zs[0] - 0.4), yaw: WEST, pose: 'crank', nightPose: 'wave' },
   // りんご飴の屋台（呼び込み）
   { id: 'unit_ame', serial: 87, pos: v(F.STALLS.x + 0.15, 0.38, F.STALLS.zs[2] + 0.3), yaw: WEST - 0.2, pose: 'wave', nightPose: 'wave' },
+  // 焼きそばの屋台（鉄板を返す）・金魚すくいの屋台（呼び込み）
+  { id: 'unit_soba', serial: 141, pos: v(F.STALLS.x + 0.15, 0.38, F.STALLS.zs[1] - 0.2), yaw: WEST + 0.1, pose: 'crank', nightPose: 'wave' },
+  { id: 'unit_kingyo', serial: 59, pos: v(F.STALLS.x + 0.15, 0.38, F.STALLS.zs[3] + 0.5), yaw: WEST - 0.25, pose: 'wave', nightPose: 'wave' },
   // 展示のリングの組み立て
   { id: 'unit_booth', serial: 64, pos: v(F.PORTAL.x - 2.75, F.BOOTH.h, F.PORTAL.z + 1.45), yaw: -2.2, pose: 'crank', nightPose: 'idle' },
   // 広場の見回り（中央の円をまわる）

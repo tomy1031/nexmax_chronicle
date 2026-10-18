@@ -110,6 +110,10 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
       if (out.map) {
         out.map.anisotropy = 8
         out.map.colorSpace = THREE.SRGBColorSpace
+        // 影の中や夜でも顔が黒くつぶれないように、テクスチャの色を少しだけ自分で光らせる
+        out.emissiveMap = out.map
+        out.emissive.set('#ffffff')
+        out.emissiveIntensity = 0.2
       }
       return out
     }

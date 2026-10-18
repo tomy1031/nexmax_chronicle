@@ -5,7 +5,8 @@ import { M, rbox } from '../../render/batch'
 import { mulberry32, range } from '../../render/noise'
 import { F, HOOK, SWING } from './layout'
 import { createFloorKit } from './floor2086'
-import { NEON, bulbString, chochin, column, fbox, flightCase, glowRailing, lanternString, neon, planter, vine, type FCtx } from './kit2086'
+import { buildStalls2086 } from './stalls2086'
+import { NEON, bulbString, chochin, column, fbox, glowRailing, lanternString, neon, planter, vine, type FCtx } from './kit2086'
 import { atlasPlane } from './textures2086'
 import { paintWaterNormal } from '../../render/textures'
 import { createSpray, type Emitter } from '../../world/edo/water'
@@ -215,87 +216,10 @@ function arch(c: FCtx): void {
   for (let x = -6; x <= 6; x += 1.5) if (Math.abs(x) > 1.2) chochin(c, x, top - 1.1 - Math.abs(Math.sin(x)) * 0.2, A.z + 0.2, Math.round(x / 1.5) % 2 ? 'red' : 'white', 0.85)
 }
 
-// ------------------------------------------------------------------ 屋台
-
-const STALL_KINDS = [
-  { noren: 'noren_tako', awning: 'awning_red', menu: 'menu_tako' },
-  { noren: 'noren_soba', awning: 'awning_blue', menu: null },
-  { noren: 'noren_ame', awning: 'awning_red', menu: 'menu_ame' },
-  { noren: 'noren_kingyo', awning: 'awning_blue', menu: null },
-] as const
-
-function stall(c: FCtx, zc: number, kind: (typeof STALL_KINDS)[number], idx: number): void {
-  const S = F.STALLS
-  const front = S.x - S.d / 2 // 西向き（-X）の正面
-  const back = S.x + S.d / 2
-  const z0 = zc - S.w / 2
-  const z1 = zc + S.w / 2
-  const roofY = 2.75
-  // 柱
-  for (const x of [front + 0.1, back - 0.1]) for (const z of [z0 + 0.1, z1 - 0.1]) fbox(c, c.fm.metal, x, roofY / 2, z, 0.09, roofY, 0.09, { r: 0.02 })
-  // カウンター（木の天板・白い前板・光る帯）
-  const cx = front + 0.45
-  c.b.add(rbox(0.9, 0.08, S.w - 0.2, 0.025), c.m.planks, M(cx, 1.02, zc), { texM: 1.6, tint: '#ffe2bd' })
-  fbox(c, c.fm.plastic, cx + 0.05, 0.5, zc, 0.7, 0.96, S.w - 0.3, { r: 0.04, tint: '#f6f4ef' })
-  neon(c, v(front + 0.08, 0.86, z0 + 0.25), v(front + 0.08, 0.86, z1 - 0.25), 0.04, idx % 2 ? NEON.cyan : NEON.warm)
-  // 屋台の名前の小さな木の看板（前板）
-  c.b.add(rbox(0.04, 0.42, S.w * 0.55, 0.01), c.m.planks, M(front + 0.07, 0.5, zc), { texM: 1.2, tint: '#f3cf9a' })
-  // 店番の台（小さな量産型ネクマックスがカウンターに届くように）
-  fbox(c, c.fm.plastic, S.x + 0.15, 0.19, zc, 0.95, 0.38, S.w - 0.7, { r: 0.04, tint: '#dfe6ee' })
-  neon(c, v(S.x - 0.33, 0.36, zc - S.w / 2 + 0.4), v(S.x - 0.33, 0.36, zc + S.w / 2 - 0.4), 0.025, NEON.blue)
-  // 後ろの棚と箱
-  fbox(c, c.fm.plastic, back - 0.35, 0.9, zc, 0.5, 1.8, S.w - 0.4, { r: 0.04, tint: '#e9edf1' })
-  for (let i = 0; i < 4; i++) flightCase(c, back - 0.38, 1.82, z0 + 0.6 + i * 0.95, 0.42, 0.32, 0.6, Math.PI / 2, undefined, false)
-  // 屋根（布・前へ下がる）
-  const awR = c.fm.atlases.fabric.get(kind.awning)
-  const slope = 0.32
-  const rw = S.d + 0.6
-  const rl = Math.hypot(rw, slope)
-  const rg = atlasPlane(rl, S.w + 0.3, awR, 4, 4)
-  c.cloth.add(rg, M((front + back) / 2 - 0.2, roofY + 0.18, zc, -Math.PI / 2, -Math.PI / 2, Math.atan2(slope, rw)), { aHang: () => 0.05 })
-  c.cloth.add(rg, M((front + back) / 2 - 0.2, roofY + 0.17, zc, Math.PI / 2, -Math.PI / 2, -Math.atan2(slope, rw)), { aHang: () => 0.05 })
-  // のれん
-  hangingCloth(c, kind.noren, front - 0.12, roofY - 0.05 - 0.33, zc, S.w - 0.25, 0.66, -Math.PI / 2, 0.8)
-  // 提灯（正面の角）
-  chochin(c, front - 0.15, roofY - 0.5, z0 + 0.12, 'red', 0.85, { light: true })
-  chochin(c, front - 0.15, roofY - 0.5, z1 - 0.12, 'white', 0.85, { light: idx % 2 === 0 })
-  // 台の上の品物
-  if (idx === 0) {
-    // たこ焼きの鉄板（くぼみに丸い玉）
-    fbox(c, c.fm.darkMetal, cx, 1.1, zc - 0.5, 0.6, 0.08, 0.9, { r: 0.02 })
-    for (let i = 0; i < 4; i++) for (let k = 0; k < 6; k++) c.b.add(new THREE.SphereGeometry(0.045, 8, 6), c.m.plain, M(cx - 0.21 + i * 0.14, 1.16, zc - 0.85 + k * 0.14), { tint: '#c98a3e' })
-    // 舟皿
-    for (let i = 0; i < 3; i++) fbox(c, c.m.plain, cx - 0.1, 1.08, zc + 0.5 + i * 0.25, 0.18, 0.04, 0.22, { tint: '#efe4cc' })
-  } else if (idx === 1) {
-    fbox(c, c.fm.metal, cx, 1.1, zc, 0.62, 0.08, 1.4, { r: 0.02 })
-    for (let i = 0; i < 18; i++) c.b.add(new THREE.SphereGeometry(0.04, 6, 4), c.m.plain, M(cx + range(c.rng, -0.22, 0.22), 1.16, zc + range(c.rng, -0.6, 0.6)), { tint: i % 3 ? '#d9a35a' : '#7aa64a' })
-  } else if (idx === 2) {
-    for (let i = 0; i < 12; i++) {
-      const x = cx + ((i % 3) - 1) * 0.16
-      const z = zc - 0.7 + Math.floor(i / 3) * 0.3
-      c.b.add(new THREE.SphereGeometry(0.065, 12, 8), c.m.lacquerRed, M(x, 1.22, z), { tint: '#ff5a4a' })
-      c.b.add(new THREE.CylinderGeometry(0.008, 0.008, 0.22, 4), c.m.wood, M(x, 1.12, z))
-    }
-  } else {
-    // 金魚の水槽（青い水）
-    fbox(c, c.fm.glass, cx - 0.05, 1.18, zc, 0.62, 0.2, 1.6, { r: 0.04, tint: '#9fd8ff' })
-    for (let i = 0; i < 9; i++) c.b.add(new THREE.SphereGeometry(0.03, 6, 4), c.fm.glow, M(cx + range(c.rng, -0.2, 0.2), 1.26, zc + range(c.rng, -0.7, 0.7), 0, 0, 0, 1.8, 0.7, 1), { tint: new THREE.Color(2.4, 0.7, 0.3), cast: false })
-  }
-  if (kind.menu) {
-    holoSign(c, kind.menu, front + 0.35, 1.6, z1 - 0.45, 0.42, -Math.PI / 2)
-  }
-  c.col.box((front + back) / 2 + 0.1, 1.2, zc, back - front - 0.1, 2.4, S.w)
-}
+// ------------------------------------------------------------------ 屋台（stalls2086.ts）＋屋台の上のホロ
 
 function stalls(c: FCtx): void {
-  F.STALLS.zs.forEach((z, i) => stall(c, z, STALL_KINDS[i % STALL_KINDS.length], i))
-  // 屋台の前の提灯の連なり（南北）
-  const x = F.STALLS.x - F.STALLS.d / 2 - 0.9
-  lanternString(c, v(x, 3.4, F.STALLS.zs[0] - 2.4), v(x, 3.4, F.STALLS.zs[3] + 2.4), 0.45, 1.15, 0.75, 5)
-  for (const z of [F.STALLS.zs[0] - 2.4, F.STALLS.zs[3] + 2.4]) {
-    c.b.add(new THREE.CylinderGeometry(0.05, 0.06, 3.5, 8), c.fm.metal, M(x, 1.75, z))
-    c.col.box(x, 1.75, z, 0.15, 3.5, 0.15)
-  }
+  buildStalls2086(c)
   // 屋台の上のホロ「なんばタウン」（東のビルの壁）
   holoSign(c, 'nanba_holo', F.PLAZA.x1 - 0.05, 7.4, -0.2, 7.6, -Math.PI / 2)
 }

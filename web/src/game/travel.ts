@@ -4,18 +4,18 @@
 // 流れ：idle →（移動の要求が規則に合えば）outro：光の裂け目が画面を覆う（古いステージはまだ描画中）
 //      → loading：読み込み画面の裏で古いステージを解放し、新しいステージを組み立ててシェーダを事前コンパイル
 //      → intro：裂け目が閉じて新しい時代が見える（時代カードを出す）→ idle
-// 移動は自由ではない：IDO（2086年の展示・2026年の QR）か、鉱石に残った出発地点への帰還だけ。
+// 移動は自由ではない：IDO（2086年の展示・2026年の QR・中盤はソラの羅針盤）か、鉱石に残った出発地点への帰還だけ。
 
-export type StageKey = '1726' | '2026' | '2086'
+export type StageKey = '1726' | '1970' | '2026' | '2086'
 
-export const STAGE_KEYS: readonly StageKey[] = ['1726', '2026', '2086']
+export const STAGE_KEYS: readonly StageKey[] = ['1726', '1970', '2026', '2086']
 
 export function isStageKey(v: unknown): v is StageKey {
   return typeof v === 'string' && (STAGE_KEYS as readonly string[]).includes(v)
 }
 
-export function stageEra(k: StageKey): 1726 | 2026 | 2086 {
-  return Number(k) as 1726 | 2026 | 2086
+export function stageEra(k: StageKey): 1726 | 1970 | 2026 | 2086 {
+  return Number(k) as 1726 | 1970 | 2026 | 2086
 }
 
 export function eraStage(era: number): StageKey | null {
@@ -25,10 +25,11 @@ export function eraStage(era: number): StageKey | null {
 
 /**
  * 移動のきっかけ。
- * ido_exhibit：2086年のソラの IDO 展示（VR）／ido_qr：2026年の IDO の QR／return：鉱石に残った出発地点へ帰る／
+ * ido_exhibit：2086年のソラの IDO 展示（VR）／ido_qr：2026年の IDO の QR／
+ * ido_compass：2086年のソラの IDO の羅針盤（針が振れた記録の石標の QR。中盤）／return：鉱石に残った出発地点へ帰る／
  * debug：開発用（URL の ?stage= や検証）／load：セーブから再開
  */
-export type TravelCause = 'ido_exhibit' | 'ido_qr' | 'return' | 'debug' | 'load'
+export type TravelCause = 'ido_exhibit' | 'ido_qr' | 'ido_compass' | 'return' | 'debug' | 'load'
 
 export type TravelRequest = {
   to: StageKey
@@ -65,6 +66,14 @@ export function travelRule(from: StageKey | null, req: TravelRequest, f: TravelF
     case '2026>2086':
       if (req.cause !== 'return') return ng('2086年へは帰還でしか戻れません')
       return f('drawing_confirmed') ? ok() : ng('まだ未来へ持ち帰るものがそろっていない')
+    case '2086>1970':
+      // 中盤 9章：ソラの羅針盤の針が「1970年・万博」の記録に振れたとき（docs/中盤シナリオとワールド構成_v1.md）
+      if (req.cause !== 'ido_compass') return ng('1970年へは IDO の羅針盤からしかつながりません')
+      return f('compass_built') ? ok() : ng('まだ羅針盤ができていない')
+    case '1970>2086':
+      // 錨をほどくと、鉱石に残った 2086年の記録へ帰れる
+      if (req.cause !== 'return') return ng('1970年からは帰還でしか戻れません')
+      return f('expo_anchor_cleared') ? ok() : ng('まだ帰れない（未来の塔の錨をほどこう）')
   }
   return ng(`${from}年から${req.to}年へは直接移動できません`)
 }

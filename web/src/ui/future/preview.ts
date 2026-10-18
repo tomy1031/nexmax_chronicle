@@ -60,7 +60,7 @@ async function iconSheet(): Promise<void> {
 const hud = new HudFuture(ui, q.get('ghost') === '1' ? { ghostSeconds: 600 } : {})
 ;(window as unknown as { __hud: HudFuture }).__hud = hud
 
-const ERA_TEXT: Record<HudTheme, string> = { '1726': '1726年　大坂・仕掛け横丁', '2026': '2026年　大阪・なんば', '2086': '2086年　ナンバタウン' }
+const ERA_TEXT: Record<HudTheme, string> = { '1726': '1726年　大坂・仕掛け横丁', '1970': '1970年　千里丘陵・万国博覧会', '2026': '2026年　大阪・なんば', '2086': '2086年　ナンバタウン' }
 const themeKey = (q.get('theme') ?? (bgKey === '2026' ? '2026' : bgKey === 'none' ? '2086' : '1726')) as HudTheme
 function theme(t: HudTheme): void {
   hud.setTheme(t)
@@ -118,7 +118,7 @@ function reticle(kind: string): void {
     return
   }
   const cat: ReticleCategory = kind === 'anchor' ? 'anchor' : kind === 'light' ? 'light' : 'mechanism'
-  const labels: Record<ReticleCategory, string> = { light: '木箱', anchor: '屋根の金具', mechanism: '大歯車' }
+  const labels: Record<ReticleCategory, string> = { light: '木箱', anchor: '屋根の金具', mechanism: '大歯車', enemy: '欠け虫' }
   hud.setReticle({
     mode: kind === 'far' ? 'far' : 'target',
     x: cx + (kind === 'far' ? 120 : 8),
@@ -187,6 +187,7 @@ if (q.get('gate')) gate(q.get('gate') as string)
 if (q.get('expr')) hud.setPortraitExpression(q.get('expr') as 'happy')
 const ERA_CARD: Record<HudTheme, [string, string, string, string]> = {
   '1726': ['1726年', '大坂・仕掛け横丁', 'からくり職人の町', '#ffd27a'],
+  '1970': ['1970年', '千里丘陵・万国博覧会', '人類の明日が並んだ夏', '#ffb066'],
   '2026': ['2026年', '大阪・なんば', 'ネクマックスが生まれた時代', '#8fd8ff'],
   '2086': ['2086年', 'ナンバタウン', '時代博覧祭', '#9fe8ff'],
 }
@@ -250,7 +251,7 @@ type Btn = [string, () => void]
 const groups: Array<[string, Btn[]]> = [
   ['会話（話者）', [...Object.keys(LINES).map((n): Btn => [n, () => hud.say(n, LINES[n], 8)]), ['2人同時', () => (hud.say('源兵衛', '歯止めは入っとる。おはるの合図で離すんやで。', 8), setTimeout(() => hud.say('おはる', '待って！ 舟が来るよ！', 6), 400))]]],
   ['照準', ['light', 'anchor', 'mechanism', 'far', 'multi', 'connected', 'none'].map((k): Btn => [k, () => reticle(k)])],
-  ['テーマ', (['2086', '2026', '1726'] as HudTheme[]).map((t): Btn => [t, () => theme(t)])],
+  ['テーマ', (['2086', '2026', '1970', '1726'] as HudTheme[]).map((t): Btn => [t, () => theme(t)])],
   ['腕', [['支える', () => hold(true)], ['離す', () => hold(false)], ['左腕 装備', () => ((leftPart = 'つかむNMClaw'), hold(false))], ['左腕 なし', () => ((leftPart = null), hold(false))], ['Q', () => (hud.pulseArm('left'), hud.toast(leftPart ? '左腕：つかむNMClaw' : '左腕：装備なし'))], ['E', () => hud.pulseArm('right')]]],
   ['体力・鉱石', [['HP -1', () => hud.setHp(Math.max(0, hpNow() - 1))], ['HP +1', () => hud.setHp(Math.min(5, hpNow() + 1))], ['鉱石 0.3', () => hud.setEnergy(0.3)], ['鉱石 1.0', () => hud.setEnergy(1)], ['鉱石 なし', () => hud.setEnergy(null)], ['鉱石が光る', () => hud.setOreGlow(2.5)]]],
   ['表情', [...(['happy', 'determined', 'worried', 'surprised'] as const).map((e): Btn => [e, () => hud.setPortraitExpression(e)]), ['自動', () => hud.setPortraitExpression(null)]]],

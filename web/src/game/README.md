@@ -34,7 +34,7 @@ three.js 版は **シェル（ずっと残るもの）＋ステージ（時代�
 
 ```ts
 interface Stage {
-  key: '1726' | '2026' | '2086'
+  key: '1726' | '1970' | '2026' | '2086'
   era: EraId                       // core/eras.ts
   label: string                    // 時代カード・HUD（例「2026年　大阪・なんば」）
   subtitle?: string                // 時代カードの下の一行
@@ -100,7 +100,8 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
   `dispose()` で解放する。
 - 主人公の見た目（`rt.nexmax`）・HUD・`rt.rift` はシェルの物なので解放しない。
 - 時空移動は `rt.travel({ to, cause, spawn })`。規則（`travel.ts` の `travelRule`）に合わないと `{ ok: false, reason }`。
-  cause：`ido_exhibit`（2086 の IDO 展示）・`ido_qr`（2026 の QR）・`return`（鉱石に残った出発地点へ帰る）・`debug`・`load`。
+  cause：`ido_exhibit`（2086 の IDO 展示）・`ido_qr`（2026 の QR）・`ido_compass`（2086 のソラの羅針盤。中盤）・
+  `return`（鉱石に残った出発地点へ帰る）・`debug`・`load`。
 - フラグは `rt.story.get(name)` / `rt.story.set(name, true)`。TimelineState のフラグ（`gate_repaired` など）と
   v2.3 の追加フラグ（`festival_morning_seen`・`orum_seen`・`ido_exhibit_used`・`ido_qr_used`・`met_saeki`・
   `genbei_story_told`・`fixture_made`、周回数 `loop_count` は `rt.story.addLoop()`）を同じ名前で扱える。
@@ -121,7 +122,7 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 
 ## URL パラメータ（開発・検証用）
 
-`?stage=1726|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
+`?stage=1726|1970|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
 `?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
 （どちらも保存した設定より優先）・`?fixed`（解像度を固定）・`?stats`（F3 と同じ計測表示）・`?debug`・`?slowmo=0.3`。
 開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`・
@@ -152,3 +153,20 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 新しい演出（回想・レンズの受け渡し・アンテナと大画面・試みの一覧・町の外・QR と記録の石標など）とソラの動きは
 `introDirector2086.ts`、小物は `introProps2086.ts`。旧版の流れ `future2086Story.ts` はプレビュー（previewPlay.ts）と既存テスト用に残してある。IDO 展示で 2026 年へ行くときは
 `rt.travel({ to: '2026', cause: 'ido_exhibit', spawn: 'present_start' })`、2026 年から戻るときの到着地点 ID は `future_return`。
+
+## 戦闘（`combat/`）と 1970 年ステージ（`stages/expo1970/`）
+
+中盤（`docs/中盤シナリオとワールド構成_v1.md`）のアクション。シェルはステージごとに `CombatSystem`（`combat/combatSystem.ts`）を作り、
+`rt.combat` で渡す。ステージは `rt.combat.enabled = true` にして `spawn(kind, pos, { tag, leash, style, hp, scale, hidden, armored })` で
+敵（欠け虫・欠け盾・欠け重）を出す。K：3 段の連続攻撃、Shift（戦闘中）：回避、J：クローで小さい敵を引き寄せる・盾をはがす・
+大きい敵へ飛び込んで蹴る。左腕の はじくNMClaw（`impact_claw_got`）を選んで J で衝撃（盾・装甲を割る・`addBreakable` の壁を壊す）。
+左腕を選んでいても、金具など敵でない対象を狙っているときやワイヤーがつながっているときはクローを使う。
+倒した敵は `onEnemyDefeated`、演出で倒すときは `kill(handle)`。敵の判断は純粋なロジック `combat/combatLogic.ts`（テストあり）。
+壊れる壁の当たり判定は `rt.phys.remove(box)` で外す（`ColliderList.box()` が返す箱）。
+
+1970 年 千里丘陵・万国博覧会（架空の会場）は `stages/expo1970/`：配置 `layout.ts`、組み立て `scene1970.ts`（2026 年の素材を使い回して Batch で結合）、
+進み方 `story1970.ts`（フラグだけで段階が決まる純粋なロジック。錨をほどく合図 `UnravelLogic`）、ステージ `stage.ts`、
+仲間のミチ `michi.ts`、来場者 `visitors1970.ts`（部品ごとの InstancedMesh）、拾える物・裂け目・破片・錨の糸 `props1970.ts`、
+台詞 `dialogue_1970.json`・`mob_lines_1970.json`。2086 年からはソラの羅針盤（9 章。`compass_built`）で `ido_compass`、
+錨をほどく（`expo_anchor_cleared`）と `return` で 2086 年へ帰れる。
+

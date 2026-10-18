@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { drawGear, makeCanvas } from '../render/textures'
 import { createNexmax } from './nexmax/nexmaxModel'
 
-export type CharacterName = 'nexmax' | 'genbei' | 'oharu' | 'matsui' | 'saeki' | 'sora'
+export type CharacterName = 'nexmax' | 'genbei' | 'oharu' | 'matsui' | 'saeki' | 'sora' | 'michi'
 export type Pose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave' | 'run' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'dash'
 
 /** 仮モデルが持つ基本のポーズへ寄せる（新しいポーズは近いものとして扱う） */

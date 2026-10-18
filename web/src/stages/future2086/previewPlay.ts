@@ -48,6 +48,8 @@ const FIRE_VERB: Record<ClawTargetType, string> = {
   pull_player: '飛びつく',
   swing_anchor: 'ぶら下がる',
   hold_mechanism: '支える',
+  enemy_pull: '引き寄せる',
+  enemy_zip: '飛び込む',
 }
 
 /** 会話を 1 行ずつ出す（F で次へ、放っておいても進む） */

@@ -6,6 +6,7 @@
 export const ERA = {
   HUB: 0,
   EDO: 1726,
+  EXPO: 1970,
   PRESENT: 2026,
   FUTURE: 2086,
 } as const;
@@ -14,11 +15,12 @@ export type EraId = (typeof ERA)[keyof typeof ERA];
 
 export const ERA_HUB = ERA.HUB;
 export const ERA_EDO = ERA.EDO;
+export const ERA_EXPO = ERA.EXPO;
 export const ERA_PRESENT = ERA.PRESENT;
 export const ERA_FUTURE = ERA.FUTURE;
 
-/** 全時代ID（Godot の ERA_SCENES と同じ並び）。 */
-export const ERA_IDS: readonly EraId[] = [ERA.EDO, ERA.PRESENT, ERA.FUTURE, ERA.HUB];
+/** 全時代ID（Godot の ERA_SCENES と同じ並び。1970 は中盤で追加）。 */
+export const ERA_IDS: readonly EraId[] = [ERA.EDO, ERA.PRESENT, ERA.FUTURE, ERA.HUB, ERA.EXPO];
 
 export function isEraId(value: unknown): value is EraId {
   return ERA_IDS.includes(value as EraId);
@@ -27,6 +29,7 @@ export function isEraId(value: unknown): value is EraId {
 /** 場所の名前（HUD の「年代・場所」表示、移動中の文言に使う）。 */
 export const ERA_PLACES: Readonly<Record<EraId, string>> = {
   [ERA.EDO]: "大坂・仕掛け横丁",
+  [ERA.EXPO]: "千里丘陵・万国博覧会",
   [ERA.PRESENT]: "なんば",
   [ERA.FUTURE]: "ナンバタウン",
   [ERA.HUB]: "異次元拠点",
@@ -41,6 +44,7 @@ export interface EraTint {
 
 export const ERA_TINTS: Readonly<Record<EraId, EraTint>> = {
   [ERA.EDO]: { r: 1.0, g: 0.72, b: 0.38 },
+  [ERA.EXPO]: { r: 1.0, g: 0.58, b: 0.26 },
   [ERA.PRESENT]: { r: 0.45, g: 0.8, b: 1.0 },
   [ERA.FUTURE]: { r: 0.7, g: 0.55, b: 1.0 },
   [ERA.HUB]: { r: 0.5, g: 1.0, b: 0.9 },

@@ -395,7 +395,8 @@ export class IntroDirector {
     // 石標の足元の光（読めるとき・近いとき）
     for (const id of Object.keys(this.props.stones) as StoneId[]) {
       const st = this.props.stones[id]
-      const near = this.story.step === 'records' ? Math.max(0, 1 - st.stand.distanceTo(rt.player.position) / 3) : 0
+      const readable = this.story.step === 'records' || (this.story.step === 'compass' && id === 'stone_1970')
+      const near = readable ? Math.max(0, 1 - st.stand.distanceTo(rt.player.position) / 3) : 0
       st.setNear(near)
     }
     // 逃げた先の街から消えていく（避難した夜）
@@ -525,7 +526,10 @@ export class IntroDirector {
       case 'return_booth':
       case 'loop_cues':
       case 'returned':
+      case 'expo_back':
         return this.sora.root.position
+      case 'compass':
+        return INTRO_LAYOUT.stones.stone_1970
       case 'attempts':
         return this.story.cancelAsked || this.story.despaired ? this.sora.root.position : null
       case 'fetch_lens':
@@ -570,8 +574,14 @@ export class IntroDirector {
       case 'return_booth':
       case 'loop_cues':
       case 'returned':
+      case 'expo_back':
         sora()
         break
+      case 'compass': {
+        const st = INTRO_LAYOUT.stones.stone_1970
+        add(st.x, st.y + 2.05, st.z, '1970年・万博')
+        break
+      }
       case 'fetch_lens':
         add(lens.x, lens.y + 0.75, lens.z, '共鳴レンズのケース')
         break

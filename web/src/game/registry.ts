@@ -6,6 +6,7 @@ export type StageInfo = { year: string; place: string; label: string }
 
 export const STAGE_INFO: Record<StageKey, StageInfo> = {
   '1726': { year: '1726年', place: '大坂・仕掛け横丁', label: '1726年　大坂・仕掛け横丁' },
+  '1970': { year: '1970年', place: '千里丘陵・万国博覧会', label: '1970年　千里丘陵・万国博覧会' },
   '2026': { year: '2026年', place: '大阪・なんば', label: '2026年　大阪・なんば' },
   '2086': { year: '2086年', place: 'ナンバタウン', label: '2086年　ナンバタウン' },
 }
@@ -18,6 +19,10 @@ export async function createStage(key: StageKey): Promise<Stage> {
     case '1726': {
       const m = await import('../stages/edo1726/stage')
       return new m.EdoStage()
+    }
+    case '1970': {
+      const m = await import('../stages/expo1970/stage')
+      return new m.ExpoStage()
     }
     case '2026': {
       const m = await import('../stages/namba2026/stage')

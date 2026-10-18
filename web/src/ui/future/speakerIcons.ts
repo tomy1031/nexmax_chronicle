@@ -20,6 +20,8 @@ const KNOWN: Array<[RegExp, SpeakerStyle]> = [
   [/^源兵衛/, { key: 'genbei', color: '#ffc94d', source: 'genbei' }],
   [/^おはる/, { key: 'oharu', color: '#ff8fb6', source: 'oharu' }],
   [/^マツイ/, { key: 'matsui', color: '#ffb057', source: 'matsui' }],
+  // 1970年の佐伯ミチ（玲奈とは別人。顔は人影のまま）
+  [/^ミチ|^佐伯ミチ/, { key: 'michi', color: '#ffb066', source: null }],
   [/^佐伯/, { key: 'saeki', color: '#7fe6ff', source: 'saeki' }],
   [/^ソラ/, { key: 'sora', color: '#c8a6ff', source: 'sora' }],
   [/^ネクマックス|^NEXMAX/i, { key: 'nexmax', color: '#62d4ff', source: 'nexmax' }],
@@ -45,6 +47,7 @@ const FRAMING: Record<SpeakerModel, { down: number; size: number; yaw: number }>
   matsui: { down: 0.165, size: 0.36, yaw: 0.2 },
   saeki: { down: 0.125, size: 0.28, yaw: 0.2 },
   sora: { down: 0.14, size: 0.31, yaw: 0.2 },
+  michi: { down: 0.14, size: 0.3, yaw: 0.2 },
 }
 
 const MODEL_HEIGHT = 1.6

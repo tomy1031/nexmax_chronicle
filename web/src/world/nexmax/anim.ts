@@ -77,12 +77,12 @@ export function addWeighted(out: Params, p: Params, w: number): void {
   for (const k of PARAM_KEYS) out[k] += p[k] * w
 }
 
-export type NexmaxPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave'
-export const ALL_POSES: NexmaxPose[] = ['idle', 'walk', 'run', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave']
+export type NexmaxPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave' | 'punch' | 'punchL' | 'hurt'
+export const ALL_POSES: NexmaxPose[] = ['idle', 'walk', 'run', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave', 'punch', 'punchL', 'hurt']
 
 /** 混ぜる単位。idle / walk / run は速さで連続的に変わる「地上」1 つにまとめる */
-export type Slot = 'ground' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave'
-export const SLOTS: Slot[] = ['ground', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave']
+export type Slot = 'ground' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave' | 'punch' | 'punchL' | 'hurt'
+export const SLOTS: Slot[] = ['ground', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave', 'punch', 'punchL', 'hurt']
 export function slotOf(p: NexmaxPose): Slot {
   return p === 'idle' || p === 'walk' || p === 'run' ? 'ground' : p
 }
@@ -99,6 +99,9 @@ export const SLOT_TAU: Record<Slot, number> = {
   hold: 0.12,
   crank: 0.2,
   wave: 0.2,
+  punch: 0.035,
+  punchL: 0.035,
+  hurt: 0.04,
 }
 
 export type Ctx = {
@@ -535,6 +538,70 @@ export function evalWave(p: Params, c: Ctx): void {
   standIK(p, 0, 0, 0, 0, 0, 0)
 }
 
+/**
+ * 攻撃（K）：拳を引いて溜め → 体をひねって突き出す → 戻す。left で左手（2 段目）。
+ * 左腕の値は右と同じ向き（リグ側で Y・Z を反転して当てる）
+ */
+export function evalPunch(p: Params, c: Ctx, left = false): void {
+  clearParams(p)
+  const t = c.pt
+  const wind = smooth(0, 0.06, t)
+  const hit = smooth(0.05, 0.12, t)
+  const back = smooth(0.22, 0.45, t)
+  const k = hit * (1 - back * 0.7)
+  const shX = lerp(lerp(0.45, -0.25, wind), Math.PI / 2 - 0.08, k)
+  const el = lerp(lerp(1.0, 1.7, wind), 0.06, k)
+  if (!left) {
+    p.rShX = shX
+    p.rShZ = 0.14
+    p.rEl = el
+    p.lShX = 0.55
+    p.lShZ = 0.3
+    p.lEl = 1.35
+  } else {
+    p.lShX = shX
+    p.lShZ = 0.14
+    p.lEl = el
+    p.rShX = 0.55
+    p.rShZ = 0.3
+    p.rEl = 1.35
+  }
+  // 打つ手と反対へ体をひねる（右で打つときは左肩が引ける）
+  const twist = (left ? 1 : -1) * (lerp(-0.2 * wind, 0.38, k))
+  p.torsoYaw = twist
+  p.hipsYaw = twist * 0.35
+  p.torsoPitch = 0.1 * k
+  p.bodyPitch = 0.07 * k
+  p.headPitch = 0.04
+  p.hipsY = -0.035
+  p.rHipZ = 0.08
+  p.lHipZ = 0.08
+  p.fist = 1
+  // 前後に開いた構え（打つ手と同じ側の足を引く）
+  if (left) standIK(p, -0.08, 0, 0.04, 0.1, 0, -0.04)
+  else standIK(p, 0.1, 0, -0.04, -0.08, 0, 0.04)
+}
+
+/** 当たった：体が後ろへ揺れる */
+export function evalHurt(p: Params, c: Ctx): void {
+  clearParams(p)
+  const k = Math.exp(-c.pt * 5)
+  p.torsoPitch = -0.35 * k
+  p.bodyPitch = -0.15 * k
+  p.headPitch = -0.3 * k
+  p.rShX = 0.5
+  p.rShZ = 0.6 * k + 0.2
+  p.rEl = 0.8
+  p.lShX = 0.5
+  p.lShZ = 0.6 * k + 0.2
+  p.lEl = 0.8
+  p.hipsY = -0.04
+  p.rHipZ = 0.08
+  p.lHipZ = 0.08
+  p.squash = 1 - 0.06 * k
+  standIK(p, 0.06, 0, 0, -0.04, 0, 0)
+}
+
 export function evalSlot(slot: Slot, p: Params, c: Ctx): void {
   switch (slot) {
     case 'ground':
@@ -559,5 +626,11 @@ export function evalSlot(slot: Slot, p: Params, c: Ctx): void {
       return evalCrank(p, c)
     case 'wave':
       return evalWave(p, c)
+    case 'punch':
+      return evalPunch(p, c, false)
+    case 'punchL':
+      return evalPunch(p, c, true)
+    case 'hurt':
+      return evalHurt(p, c)
   }
 }

@@ -26,6 +26,7 @@ import type { StageKey, TravelRequest, TravelVerdict } from './travel'
 import type { RiftFx } from './riftFx'
 import type { CineShot } from './cinematic'
 import type { ObjectiveMark } from './objectiveMarker'
+import type { CombatSystem } from '../combat/combatSystem'
 
 export type { StageKey, TravelRequest, CineShot, ObjectiveMark }
 
@@ -92,6 +93,8 @@ export type StageRuntime = {
   player: PlayerController
   camRig: CameraRig
   claw: ClawSystem
+  /** 戦闘（体力・攻撃・敵）。ステージが enabled にして敵を出す（combat/combatSystem.ts） */
+  combat: CombatSystem
   phys: Physics
   /** 主人公の見た目（シェルが持つ。ステージは解放しない） */
   nexmax: Character

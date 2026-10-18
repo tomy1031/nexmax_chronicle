@@ -26,6 +26,15 @@
   --mob-acc: #ffffff;
 }
 
+/* 1970（万博）：HUD の 1970 と同じオレンジ＋青緑 */
+.nx-mob-layer.nx-mob-1970 {
+  --mob-line: #ffa24a;
+  --mob-line-dim: rgba(255, 162, 74, 0.5);
+  --mob-glass-a: rgba(120, 52, 30, 0.74);
+  --mob-glass-b: rgba(36, 14, 18, 0.86);
+  --mob-acc: #3fe0cf;
+}
+
 /* 1726（江戸の大坂）：HUD の 1726 と同じ藍＋金、朱のさし色 */
 .nx-mob-layer.nx-mob-1726 {
   --mob-line: #f3c865;

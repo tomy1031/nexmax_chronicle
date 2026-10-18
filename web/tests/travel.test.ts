@@ -40,6 +40,15 @@ describe("travelRule（移動は自由ではない）", () => {
     expect(travelRule("2026", { to: "2026", cause: "return" }, flags("drawing_confirmed")).ok).toBe(false);
   });
 
+  it("中盤：2086→1970 は羅針盤ができてから、1970→2086 は錨をほどいてからの帰還だけ", () => {
+    expect(travelRule("2086", { to: "1970", cause: "ido_compass" }, flags()).ok).toBe(false);
+    expect(travelRule("2086", { to: "1970", cause: "ido_compass" }, flags("compass_built")).ok).toBe(true);
+    expect(travelRule("2086", { to: "1970", cause: "ido_exhibit" }, flags("compass_built")).ok).toBe(false);
+    expect(travelRule("1970", { to: "2086", cause: "return" }, flags()).ok).toBe(false);
+    expect(travelRule("1970", { to: "2086", cause: "return" }, flags("expo_anchor_cleared")).ok).toBe(true);
+    expect(travelRule("1970", { to: "2026", cause: "return" }, flags("expo_anchor_cleared")).ok).toBe(false);
+  });
+
   it("StageKey と時代 ID の変換", () => {
     expect(stageEra("1726")).toBe(1726);
     expect(eraStage(2086)).toBe("2086");

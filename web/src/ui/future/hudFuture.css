@@ -65,6 +65,32 @@
   --nx-tab-on: rgba(80, 230, 220, 0.2);
 }
 
+/* ---- 1970（万博の「未来」：夕焼けのオレンジ＋クリーム、青緑のさし色。七宝の円と方眼） */
+.nx-theme-1970 {
+  --nx-line: #ffa24a;
+  --nx-line-hi: #fff4e2;
+  --nx-line-dim: rgba(255, 162, 74, 0.42);
+  --nx-line-in: rgba(110, 232, 216, 0.3);
+  --nx-acc: #3fe0cf;
+  --nx-acc-dim: rgba(63, 224, 207, 0.5);
+  --nx-glass-a: rgba(120, 52, 30, 0.62);
+  --nx-glass-b: rgba(36, 14, 18, 0.82);
+  --nx-edge-op: 0.12;
+  --nx-deep-a: rgba(74, 30, 22, 0.93);
+  --nx-deep-b: rgba(24, 8, 12, 0.96);
+  --nx-disk-a: rgba(112, 48, 30, 0.86);
+  --nx-disk-b: rgba(30, 10, 14, 0.92);
+  --nx-sheen: #ffe2bc;
+  --nx-scan: rgba(255, 210, 160, 0.045);
+  --nx-pat-ink: #ffb066;
+  --nx-pat-fill: #2a0e10;
+  --nx-pat-op: 0.18;
+  --nx-ink: #fff8ef;
+  --nx-ink-dim: #f0cfae;
+  --nx-glow: rgba(255, 150, 70, 0.45);
+  --nx-tab-on: rgba(255, 162, 74, 0.2);
+}
+
 /* ---- 1726（江戸の大坂：藍＋金、朱のさし色。ネクマックスの投影なので内側の線は青く光る） */
 .nx-theme-1726 {
   --nx-line: #f3c865;
@@ -148,6 +174,11 @@
 .nx-theme-2026 .nx-f-dot,
 .nx-theme-2026 .nx-f-flare { display: none; }
 /* 1726：麻の葉・青海波・格子。さし色は朱のひし形 */
+.nx-theme-1970 .nx-f-pat[data-slot='panel'] { fill: url(#nxp-shippo); }
+.nx-theme-1970 .nx-f-pat[data-slot='band'],
+.nx-theme-1970 .nx-f-pat[data-slot='plate'],
+.nx-theme-1970 .nx-f-pat[data-slot='bar'] { fill: url(#nxp-grid); opacity: calc(var(--nx-pat-op) * 0.8); }
+.nx-theme-1970 .nx-f-flare { display: none; }
 .nx-theme-1726 .nx-f-pat[data-slot='panel'] { fill: url(#nxp-asanoha); }
 .nx-theme-1726 .nx-f-pat[data-slot='band'] { fill: url(#nxp-seigaiha); opacity: calc(var(--nx-pat-op) * 1.15); }
 .nx-theme-1726 .nx-f-pat[data-slot='plate'],
@@ -197,6 +228,7 @@
 .nx-pf-frame .pf-pat { fill: url(#nxpd-hex); opacity: calc(var(--nx-pat-op) * 0.8); }
 .nx-theme-2026 .nx-pf-frame .pf-pat { fill: url(#nxpd-grid); }
 .nx-theme-1726 .nx-pf-frame .pf-pat { fill: url(#nxpd-asanoha); }
+.nx-theme-1970 .nx-pf-frame .pf-pat { fill: url(#nxpd-shippo); }
 .nx-pf-frame .pf-scan { fill: url(#nxf-scan); }
 .nx-pf-frame .pf-rim,
 .nx-arm-svg .arm-rim { fill: url(#nxf-rim); }
@@ -222,6 +254,7 @@
   box-shadow: inset 0 0 calc(10 * var(--u)) rgba(120, 230, 255, 0.5);
 }
 .nx-theme-1726 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #6f86e6 0%, #2c3aa0 52%, #10165a 100%); }
+.nx-theme-1970 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #ffb27a 0%, #b4502e 52%, #4a1a14 100%); }
 .nx-theme-2026 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #5ac4d8 0%, #1f6e8a 52%, #0a2c3c 100%); }
 .nx-pf-canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; animation: nx-fade-in 0.5s ease-out; }
 .nx-pf-fallback { position: absolute; inset: 0; display: grid; place-items: center; }
@@ -371,6 +404,7 @@
 .nx-ret-target { position: absolute; left: 0; top: 0; width: 0; height: 0; --rc: #ffc24a; color: var(--rc); transition: transform 0.06s linear; will-change: transform; }
 .nx-ret-target[data-cat='anchor'] { --rc: #4fe8ff; }
 .nx-ret-target[data-cat='mechanism'] { --rc: #7dff9a; }
+.nx-ret-target[data-cat='enemy'] { --rc: #ff5d74; }
 .nx-ret-target.far { --rc: rgba(222, 234, 252, 0.62); }
 .nx-ret-shape { position: absolute; left: calc(-31 * var(--u)); top: calc(-31 * var(--u)); width: calc(62 * var(--u)); height: calc(62 * var(--u));
   filter: drop-shadow(0 0 calc(3 * var(--u)) var(--rc)) drop-shadow(0 0 1px rgba(0, 16, 40, 0.9)); }
@@ -453,6 +487,7 @@
   background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 30%, #2a64b4) 0%, #123a7a 55%, #061a40 100%);
 }
 .nx-theme-1726 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #3a4ab0) 0%, #1a2270 55%, #080c36 100%); }
+.nx-theme-1970 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #c0663a) 0%, #6a2a1c 55%, #2a0c0c 100%); }
 .nx-theme-2026 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #2a8aa0) 0%, #12465a 55%, #06202c 100%); }
 .nx-face-img::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(180, 240, 255, 0.06) 0 1px, transparent 1px 3px), linear-gradient(180deg, transparent 60%, rgba(2, 10, 30, 0.45)); }
 .nx-face-img img,
@@ -504,6 +539,7 @@
 .nx-arm-svg .arm-disk { fill: url(#nxf-disk); }
 .nx-arm-svg .arm-pat { fill: url(#nxpd-hex); opacity: calc(var(--nx-pat-op) * 0.9); }
 .nx-theme-2026 .nx-arm-svg .arm-pat { fill: url(#nxpd-grid); }
+.nx-theme-1970 .nx-arm-svg .arm-pat { fill: url(#nxpd-shippo); }
 .nx-theme-1726 .nx-arm-svg .arm-pat { fill: url(#nxpd-shippo); opacity: calc(var(--nx-pat-op) * 1.1); }
 .nx-arm-svg .arm-scan { fill: url(#nxf-scan); }
 .nx-arm-svg .arm-inner { fill: none; stroke: var(--nx-line-in); stroke-width: 0.8; }
@@ -729,6 +765,7 @@
   background: radial-gradient(circle at 50% 42%, #0e3270 0%, #061738 55%, #020916 100%);
 }
 .nx-loading.nx-theme-2026 { background: radial-gradient(circle at 50% 42%, #0f3a4a 0%, #06202a 55%, #020c12 100%); }
+.nx-loading.nx-theme-1970 { background: radial-gradient(circle at 50% 42%, #7a2e1c 0%, #3a1210 55%, #12060a 100%); }
 .nx-loading.nx-theme-1726 { background: radial-gradient(circle at 50% 42%, #242c86 0%, #0d1150 55%, #04061e 100%); }
 .nx-loading.done { opacity: 0; pointer-events: none; }
 .nx-ld-grid { position: absolute; inset: 0;

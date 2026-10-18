@@ -16,7 +16,8 @@ import { shouldUseTouch } from '../player/touchLogic'
 import { TouchControls } from '../player/touchInput'
 import { ClawSystem } from '../player/clawSystem'
 import { TARGET_CATEGORY, type ClawTargetType } from '../player/clawLogic'
-import { PART_NAMES, canOpenHub, clawArm, initialEquipment, selectArm, type Equipment } from '../player/equipment'
+import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
+import { CombatSystem } from '../combat/combatSystem'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
 import { Hud, LoadingOverlay, type Hint } from '../ui/hud'
@@ -65,6 +66,8 @@ const FIRE_VERB: Record<ClawTargetType, string> = {
   pull_player: '飛びつく',
   swing_anchor: 'ぶら下がる',
   hold_mechanism: '歯車をつかむ',
+  enemy_pull: '引き寄せる',
+  enemy_zip: '飛び込む',
 }
 
 /** 入力なしの軸（毎フレーム作らない） */
@@ -82,6 +85,7 @@ type Active = {
   player: PlayerController
   camRig: CameraRig
   claw: ClawSystem
+  combat: CombatSystem
   rt: StageRuntime
   /** 解放済み（古いステージの非同期の続きが、新しいステージで会話・演出を始めないように） */
   dead?: boolean
@@ -90,6 +94,7 @@ type Active = {
 /** 時代ごとに登場する話者（HUD の顔アイコンを読み込み時に先に作る） */
 const SPEAKERS_BY_STAGE: Partial<Record<StageKey, string[]>> = {
   '1726': ['源兵衛', 'おはる'],
+  '1970': ['ミチ'],
   '2026': ['マツイ社長', '佐伯'],
   '2086': ['ソラ'],
 }
@@ -155,8 +160,12 @@ export class Game {
   private bootReveal = -1
   private readonly t0 = performance.now()
 
+  /** HUD などの重ね物の親（#ui） */
+  private readonly uiEl: HTMLDivElement
+
   constructor(app: HTMLDivElement, ui: HTMLDivElement) {
     this.app = app
+    this.uiEl = ui
     const params = readParams()
     this.fixedRatio = params.fixedRatio
     this.gp = parseGameParams(location.search)
@@ -376,6 +385,11 @@ export class Game {
     camRig.pitch = sp.camPitch
     const claw = new ClawSystem(phys, player, world.claw.targets, world.claw.movables)
     this.scene.add(claw.beam.group)
+    // 戦闘（ステージが rt.combat.enabled にして敵を出す）と、物語の進み具合からの装備
+    const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n) })
+    this.scene.add(combat.group)
+    equipFromFlags(this.equipment, (n) => this.story.get(n))
+    this.armKey = ''
     // 状態をリセット
     this.shotIndex = -1
     this.paused = false
@@ -398,7 +412,7 @@ export class Game {
     this.nexmax.setAim(null)
     this.camera.fov = 55
     this.camera.updateProjectionMatrix()
-    const a = { stage, world, env, phys, player, camRig, claw } as Active
+    const a = { stage, world, env, phys, player, camRig, claw, combat } as Active
     a.rt = this.makeRuntime(a)
     claw.onEvent = (e) => {
       switch (e.kind) {
@@ -413,6 +427,7 @@ export class Game {
           if (e.target.facing) camRig.turnTo(Math.atan2(e.target.facing.x, e.target.facing.z), 0.62)
           break
       }
+      combat.onClawEvent(e)
       stage.onClawEvent?.(e, a.rt)
     }
     player.onRespawn = () => {
@@ -476,6 +491,7 @@ export class Game {
     disposeObject3D(a.world.root)
     this.scene.remove(a.claw.beam.group)
     disposeObject3D(a.claw.beam.group)
+    a.combat.dispose()
     a.env.dispose()
     a.phys.world.free()
     for (const pl of this.lanternLights) pl.intensity = 0
@@ -519,6 +535,7 @@ export class Game {
       player: a.player,
       camRig: a.camRig,
       claw: a.claw,
+      combat: a.combat,
       phys: a.phys,
       nexmax: this.nexmax,
       sky: a.env.sky,
@@ -641,6 +658,13 @@ export class Game {
   private readonly hand = new THREE.Vector3()
   private readonly lightCenter = new THREE.Vector3()
   private armKey = ''
+
+  /** J で はじくNMClaw を使うか（左腕を選んでいて、ワイヤーが空いていて、狙っているのが敵か何も無いとき） */
+  private impactInUse(claw: ClawSystem): boolean {
+    if (selectedPart(this.equipment) !== 'impact_claw' || claw.wire.phase !== 'idle') return false
+    const t = claw.selectedTarget
+    return !t || t.type === 'enemy_pull' || t.type === 'enemy_zip'
+  }
   /** 前のフレームで照準を R でロックしていたか（ロック中は止まっていれば対象の方を向く） */
   private lastLocked = false
 
@@ -690,7 +714,11 @@ export class Game {
       this.hud.setPaused(this.paused)
       this.hud.setMenu(this.menuOpen)
       if (this.travel.inputLocked) this.departure(a, dt)
-      else if (!this.paused && !this.menuOpen) this.gameplay(a, frame, dt)
+      else if (!this.paused && !this.menuOpen) {
+        // 当たった瞬間の一瞬の止まり（戦闘の手応え）：実時間で数えて、ゲームの時間だけ縮める
+        a.combat.tickReal(dt)
+        this.gameplay(a, frame, dt * a.combat.timeScale)
+      }
       this.focus.copy(player.position)
     }
     const frozen = this.shotIndex === -1 && (this.paused || this.menuOpen)
@@ -700,6 +728,7 @@ export class Game {
     const ndt = frozen ? 0 : dt
     this.nexmax.update(ndt, this.shotIndex === -1 || !shots ? player.speed : shots.nexmaxSpeed(this.shotIndex))
     stage.animate(ndt, uTime.value, rt)
+    a.combat.animate(ndt * a.combat.timeScale, uTime.value)
     if (!frozen) this.tickDialogue(ndt, false)
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
@@ -784,7 +813,7 @@ export class Game {
   // ================================================================ プレイ中の 1 フレーム
 
   private gameplay(a: Active, frame: ActionFrame, dt: number): void {
-    const { stage, player, camRig, claw, rt } = a
+    const { stage, player, camRig, claw, combat, rt } = a
     const hud = this.hud
     this.playTime += dt
     this.story.timeline.play_time += dt
@@ -801,22 +830,41 @@ export class Game {
       hud.pulseArm('right')
     }
     if (!cineOn && frame.pressed.has('open_hub')) {
-      const r = canOpenHub({ unlocked: false, atSafePoint: false, wireMoving: claw.wire.isWireMoving(), airborne: !player.grounded && !player.isExternal, inCombat: false })
+      const r = canOpenHub({ unlocked: false, atSafePoint: false, wireMoving: claw.wire.isWireMoving(), airborne: !player.grounded && !player.isExternal, inCombat: combat.inCombat })
       hud.toast(r.message)
-    }
-    this.attackToastCooldown -= dt
-    if (!cineOn && frame.pressed.has('attack') && this.attackToastCooldown <= 0) {
-      hud.toast('基本攻撃は戦闘の実装後に使えます')
-      this.attackToastCooldown = 2
     }
     if (!cineOn && frame.pressed.has('interact')) {
       if (this.talk) this.tickDialogue(0, true)
       else stage.interact(rt)
     }
-    const locked = this.controlLocked || cineOn
-    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, clawArm(this.equipment) !== null, this.camera)
-    player.update(dt, { move: locked ? ZERO_AXIS : frame.move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
+    const locked = this.controlLocked || cineOn || combat.downed
+    // K：戦闘のあるステージでは攻撃（無ければ案内だけ）
+    this.attackToastCooldown -= dt
+    if (!locked && frame.pressed.has('attack')) {
+      if (combat.enabled) combat.attack()
+      else if (this.attackToastCooldown <= 0) {
+        hud.toast('ここでは戦わない')
+        this.attackToastCooldown = 2
+      }
+    }
+    // Shift：戦闘中は押した瞬間に回避（それ以外は押している間のダッシュ）
+    if (!locked && combat.enabled && frame.pressed.has('dash') && combat.inCombat) {
+      const fx = -Math.sin(camRig.yaw)
+      const fz = -Math.cos(camRig.yaw)
+      const rx = Math.cos(camRig.yaw)
+      const rz = -Math.sin(camRig.yaw)
+      combat.dodge(fx * frame.move.y + rx * frame.move.x, fz * frame.move.y + rz * frame.move.x)
+    }
+    // J：選んでいる腕のパーツを使う（はじくNMClaw なら衝撃。つかむNMClaw はクローへ）。
+    // 左腕を選んでいても、金具・結び目など敵でない対象を狙っているとき・ワイヤーがつながっているときはクローを使う
+    const impactArm = this.impactInUse(claw)
+    if (!locked && impactArm && frame.pressed.has('claw_fire') && combat.impact()) hud.pulseArm(this.equipment.selected)
+    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && clawArm(this.equipment) !== null, this.camera)
+    const ms = combat.moveScale
+    const move = locked ? ZERO_AXIS : ms < 1 ? { x: frame.move.x * ms, y: frame.move.y * ms } : frame.move
+    player.update(dt, { move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed && !combat.downed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
     claw.update(dt, frame, camRig.yaw)
+    combat.update(dt)
     this.faceClawTarget(a, frame, dt)
     stage.update(dt, frame, rt)
     if (this.cine.active) camRig.update(dt, ZERO_AXIS, player.position)
@@ -844,6 +892,7 @@ export class Game {
       dash: frame.held.has('dash'),
       landTimer: this.landTimer,
       fireTimer: this.fireTimer,
+      combat: combat.poseHint(),
     })
     applyPose(nexmax, pose, player.speed)
     const aimAt = pose === 'fire' || pose === 'hold' || pose === 'pulled' || pose === 'swing' ? claw.aimPoint : null
@@ -995,12 +1044,16 @@ export class Game {
       case 'miss':
         return []
     }
+    const impactArm = this.impactInUse(claw)
+    const fight: Hint[] = a.combat.enabled && a.combat.inCombat ? [{ key: 'K', label: '攻撃' }, { key: 'Shift', label: '回避' }] : []
+    if (impactArm) return [{ key: 'J', label: 'はじく' }, ...fight, { key: 'E', label: '右腕へ' }]
     const sel = claw.selectedTarget
     if (sel) {
-      const list: Hint[] = [{ key: 'J', label: FIRE_VERB[sel.type] }]
+      const list: Hint[] = [{ key: 'J', label: FIRE_VERB[sel.type] }, ...fight]
       if (claw.candidateCount > 1) list.push({ key: 'R', label: '対象を切替' })
       return list
     }
+    if (fight.length) return fight
     const st = a.stage.hints(a.rt)
     if (st && st.length) return st
     if (this.playTime < START_HINT_TIME) {

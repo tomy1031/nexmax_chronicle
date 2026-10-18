@@ -2,11 +2,12 @@
 // ・2086：ホログラム（水色＋マゼンタ＋白、細かな六角の模様）＝ 既定
 // ・2026：いまの技術の会社（NEXTMAKE の研究室）。水色〜青緑＋白、うすい方眼、演出は少なめ
 // ・1726：江戸の大坂。藍＋金、朱のさし色。麻の葉・青海波・格子・七宝の模様（ネクマックスの投影のまま）
+// ・1970：万博の「未来」。夕焼けのオレンジ＋クリーム、青緑のさし色。七宝（円）と方眼
 // 色そのものは hudFuture.css の .nx-theme-* の CSS 変数。ここは名前の決まりと模様の形だけ。
 
-export type HudTheme = '1726' | '2026' | '2086'
+export type HudTheme = '1726' | '1970' | '2026' | '2086'
 
-export const HUD_THEMES: readonly HudTheme[] = ['1726', '2026', '2086']
+export const HUD_THEMES: readonly HudTheme[] = ['1726', '1970', '2026', '2086']
 
 /** setTheme が一度も呼ばれないときのテーマ */
 export const DEFAULT_THEME: HudTheme = '2086'
@@ -19,7 +20,7 @@ export function themeClass(t: HudTheme): string {
 /** 文の中の年（「1726年　大坂・仕掛け横丁」など）からテーマを決める。見つからなければ null */
 export function themeFromText(text: string | null | undefined): HudTheme | null {
   if (!text) return null
-  const m = /(1726|2026|2086)/.exec(text)
+  const m = /(1726|1970|2026|2086)/.exec(text)
   return m ? (m[1] as HudTheme) : null
 }
 
@@ -28,6 +29,7 @@ export function normalizeTheme(key: string | null | undefined): HudTheme {
   if (!key) return DEFAULT_THEME
   const k = String(key).trim().toLowerCase()
   if (k === 'edo') return '1726'
+  if (k === 'expo') return '1970'
   if (k === 'present' || k === 'now') return '2026'
   if (k === 'future') return '2086'
   return themeFromText(k) ?? DEFAULT_THEME

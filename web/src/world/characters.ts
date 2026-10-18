@@ -67,6 +67,45 @@ export async function loadCharacter(name: CharacterName, targetHeightMeters: num
 
 // ------------------------------------------------------------------ GLB
 
+/**
+ * Tripo のテクスチャは肌や髪の色が濃く、ゲームの色の処理（トーンマッピング）でさらにオレンジに寄る。
+ * 読み込むときに彩度を少し落として明るくした絵に描き直す（顔をアニメ調のすっきりした色に）
+ */
+const softened = new WeakMap<THREE.Texture, THREE.Texture>()
+function softenTexture(tex: THREE.Texture): THREE.Texture {
+  const done = softened.get(tex)
+  if (done) return done
+  const img = tex.image as (CanvasImageSource & { width: number; height: number }) | undefined
+  if (!img || !img.width || typeof document === 'undefined') return tex
+  const cv = document.createElement('canvas')
+  cv.width = img.width
+  cv.height = img.height
+  const g = cv.getContext('2d')
+  if (!g) return tex
+  g.filter = 'saturate(0.8) brightness(1.05)'
+  g.drawImage(img, 0, 0)
+  const out = new THREE.CanvasTexture(cv)
+  out.flipY = tex.flipY
+  out.wrapS = tex.wrapS
+  out.wrapT = tex.wrapT
+  out.channel = tex.channel
+  softened.set(tex, out)
+  tex.dispose()
+  return out
+}
+
+/** トゥーンの明暗の段（暗い所でも 6 割の明るさ。顔が黒くつぶれない） */
+let rampTex: THREE.DataTexture | null = null
+function toonRamp(): THREE.DataTexture {
+  if (rampTex) return rampTex
+  const d = new Uint8Array([168, 168, 168, 255, 214, 214, 214, 255, 248, 248, 248, 255])
+  rampTex = new THREE.DataTexture(d, 3, 1, THREE.RGBAFormat)
+  rampTex.minFilter = rampTex.magFilter = THREE.NearestFilter
+  rampTex.generateMipmaps = false
+  rampTex.needsUpdate = true
+  return rampTex
+}
+
 function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.AnimationClip[], h: number): Character {
   const root = new THREE.Group()
   root.name = name
@@ -93,27 +132,29 @@ function fromGLTF(name: CharacterName, scene: THREE.Object3D, clips: THREE.Anima
   })
   for (const m of meshes) {
     m.castShadow = true
-    m.receiveShadow = true
-    // Tripo はアルベドだけを焼くので、つやを抑えた標準マテリアルへ置き換える（volume/transmission も外す）
+    // 体の凹凸に落ちる影（口のくぼみ・髪の影）が顔を暗く怖く見せるので、自分には影を落とさない
+    m.receiveShadow = false
+    // Tripo はアルベド（色）だけを焼いている。アニメ調に見えるよう、明暗 3 段のトゥーン材質にして、
+    // 色を少し自分で光らせる（正面から見たテクスチャの色に近い、すっきりした顔になる）
     const conv = (mat: THREE.Material): THREE.Material => {
       const src = mat as THREE.MeshPhysicalMaterial
-      const out = new THREE.MeshStandardMaterial({
+      const out = new THREE.MeshToonMaterial({
         name: src.name,
         map: src.map ?? null,
         normalMap: src.normalMap ?? null,
         color: src.color ? src.color.clone() : new THREE.Color('#ffffff'),
         vertexColors: src.vertexColors,
-        roughness: 0.8,
-        metalness: 0,
-        envMapIntensity: 0.8,
+        gradientMap: toonRamp(),
       })
       if (out.map) {
+        out.map = softenTexture(out.map)
         out.map.anisotropy = 8
         out.map.colorSpace = THREE.SRGBColorSpace
-        // 影の中や夜でも顔が黒くつぶれないように、テクスチャの色を少しだけ自分で光らせる
+        // 明るさの半分は自分の色（テクスチャを正面から見たときの色に近い、平らなアニメ調）、半分を光で
+        out.color.multiplyScalar(0.55)
         out.emissiveMap = out.map
         out.emissive.set('#ffffff')
-        out.emissiveIntensity = 0.2
+        out.emissiveIntensity = 0.5
       }
       return out
     }

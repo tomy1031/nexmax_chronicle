@@ -2,6 +2,9 @@
 import { describe, expect, it } from 'vitest'
 import { EXPO_PARTS, UNRAVEL, UnravelLogic, bossWaves, expoObjective, expoSpawn, expoStep, michiSpot, partsCount, shardCount } from '../src/stages/expo1970/story1970'
 import { STORY_BOOL_FLAGS } from '../src/core/storyFlags'
+import { readFileSync } from 'node:fs'
+import dialogue from '../src/stages/expo1970/dialogue_1970.json'
+import mobLines from '../src/stages/expo1970/mob_lines_1970.json'
 
 const flags = (...on: string[]) => (n: string) => on.includes(n)
 
@@ -95,5 +98,42 @@ describe('錨の番人', () => {
     expect(bossWaves(16, 24)).toBe(1)
     expect(bossWaves(8, 24)).toBe(2)
     expect(bossWaves(0, 24)).toBe(2)
+  })
+})
+
+describe('1970年の台詞', () => {
+  const table = dialogue as unknown as Record<string, unknown>
+  it('ステージが使う会話のキーはすべて JSON にある', () => {
+    const src = readFileSync(new URL('../src/stages/expo1970/stage.ts', import.meta.url), 'utf8')
+    const keys = new Set<string>()
+    for (const m of src.matchAll(/this\.lines\('([a-z0-9_]+)'\)/g)) keys.add(m[1])
+    for (const m of src.matchAll(/say1\(rt, '([a-z0-9_]+)'/g)) keys.add(m[1])
+    for (const m of src.matchAll(/'([a-z0-9_]+)' : '([a-z0-9_]+)'/g)) {
+      if (m[1] in table || m[2] in table) {
+        keys.add(m[1])
+        keys.add(m[2])
+      }
+    }
+    // 錨をほどく途中の声（成功の数で選ぶ）と部品（part_<id>）
+    keys.add('unravel_success_1')
+    keys.add('unravel_success_2')
+    for (const p of EXPO_PARTS) keys.add(`part_${p.id}`)
+    expect(keys.size).toBeGreaterThan(30)
+    for (const k of keys) expect(Array.isArray(table[k]), k).toBe(true)
+  })
+
+  it('黒い輪の名前（オルム）は誰も口にしない', () => {
+    // 注記（_note）はのぞいて、台詞だけを見る
+    const texts: string[] = []
+    const walk = (v: unknown, key = ''): void => {
+      if (key === '_note') return
+      if (typeof v === 'string') texts.push(v)
+      else if (Array.isArray(v)) v.forEach((x) => walk(x))
+      else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, k)
+    }
+    walk(table)
+    walk(mobLines)
+    expect(texts.length).toBeGreaterThan(100)
+    for (const t of texts) expect(t).not.toContain('オルム')
   })
 })

@@ -4,6 +4,8 @@
 //   到着 → 広場の欠け（戦闘の基本）→ ミチ → 作業台 → 部品 3 つ（順番自由。振り子・飛びつき・群れとの戦い）→
 //   はじくNMClaw → 塔の壁を割って外側の金具で登る → 錨の番人ミライ号 → 錨の糸をほどく（ミチの合図）→ 別れ → 2086年へ
 // 寄り道：時のかけら 5 個・迷子の子・ロープウェイの係員の帽子。来場者の吹き出し（mob_lines_1970.json）。
+// 敵「欠け」は可能性を吸われたものの抜け殻。倒すと吸われていたものが光になって持ち主へ帰る（ReturnLights）。
+// 錨をほどくと、忘れられていた先輩・北條が戻り、展示案内の設計者の名前も戻る（§1.5・§3.2）。
 import * as THREE from 'three'
 import type { SkyPalette } from '../../render/sky'
 import type { WireEvent } from '../../player/clawLogic'
@@ -24,7 +26,7 @@ import { buildExpoScene, CLAW_IDS, type CrackedWall, type ExpoScene } from './sc
 import { PARTS, PART_IDS, SHARDS, SHARD_IDS, SPAWNS, X, type PartId, type ShardId } from './layout'
 import { createMichi, type MichiCharacter } from './michi'
 import { Visitors, type VisitorDef } from './visitors1970'
-import { AnchorThread, Debris, KakeRift, Pickup } from './props1970'
+import { AnchorThread, Debris, KakeRift, Pickup, Plaque, ReturnLights, buildMiraiFigure } from './props1970'
 import { EXPO_PARTS, UnravelLogic, bossWaves, expoObjective, expoSpawn, expoStep, michiSpot, partsCount, shardCount, type ExpoStep } from './story1970'
 import data1970 from './dialogue_1970.json'
 import mobLines from './mob_lines_1970.json'
@@ -65,6 +67,13 @@ const MICHI_AT = {
   farewell: { pos: v(2.4, 0, 8.6), yaw: Math.PI / 2 },
   appear: { pos: v(25, 0, -3), yaw: Math.PI / 2 },
 }
+/** 展示案内の板と、元に戻ったミライ号（電気の館の入口の前） */
+const PLAQUE_AT = v(41.4, 0, -4.4)
+const MIRAI_AT = v(41.6, 0, 2.6)
+/** 戻ってきた先輩・北條（別れの場面でミチの横） */
+const SENIOR_AT = v(3.7, 0, 9.5)
+/** 取り戻した光が帰っていく先：展示の多い電気の館・広場の展示台 */
+const LIGHT_HOME = { pavilion: v(54, 7, 0), exhibit: v(9, 1.2, -7) }
 const MICHI_TO_TOWER = [v(30, 0, -6), v(20, 0, -18), v(6, 0, -24), v(-3.2, 0, -40.5), X.MICHI_SIGNAL.clone()]
 
 type Walker = { path: THREE.Vector3[]; i: number; speed: number; face: number | null; done: (() => void) | null }
@@ -91,6 +100,9 @@ export class ExpoStage implements Stage {
   private ring!: BlackRing
   private thread!: AnchorThread
   private debris!: Debris
+  private lights!: ReturnLights
+  private plaque!: Plaque
+  private mirai!: THREE.Group
   private readonly parts = {} as Record<PartId, Pickup>
   private readonly shards = {} as Record<ShardId, Pickup>
   private readonly rifts: { first: KakeRift; swarm: KakeRift; child: KakeRift; gate: KakeRift } = {} as never
@@ -110,7 +122,9 @@ export class ExpoStage implements Stage {
   private ringOpen = false
   private curtain: HTMLDivElement | null = null
   /** 来場者の中の決まった人 */
-  private who = { staff: 0, child: 0, mother: 0, father: 0 }
+  private who = { staff: 0, child: 0, mother: 0, father: 0, senior: 0 }
+  /** 先輩・北條が戻ってきて、ミチと会った */
+  private seniorBack = false
   private childState: 'trapped' | 'walking' | 'home' | 'thanked' = 'trapped'
   private childCried = false
   private staffAsked = false
@@ -161,7 +175,15 @@ export class ExpoStage implements Stage {
     this.ring = new BlackRing(X.ANCHOR_RING, 15)
     this.thread = new AnchorThread(X.ANCHOR_RING.clone().add(v(0, -3, 0)), X.ANCHOR_KNOT)
     this.debris = new Debris()
-    root.add(this.ring.mesh, this.thread.root, this.debris.root)
+    this.lights = new ReturnLights()
+    this.plaque = new Plaque()
+    this.plaque.root.position.copy(PLAQUE_AT)
+    this.plaque.root.rotation.y = Math.PI / 2
+    this.mirai = buildMiraiFigure()
+    this.mirai.position.copy(MIRAI_AT)
+    this.mirai.rotation.y = Math.PI / 2
+    this.mirai.visible = false
+    root.add(this.ring.mesh, this.thread.root, this.debris.root, this.lights.root, this.plaque.root, this.mirai)
     return { root, colliders: this.sc.colliders, claw: this.sc.claw, lights: this.sc.lights }
   }
 
@@ -187,6 +209,9 @@ export class ExpoStage implements Stage {
     defs.push({ role: 'script', pos: X.PARENTS.clone(), yaw: Math.PI * 0.8, shirt: '#d85aa0', dress: true })
     this.who.father = defs.length
     defs.push({ role: 'script', pos: X.PARENTS.clone().add(v(0.9, 0, 0.6)), yaw: Math.PI * 0.9, shirt: '#f4f0e8', pants: '#5a4a3a', hat: 'straw' })
+    // 先輩・北條（錨をほどくまで、だれの記憶にもいない）
+    this.who.senior = defs.length
+    defs.push({ role: 'script', pos: SENIOR_AT.clone(), yaw: -Math.PI / 2, shirt: '#e8eef4', pants: '#2a3a5e', hat: 'cap' })
     return defs
   }
 
@@ -270,6 +295,12 @@ export class ExpoStage implements Stage {
       this.sc.hat.object.visible = false
       this.visitors.setHat(this.who.staff, 'staff')
     }
+    // 先輩・北條と、元に戻ったミライ号・展示案内の名前
+    const cleared = f('expo_anchor_cleared')
+    this.visitors.setVisible(this.who.senior, cleared)
+    this.seniorBack = f('expo_farewell')
+    this.mirai.visible = cleared
+    this.plaque.setNamed(cleared)
     // 迷子の子
     if (f('expo_child_saved')) {
       this.childState = 'thanked'
@@ -430,6 +461,10 @@ export class ExpoStage implements Stage {
   }
 
   private onDefeated(e: EnemyHandle, rt: StageRuntime): void {
+    // 吸われていたものが、光になって持ち主へ帰る
+    const home = e.tag === 'first' ? LIGHT_HOME.exhibit : e.tag === 'child' ? this.visitors.position(this.who.child).clone().setY(1.2) : LIGHT_HOME.pavilion
+    this.lights.send(this.tmp.copy(e.pos).setY(e.pos.y + 0.8), home)
+    if (e.tag === 'boss') for (let k = 0; k < 4; k++) this.lights.send(this.tmp.copy(e.pos).setY(e.pos.y + 1.5 + k * 0.2), LIGHT_HOME.pavilion, k * 0.25)
     const left = rt.combat.alive(e.tag).length
     if (e.tag === 'swarm' && left === 0) {
       this.rifts.swarm.show(false)
@@ -525,12 +560,12 @@ export class ExpoStage implements Stage {
     rt.player.turnToward(m.root.position.x - p.x, m.root.position.z - p.z, 1, 1)
     const W = X.WORKBENCH
     void rt.cinematic({ look: v(W.x - 0.1, 1.1, W.z + 0.3), from: v(W.x - 2.6, 2.0, W.z - 1.6), hold: Infinity, inSec: 1.2, fov: 40 })
-    await rt.dialogue(this.lines('bench_parts').slice(0, 2))
-    // 部品の場所を順に
+    await rt.dialogue(this.lines('bench_parts'))
+    // 部品の場所（ロープウェイの向こうの鉄塔を見せる）
     void rt.cinematic({ look: v(-60, 9, 0), from: v(30, 6, 2), hold: Infinity, inSec: 1.2, fov: 34, marker: { pos: PARTS.ropeway.pos.clone().add(v(0, 1.2, 0)), label: '放電コイル', color: '#5ad8ff' } })
-    await rt.dialogue(this.lines('bench_parts').slice(2, 3))
+    await rt.dialogue(this.lines('bench_where'))
     rt.endCinematic()
-    await rt.dialogue(this.lines('bench_parts').slice(3))
+    await rt.dialogue(this.lines('bench_go'))
     rt.setControlLocked(false)
     rt.story.set('expo_bench', true)
     for (const id of PART_IDS) this.parts[id].active = true
@@ -575,15 +610,14 @@ export class ExpoStage implements Stage {
     m.root.rotation.y = MICHI_AT.bench.yaw
     const W = X.WORKBENCH
     void rt.cinematic({ look: v(W.x - 0.1, 1.1, W.z + 0.3), from: v(W.x - 2.4, 1.9, W.z - 1.8), hold: Infinity, inSec: 1.2, fov: 40 })
-    const L = this.lines('assemble')
-    await rt.dialogue(L.slice(0, 1))
+    await rt.dialogue(this.lines('assemble_a'))
+    // ミチが自分の手で組み上げる（手が震える → 見習いでも、今できることはある）
     m.setPose('crank')
-    await rt.dialogue(L.slice(1, 2))
-    await this.wait(0.5)
+    await rt.dialogue(this.lines('assemble_b'))
+    await this.wait(0.6)
     m.setPose('idle')
     const p = rt.player.position
     m.root.rotation.y = Math.atan2(-(p.x - m.root.position.x), -(p.z - m.root.position.z))
-    await rt.dialogue(L.slice(2, 4))
     // 組み上げ
     this.sc.protoArm.visible = false
     rt.story.set('impact_claw_got', true)
@@ -591,9 +625,9 @@ export class ExpoStage implements Stage {
     rt.oreGlow(1.6)
     rt.shake(0.2)
     rt.hud.banner('はじくNMClaw', 'success', 2.6)
-    await rt.dialogue(L.slice(4, 6))
+    await rt.dialogue(this.lines('assemble_c'))
     rt.endCinematic()
-    await rt.dialogue(L.slice(6))
+    await rt.dialogue(this.lines('assemble_d'))
     rt.setControlLocked(false)
     for (const id of PART_IDS) this.parts[id].active = false
     this.spawnTower(rt)
@@ -641,11 +675,11 @@ export class ExpoStage implements Stage {
     rt.combat.setCheckpoint(SPAWNS.deck.pos, SPAWNS.deck.facing)
     const b = this.boss
     void rt.cinematic({ look: X.ANCHOR_RING.clone(), from: v(rt.player.position.x, X.TOWER.deckY + 1.6, rt.player.position.z + 2), hold: Infinity, inSec: 1.4, fov: 40 })
-    await rt.dialogue(this.lines('boss_intro').slice(0, 1))
+    await rt.dialogue(this.lines('boss_intro_a'))
     rt.combat.appear(b)
     rt.shake(0.5)
     void rt.cinematic({ look: b.pos.clone().setY(b.pos.y + 2.2), hold: Infinity, inSec: 1.0, fov: 44 })
-    await rt.dialogue(this.lines('boss_intro').slice(1))
+    await rt.dialogue(this.lines('boss_intro_b'))
     rt.endCinematic()
     rt.combat.showBoss(b, BOSS_NAME)
     rt.setControlLocked(false)
@@ -687,8 +721,10 @@ export class ExpoStage implements Stage {
       rt.shake(0.3)
       rt.oreGlow(1)
       this.ring.fade(1 - this.unravel.progress * 0.7)
+      // ほどけた分だけ、取られていた明日が光になって会場へ帰っていく（その声が聞こえる）
+      for (let k = 0; k < 3; k++) this.lights.send(X.ANCHOR_KNOT, k === 0 ? LIGHT_HOME.pavilion : k === 1 ? LIGHT_HOME.exhibit : v(-30 + Math.random() * 60, 4, -10 + Math.random() * 30), k * 0.2)
       if (this.unravel.finished) void this.runUnravelDone(rt)
-      else this.say1(rt, 'unravel_success', 2.4)
+      else void rt.dialogue(this.lines(`unravel_success_${this.unravel.done}`))
     } else if (r === 'early') {
       rt.hud.banner('まだ早い！', 'fail', 1.4)
       this.say1(rt, 'unravel_early', 2.2)
@@ -708,13 +744,16 @@ export class ExpoStage implements Stage {
     void rt.cinematic({ look: X.ANCHOR_RING.clone(), from: v(4, X.TOWER.deckY + 1.8, X.TOWER.z + 7), hold: Infinity, inSec: 1.6, fov: 38, shake: 0.06 })
     this.ring.fade(0)
     this.thread.setFade(0)
+    for (let k = 0; k < 10; k++) this.lights.send(X.ANCHOR_KNOT, v(-40 + Math.random() * 100, 3 + Math.random() * 6, -40 + Math.random() * 60), k * 0.12)
     await this.wait(1.6)
     await rt.dialogue(this.lines('unravel_done'))
     rt.endCinematic(true)
     rt.hud.setGate(null)
     rt.story.set('expo_anchor_cleared', true)
     rt.save('return')
-    // 会場の欠けはすべて消える
+    // 会場の欠けはすべて消え、ミライ号は館の入口へ、案内板には設計者の名前が戻る
+    this.mirai.visible = true
+    this.plaque.setNamed(true)
     for (const e of rt.combat.alive()) rt.combat.kill(e)
     for (const r of Object.values(this.rifts)) r.show(false)
     // 暗転して広場へ（ミチのところ）
@@ -741,21 +780,37 @@ export class ExpoStage implements Stage {
     rt.player.turnToward(m.root.position.x - p.x, m.root.position.z - p.z, 1, 1)
     const mid = v((p.x + m.root.position.x) / 2, 1.0, (p.z + m.root.position.z) / 2)
     void rt.cinematic({ look: mid, from: v(mid.x - 0.6, 1.5, mid.z + 3.4), fromTo: v(mid.x - 0.4, 1.4, mid.z + 2.8), hold: Infinity, inSec: 1.3, panSec: 16, fov: 40 })
-    const L = this.lines('farewell')
-    await rt.dialogue(L.slice(0, 6))
+    // 先輩・北條が、何事もなかったように戻ってくる（本人は消えていたことを知らない）
+    if (!this.seniorBack) {
+      this.seniorBack = true
+      const s = this.who.senior
+      this.visitors.setVisible(s, true)
+      this.visitors.teleport(s, v(12, 0, 11), -Math.PI / 2)
+      const said = rt.dialogue(this.lines('senior_return').slice(0, 1))
+      this.visitors.walkTo(s, SENIOR_AT, 2.4, () => this.visitors.face(s, m.root.position.x, m.root.position.z))
+      await said
+      m.root.rotation.y = Math.atan2(-(SENIOR_AT.x - m.root.position.x), -(SENIOR_AT.z - m.root.position.z))
+      void rt.cinematic({ look: v((SENIOR_AT.x + m.root.position.x) / 2, 1.2, (SENIOR_AT.z + m.root.position.z) / 2), from: v(1.0, 1.6, 12.6), hold: Infinity, inSec: 1.2, fov: 40 })
+      await rt.dialogue(this.lines('senior_return').slice(1))
+      m.root.rotation.y = Math.atan2(-(p.x - m.root.position.x), -(p.z - m.root.position.z))
+      void rt.cinematic({ look: mid, from: v(mid.x - 0.6, 1.5, mid.z + 3.4), fromTo: v(mid.x - 0.4, 1.4, mid.z + 2.8), hold: Infinity, inSec: 1.3, panSec: 16, fov: 40 })
+    }
+    const L = this.lines('farewell_a')
+    await rt.dialogue(L.slice(0, -1))
     // ノートの最後のページに、小さな青いロボットの絵
     m.setPose('crank')
     await this.wait(1.2)
-    await rt.dialogue(L.slice(6, 7))
+    await rt.dialogue(L.slice(-1))
     m.setPose('idle')
-    await rt.dialogue(L.slice(7, 9))
+    const B = this.lines('farewell_b')
+    await rt.dialogue(B.slice(0, -1))
     rt.endCinematic()
     rt.oreGlow(1.8)
-    await rt.dialogue(L.slice(9))
+    await rt.dialogue(B.slice(-1))
     rt.story.set('expo_farewell', true)
     this.openReturnRing(rt, true)
-    void rt.cinematic({ look: X.RETURN_RING.clone().setY(1.2), hold: 1.5, inSec: 1.1, outSec: 1.1, fov: 46, marker: { pos: X.RETURN_RING.clone().setY(1.0), label: '帰りの光の輪', color: '#c8a6ff' } })
-    await rt.dialogue(this.lines('return_ready'))
+    // 光の輪を見せてから操作を戻す（カメラが戻りきる前に F を押しても効かないので）
+    await Promise.all([rt.cinematic({ look: X.RETURN_RING.clone().setY(1.2), hold: 1.5, inSec: 1.1, outSec: 1.1, fov: 46, marker: { pos: X.RETURN_RING.clone().setY(1.0), label: '帰りの光の輪', color: '#c8a6ff' } }), rt.dialogue(this.lines('return_ready'))])
     rt.setControlLocked(false)
     this.busy = false
   }
@@ -774,6 +829,7 @@ export class ExpoStage implements Stage {
     this.busy = true
     rt.setControlLocked(true)
     this.michi.setPose('wave')
+    this.visitors.wave(this.who.senior, 4)
     await rt.dialogue(this.lines('return_leave'))
     rt.oreGlow(2)
     rt.setControlLocked(false)
@@ -810,9 +866,12 @@ export class ExpoStage implements Stage {
 
   // ---------------------------------------------------------------- F
 
-  private nearNpc(rt: StageRuntime): 'michi' | 'staff' | 'parents' | null {
+  private nearNpc(rt: StageRuntime): 'michi' | 'staff' | 'parents' | 'senior' | 'plaque' | 'mirai' | null {
     const p = rt.player.position
     if (this.michi.root.visible && this.dist2(p, this.michi.root.position) < 2.8 && Math.abs(p.y - this.michi.root.position.y) < 2) return 'michi'
+    if (this.visitors.isVisible(this.who.senior) && this.dist2(p, this.visitors.position(this.who.senior)) < 2.4) return 'senior'
+    if (this.dist2(p, PLAQUE_AT) < 2.0) return 'plaque'
+    if (this.mirai.visible && this.dist2(p, MIRAI_AT) < 2.4) return 'mirai'
     if (this.dist2(p, this.visitors.position(this.who.staff)) < 2.4) return 'staff'
     if (this.dist2(p, this.visitors.position(this.who.mother)) < 2.4 || this.dist2(p, this.visitors.position(this.who.father)) < 2.4) return 'parents'
     return null
@@ -844,6 +903,18 @@ export class ExpoStage implements Stage {
         this.staffAsked = true
         void rt.dialogue(this.lines('staff_ask'))
       } else void rt.dialogue(this.lines('staff_wait'))
+      return true
+    }
+    if (n === 'senior') {
+      void rt.dialogue(this.lines('senior_talk'))
+      return true
+    }
+    if (n === 'plaque') {
+      void rt.dialogue(this.lines(this.f(rt)('expo_anchor_cleared') ? 'plaque_after' : 'plaque_before'))
+      return true
+    }
+    if (n === 'mirai') {
+      void rt.dialogue(this.lines('mirai_restored'))
       return true
     }
     if (n === 'parents') {
@@ -898,6 +969,7 @@ export class ExpoStage implements Stage {
     if (this.nearRing(rt)) return [{ key: 'F', label: '光の輪で2086年へ帰る' }]
     const n = this.nearNpc(rt)
     if (n === 'staff' && this.carryingHat(rt)) return [{ key: 'F', label: '帽子を渡す' }]
+    if (n === 'plaque') return [{ key: 'F', label: '読む' }]
     if (n) return [{ key: 'F', label: '話す' }]
     return this.mobs?.canTalk(rt.player.position) ? [{ key: 'F', label: '話す' }] : null
   }
@@ -1120,6 +1192,7 @@ export class ExpoStage implements Stage {
     for (const id of SHARD_IDS) this.shards[id].update(dt, t)
     for (const r of Object.values(this.rifts)) r.update(dt, t)
     this.debris.update(dt)
+    this.lights.update(dt, t)
     this.ring.update(dt, rt.camera, t)
     // 糸は近いときだけ動かす（形を作り直すので）
     if (rt.player.position.distanceTo(X.ANCHOR_KNOT) < 60) this.thread.update(dt, t)

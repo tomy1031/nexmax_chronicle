@@ -238,3 +238,147 @@ export class AnchorThread {
     this.line.geometry.dispose()
   }
 }
+
+/**
+ * 帰っていく光：欠けを倒した・錨がほどけたときに、吸われていた可能性が光の粒になって持ち主のところへ帰る
+ * （docs/中盤シナリオとワールド構成_v1.md §1.5）。使い回しの光の玉が、ふわりと浮いてから弧を描いて飛ぶ。
+ */
+export class ReturnLights {
+  readonly root = new THREE.Group()
+  private readonly items: Array<{ m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; lift: number }> = []
+  private next = 0
+  private readonly tmp = new THREE.Vector3()
+
+  constructor(n = 14) {
+    const geo = new THREE.SphereGeometry(0.16, 12, 8)
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe2a0').multiplyScalar(2.4), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
+      const m = new THREE.Mesh(geo, mat)
+      m.visible = false
+      m.frustumCulled = false
+      this.root.add(m)
+      this.items.push({ m, from: new THREE.Vector3(), to: new THREE.Vector3(), t: -1, dur: 1, lift: 2 })
+    }
+  }
+
+  /** at から to へ（to が遠ければ空へ消えていく） */
+  send(at: THREE.Vector3, to: THREE.Vector3, delay = 0): void {
+    const it = this.items[this.next]
+    this.next = (this.next + 1) % this.items.length
+    it.from.copy(at)
+    it.to.copy(to)
+    it.t = -delay
+    it.dur = Math.min(3.2, 1.2 + at.distanceTo(to) / 18)
+    it.lift = 1.5 + Math.random() * 1.5
+    it.m.visible = false
+  }
+
+  update(dt: number, t: number): void {
+    for (const it of this.items) {
+      if (it.t === -1 && !it.m.visible) continue
+      it.t += dt
+      if (it.t < 0) continue
+      const u = Math.min(1, it.t / it.dur)
+      const e = u * u * (3 - 2 * u)
+      this.tmp.lerpVectors(it.from, it.to, e)
+      this.tmp.y += Math.sin(Math.PI * u) * (it.lift + it.from.distanceTo(it.to) * 0.15)
+      it.m.position.copy(this.tmp)
+      it.m.visible = true
+      const mat = it.m.material as THREE.MeshBasicMaterial
+      mat.opacity = Math.min(1, it.t * 4) * (1 - Math.max(0, (u - 0.8) / 0.2))
+      it.m.scale.setScalar(1 + Math.sin(t * 12 + it.from.x) * 0.15)
+      if (u >= 1) {
+        it.t = -1
+        it.m.visible = false
+      }
+    }
+  }
+}
+
+/** 元に戻った展示ロボット「ミライ号」（錨をほどいたあと、電気の館の入口で来場者にあいさつしている） */
+export function buildMiraiFigure(): THREE.Group {
+  const g = new THREE.Group()
+  const silver = new THREE.MeshStandardMaterial({ color: '#d6dce4', roughness: 0.3, metalness: 0.75 })
+  const dark = new THREE.MeshStandardMaterial({ color: '#3a4250', roughness: 0.5, metalness: 0.4 })
+  const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color('#7fe8ff').multiplyScalar(1.8), toneMapped: false })
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, sx = 1, sy = sx, sz = sx) => {
+    const o = new THREE.Mesh(geo, m)
+    o.position.set(x, y, z)
+    o.scale.set(sx, sy, sz)
+    o.castShadow = true
+    g.add(o)
+    return o
+  }
+  add(new THREE.CylinderGeometry(0.42, 0.5, 1.0, 20), silver, 0, 0.75, 0)
+  add(new THREE.CylinderGeometry(0.5, 0.55, 0.25, 20), dark, 0, 0.12, 0)
+  add(new THREE.SphereGeometry(0.36, 20, 14), silver, 0, 1.55, 0)
+  add(new THREE.BoxGeometry(0.42, 0.08, 0.04), glow, 0, 1.58, -0.33)
+  for (let i = 0; i < 3; i++) add(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12), glow, -0.14 + i * 0.14, 0.95, -0.44).rotation.x = Math.PI / 2
+  for (const s of [-1, 1]) {
+    add(new THREE.CapsuleGeometry(0.08, 0.5, 3, 8), dark, s * 0.56, 0.85, 0).rotation.z = s * 0.25
+    add(new THREE.CylinderGeometry(0.02, 0.02, 0.4, 6), dark, s * 0.2, 1.95, 0).rotation.z = s * -0.35
+    add(new THREE.SphereGeometry(0.05, 8, 6), glow, s * 0.27, 2.14, 0)
+  }
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 10), new THREE.MeshStandardMaterial({ color: '#cfe6ff', roughness: 0.05, transparent: true, opacity: 0.3 })).translateY(1.6))
+  return g
+}
+
+/** 展示案内の板（設計者の名前が消えている／戻っている、の 2 枚を切り替える） */
+export class Plaque {
+  readonly root = new THREE.Group()
+  private readonly before: THREE.Mesh
+  private readonly after: THREE.Mesh
+
+  constructor() {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8), new THREE.MeshStandardMaterial({ color: '#c9ced4', metalness: 0.7, roughness: 0.35 }))
+    post.position.y = 0.55
+    post.castShadow = true
+    this.root.add(post)
+    this.before = this.board(null)
+    this.after = this.board('北條')
+    this.root.add(this.before, this.after)
+    this.setNamed(false)
+  }
+
+  private board(name: string | null): THREE.Mesh {
+    const W = 512
+    const H = 340
+    const cv = document.createElement('canvas')
+    cv.width = W
+    cv.height = H
+    const g = cv.getContext('2d') as CanvasRenderingContext2D
+    g.fillStyle = '#f4f1ea'
+    g.fillRect(0, 0, W, H)
+    g.fillStyle = '#f07a2a'
+    g.fillRect(0, 0, W, 70)
+    g.fillStyle = '#fff'
+    g.font = '800 44px "M PLUS Rounded 1c", "Hiragino Sans", sans-serif'
+    g.textBaseline = 'middle'
+    g.fillText('ミライ号', 24, 37)
+    g.fillStyle = '#24345e'
+    g.font = '700 26px "M PLUS Rounded 1c", "Hiragino Sans", sans-serif'
+    const lines = ['毎朝「おはようございます」と', 'あいさつし、今日の予定を', '読み上げる家庭用ロボットの試作']
+    lines.forEach((l, i) => g.fillText(l, 24, 112 + i * 40))
+    g.font = '700 26px "M PLUS Rounded 1c", "Hiragino Sans", sans-serif'
+    g.fillText('設計：', 24, 290)
+    if (name) g.fillText(`${name}（電気の館 技術班）`, 104, 290)
+    else {
+      // 名前の欄だけ、インクが抜けたように白い
+      g.fillStyle = 'rgba(255,255,255,0.95)'
+      g.fillRect(100, 270, 160, 40)
+      g.fillStyle = '#24345e'
+      g.fillText('（電気の館 技術班）', 268, 290)
+    }
+    const tex = new THREE.CanvasTexture(cv)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }))
+    m.position.y = 1.35
+    m.rotation.x = -0.2
+    return m
+  }
+
+  setNamed(on: boolean): void {
+    this.before.visible = !on
+    this.after.visible = on
+  }
+}

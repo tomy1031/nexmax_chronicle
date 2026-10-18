@@ -36,6 +36,28 @@ export const STORY_BOOL_FLAGS = [
   "try_escape", // 2086年 4章③：ソラと町の外へ出ようとしたが、広場へ戻された
   "try_confront", // 2086年 4章④：夜、空の存在にクローを撃ったが、すり抜けた
   "confided", // 2086年 5章：ソラに繰り返しを打ち明け、「信じるよ」と言ってもらった（記録の石標へ）
+  // 中盤（docs/中盤シナリオとワールド構成_v1.md）9章 2086年・10章 1970年 万博（stages/expo1970/story1970.ts）
+  "compass_built", // 2086年 9章：ソラが IDO の羅針盤を作り、針が「1970年・万博」に振れた
+  "expo_arrived", // 1970年：万博の広場に着いた（到着の場面を見た）
+  "expo_first_fight", // 1970年：広場の最初の欠けを追い払った
+  "met_michi", // 1970年：佐伯ミチと会い、ノート（消えていく展示）の話を聞いた
+  "expo_bench", // 1970年：電気の館の作業台で、試作の腕に足りない部品 3 つの話を聞いた
+  "expo_part_ropeway", // 1970年：放電コイル（ロープウェイの向こうの鉄塔）
+  "expo_part_bamboo", // 1970年：共鳴ばね（日本庭園の池の小島）
+  "expo_part_swarm", // 1970年：試作の爪（工事中の区画の欠けの群れ）
+  "impact_claw_got", // 1970年：ミチが左腕に「はじくNMClaw」を組み上げた
+  "expo_wall_broken", // 1970年：未来の塔の前のひび割れた壁を割った
+  "expo_boss_down", // 1970年：塔の上の錨の番人（ミライ号）を止めた
+  "expo_anchor_cleared", // 1970年：錨の糸をほどいた（2086年へ帰れる）
+  "expo_farewell", // 1970年：ミチと別れた（ノートの最後のページの絵）
+  "expo_shard_capsule", // 1970年 時のかけら：大屋根の吊り展示の上
+  "expo_shard_ropeway", // 1970年 時のかけら：鉄塔の機械室の屋根
+  "expo_shard_bamboo", // 1970年 時のかけら：竹やぶの奥の祠
+  "expo_shard_store", // 1970年 時のかけら：電気の館の裏の倉庫（ひび割れた壁の奥）
+  "expo_shard_tower", // 1970年 時のかけら：未来の塔の 2 段目の裏
+  "expo_child_saved", // 1970年 寄り道：竹林の入口で欠けに囲まれた迷子の子を、親のところへ帰した
+  "expo_hat_returned", // 1970年 寄り道：ロープウェイの係員の帽子を取ってあげた
+  "expo_reported", // 2086年 11章の前：1970年の錨をほどいたことをソラに話した
 ] as const;
 
 export type StoryBoolFlag = (typeof STORY_BOOL_FLAGS)[number];

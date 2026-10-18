@@ -52,6 +52,8 @@ export class PlayerController {
   private readonly lastSafe = new THREE.Vector3()
   /** 水などに落ちて戻したとき */
   onRespawn: (() => void) | null = null
+  /** 回避・踏み込み・吹き飛ばされ（combat/）：t 秒のあいだ水平の速さを固定する */
+  private readonly burst = { x: 0, z: 0, t: 0 }
 
   constructor(phys: Physics, start: THREE.Vector3) {
     const R = phys.R
@@ -79,7 +81,21 @@ export class PlayerController {
     this.position.copy(p)
     this.velocity.set(0, 0, 0)
     this.momentum = false
+    this.burst.t = 0
     if (facing !== undefined) this.facing = facing
+  }
+
+  /** 回避・踏み込み・吹き飛ばされ：seconds 秒のあいだ水平の速さを (vx, vz) にする（移動の入力より優先。重力と壁は効く） */
+  burstMove(vx: number, vz: number, seconds: number): void {
+    this.burst.x = vx
+    this.burst.z = vz
+    this.burst.t = seconds
+    this.momentum = false
+  }
+
+  /** 回避・踏み込みの途中か */
+  get bursting(): boolean {
+    return this.burst.t > 0
   }
 
   /** 最後に立っていた安全な場所を上書き（チェックポイント） */
@@ -136,7 +152,11 @@ export class PlayerController {
       dx = (fwdX * mf + rgtX * mx) / Math.max(1, len)
       dz = (fwdZ * mf + rgtZ * mx) / Math.max(1, len)
     }
-    if (this.momentum && !this.grounded) {
+    if (this.burst.t > 0) {
+      this.burst.t -= step
+      this.velocity.x = this.burst.x
+      this.velocity.z = this.burst.z
+    } else if (this.momentum && !this.grounded) {
       // 離脱の勢いを保つ：入力があるときだけゆるやかに向きを変える
       const drag = Math.max(0, 1 - T.momentumDrag * step)
       this.velocity.x *= drag
@@ -181,7 +201,9 @@ export class PlayerController {
     }
     this.position.set(next.x, next.y - FOOT, next.z)
     this.speed = Math.hypot(this.velocity.x, this.velocity.z)
-    if (this.speed > 0.2 && len > 0) this.turnToward(this.velocity.x, this.velocity.z, step, 12)
+    if (this.burst.t > 0) {
+      // 向きは攻撃・回避の側（combat/）が決める
+    } else if (this.speed > 0.2 && len > 0) this.turnToward(this.velocity.x, this.velocity.z, step, 12)
     else if (this.speed > 0.2 && this.momentum) this.turnToward(this.velocity.x, this.velocity.z, step, 6)
     if (this.grounded) this.lastSafe.copy(this.position)
     if (this.position.y < T.killY) {

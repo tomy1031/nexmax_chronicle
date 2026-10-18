@@ -30,7 +30,7 @@ export type MobTalkOptions = {
   table: MobTable
   speakers: MobSpeakerDef[]
   /** 色の組（'2086' 既定・'2026'・'1726'） */
-  theme?: '2086' | '2026' | '1726'
+  theme?: '2086' | '2026' | '1726' | '1970'
   config?: Partial<MobDirectorConfig>
 }
 

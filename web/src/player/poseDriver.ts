@@ -4,7 +4,7 @@
 import type { Character, Pose } from '../world/characters'
 import type { ClawTargetType, WirePhase } from './clawLogic'
 
-export type RichPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold'
+export type RichPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'punch' | 'punchL' | 'hurt'
 type LegacyPose = 'idle' | 'walk' | 'hold'
 
 export type PoseInput = {
@@ -20,6 +20,8 @@ export type PoseInput = {
   landTimer: number
   /** 空振りの射出など、腕を突き出して見せる残り時間 */
   fireTimer: number
+  /** 戦闘（combat/）が決めるポーズ：攻撃・回避・被弾（無ければ null） */
+  combat?: 'punch' | 'punchL' | 'dash' | 'hurt' | null
 }
 
 export function choosePose(s: PoseInput): RichPose {
@@ -35,6 +37,7 @@ export function choosePose(s: PoseInput): RichPose {
     case 'miss':
       return 'fire'
   }
+  if (s.combat) return s.combat
   if (s.fireTimer > 0) return 'fire'
   if (!s.grounded) return s.vy > 0.5 ? 'jump' : 'fall'
   if (s.landTimer > 0) return 'land'
@@ -50,9 +53,12 @@ export function legacyPose(p: RichPose, speed: number): LegacyPose {
     case 'pulled':
     case 'fire':
     case 'hold':
+    case 'punch':
+    case 'punchL':
       return 'hold'
     case 'idle':
     case 'land':
+    case 'hurt':
       return 'idle'
     case 'jump':
     case 'fall':

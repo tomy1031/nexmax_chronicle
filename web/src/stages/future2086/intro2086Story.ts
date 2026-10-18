@@ -44,6 +44,11 @@ export type IntroStep =
   | 'resonance'
   | 'travel'
   | 'returned'
+  // 中盤（docs/中盤シナリオとワールド構成_v1.md）：9章 羅針盤 → 1970年 → 錨をほどいて帰ってきた報告
+  | 'compass'
+  | 'compass_travel'
+  | 'expo_back'
+  | 'midgame'
 
 export const INTRO_STEPS: readonly IntroStep[] = [
   'opening',
@@ -73,6 +78,10 @@ export const INTRO_STEPS: readonly IntroStep[] = [
   'resonance',
   'travel',
   'returned',
+  'compass',
+  'compass_travel',
+  'expo_back',
+  'midgame',
 ]
 
 export type DialogueLine = { speaker: string; text: string }
@@ -118,7 +127,7 @@ export type IntroEvent =
   | { kind: 'confront_shot' }
   | { kind: 'tick'; dt: number }
 
-export type IntroFlag = 'festival_morning_seen' | 'lens_installed' | 'orum_seen' | 'ido_exhibit_used' | 'loop_noticed' | 'try_cancel' | 'try_alarm' | 'try_escape' | 'try_confront' | 'confided'
+export type IntroFlag = 'festival_morning_seen' | 'lens_installed' | 'orum_seen' | 'ido_exhibit_used' | 'loop_noticed' | 'try_cancel' | 'try_alarm' | 'try_escape' | 'try_confront' | 'confided' | 'compass_built' | 'expo_reported'
 
 export const ATTEMPT_FLAG: Record<Attempt, IntroFlag> = { cancel: 'try_cancel', alarm: 'try_alarm', escape: 'try_escape', confront: 'try_confront' }
 
@@ -148,6 +157,8 @@ export type IntroEffect =
   | { kind: 'flag'; name: IntroFlag }
   | { kind: 'loop_count'; value: number }
   | { kind: 'travel'; to: '2026'; spawn: 'present_start'; cause: 'ido_exhibit' }
+  /** 9章：羅針盤の針が振れた記録へ（1970年） */
+  | { kind: 'travel'; to: '1970'; spawn: 'arrive'; cause: 'ido_compass' }
   | { kind: 'focus'; target: FocusTarget; short?: boolean }
   /** 1-0 の回想（終わったら fx_done 'flashback'） */
   | { kind: 'flashback' }
@@ -251,6 +262,10 @@ export const INTRO_OBJECTIVES: Record<IntroStep, Objective> = {
   resonance: { title: '……鉱石が反応している！', sub: '' },
   travel: { title: '光の穴の向こうへ', sub: '' },
   returned: { title: 'ソラに会いに行こう', sub: '時代博覧祭の IDO 展示へ' },
+  compass: { title: '羅針盤が指す「1970年」の石標を読もう', sub: '展示の前の石標で F：QR を読む' },
+  compass_travel: { title: '……鉱石が反応している！', sub: '' },
+  expo_back: { title: 'ソラに1970年のことを話そう', sub: '時代博覧祭の IDO 展示へ' },
+  midgame: { title: '羅針盤の針が動くのを待とう', sub: '（つづく）次の錨は、まだ眠っている' },
 }
 
 export const INTRO_HINTS: Record<IntroStep, KeyHint[]> = {
@@ -292,10 +307,18 @@ export const INTRO_HINTS: Record<IntroStep, KeyHint[]> = {
   resonance: [],
   travel: [],
   returned: [],
+  compass: [],
+  compass_travel: [],
+  expo_back: [],
+  midgame: [],
 }
 
 /** 保存されたフラグから始める段階（ロード後に同じところから） */
 export function introStartStep(f: (name: string) => boolean): IntroStep {
+  // 中盤：1970年の錨をほどいた → ソラに話した／羅針盤ができた
+  if (f('expo_reported')) return 'midgame'
+  if (f('expo_anchor_cleared')) return 'expo_back'
+  if (f('compass_built')) return 'compass'
   // 2026年・1726年まで進んでいれば（途中から始めた場合も）、戻ってきた後の段階にする。回想からやり直さない
   if (f('ido_exhibit_used') || f('met_saeki') || f('ido_qr_used') || f('fixture_made')) return 'returned'
   if (f('confided')) return 'records'
@@ -317,7 +340,12 @@ export function introSpawn(step: IntroStep): string {
     case 'confide':
       return 'booth'
     case 'returned':
+    case 'expo_back':
+    case 'midgame':
       return 'arrive_from_2026'
+    case 'compass':
+    case 'compass_travel':
+      return 'booth'
     case 'night':
     case 'night_walk':
     case 'night_orum':
@@ -371,7 +399,7 @@ export class Intro2086Story {
   /** この朝、風船を取ってあげると選んだ（まだ返していない） */
   balloonTask = false
   onEffect: ((e: IntroEffect) => void) | null = null
-  onRequestTravel: ((era: '2026', spawn: 'present_start') => void) | null = null
+  onRequestTravel: ((era: '2026' | '1970', spawn: string) => void) | null = null
   private readonly table: Readonly<Record<string, unknown>>
   private pendingDialogue: string | null = null
   private choiceOpen = false
@@ -464,7 +492,8 @@ export class Intro2086Story {
       this.step === 'loop' ||
       this.step === 'wake' ||
       this.step === 'resonance' ||
-      this.step === 'travel'
+      this.step === 'travel' ||
+      this.step === 'compass_travel'
     )
   }
 
@@ -473,7 +502,7 @@ export class Intro2086Story {
     if (this.busy) return false
     switch (target) {
       case 'sora':
-        return MORNING_STEPS.includes(this.step) || this.step === 'records' || this.step === 'returned'
+        return MORNING_STEPS.includes(this.step) || this.step === 'records' || this.step === 'returned' || this.step === 'compass' || this.step === 'expo_back' || this.step === 'midgame'
       case 'antenna':
         return this.step === 'fix_antenna'
       case 'hq':
@@ -481,7 +510,7 @@ export class Intro2086Story {
       case 'stone_1970':
       case 'stone_1726':
       case 'stone_2026':
-        return this.step === 'records'
+        return this.step === 'records' || this.step === 'compass'
       case 'parts_table':
         return this.step === 'talk_sora' || this.step === 'go_booth' || this.step === 'fetch_lens'
       case 'ido_exhibit':
@@ -515,9 +544,10 @@ export class Intro2086Story {
   /** 段階の開始（ロード直後・ステージ開始時に 1 回） */
   begin(): void {
     this.emit({ kind: 'step', step: this.step })
-    const spot: SoraSpot = this.step === 'records' || this.step === 'returned' ? 'exhibit' : isNightStep(this.step) ? 'night' : 'booth'
+    const atExhibit = this.step === 'records' || this.step === 'returned' || this.step === 'compass' || this.step === 'expo_back' || this.step === 'midgame'
+    const spot: SoraSpot = atExhibit ? 'exhibit' : isNightStep(this.step) ? 'night' : 'booth'
     this.emit({ kind: 'sora', spot })
-    this.emit({ kind: 'exhibit', mode: this.step === 'records' || this.step === 'returned' ? 'idle' : 'visitor' })
+    this.emit({ kind: 'exhibit', mode: atExhibit ? 'idle' : 'visitor' })
     if (this.step === 'opening') {
       this.emit({ kind: 'lock', on: true })
       this.emit({ kind: 'flashback' })
@@ -743,6 +773,11 @@ export class Intro2086Story {
       case 'stone_1970':
       case 'stone_1726':
       case 'stone_2026': {
+        // 9章：羅針盤の針が指すのは 1970年の石標だけ
+        if (this.step === 'compass' && target !== 'stone_1970') {
+          this.say('compass_other_stone')
+          return true
+        }
         const rec = RECORD_OF_STONE[target]
         this.qrBusy = true
         this.pendingRecord = rec
@@ -816,6 +851,15 @@ export class Intro2086Story {
         return true
       case 'returned':
         this.say('return_sora')
+        return true
+      case 'compass':
+        this.say('sora_hint_compass')
+        return true
+      case 'expo_back':
+        this.say('expo_back_sora')
+        return true
+      case 'midgame':
+        this.say('midgame_sora')
         return true
     }
     this.say('sora_idle')
@@ -1001,6 +1045,17 @@ export class Intro2086Story {
       this.say('escape_fail')
       return true
     }
+    if (fx === 'qr' && this.step === 'compass' && this.pendingRecord) {
+      // 羅針盤の針が震え、鉱石が 1970年の記録に反応する
+      this.pendingRecord = null
+      this.qrBusy = false
+      this.go('compass_travel')
+      this.emit({ kind: 'lock', on: true })
+      this.emit({ kind: 'ore_glow', level: 2.6 })
+      this.emit({ kind: 'rift', open: true })
+      this.say('compass_resonance')
+      return true
+    }
     if (fx === 'qr' && this.step === 'records' && this.pendingRecord) {
       const rec = this.pendingRecord
       this.pendingRecord = null
@@ -1162,6 +1217,30 @@ export class Intro2086Story {
       case 'qr_expo1970':
       case 'qr_edo1726':
         if (this.step === 'records') this.emit({ kind: 'lock', on: false })
+        return true
+      case 'return_sora':
+        // 9章：錨の話と、IDO の羅針盤
+        if (this.step === 'returned') this.say('compass_build')
+        return true
+      case 'compass_build':
+        if (this.step === 'returned') {
+          this.emit({ kind: 'flag', name: 'compass_built' })
+          this.go('compass')
+          this.emit({ kind: 'save' })
+        }
+        return true
+      case 'compass_resonance':
+        if (this.step === 'compass_travel') {
+          this.emit({ kind: 'travel', to: '1970', spawn: 'arrive', cause: 'ido_compass' })
+          this.onRequestTravel?.('1970', 'arrive')
+        }
+        return true
+      case 'expo_back_sora':
+        if (this.step === 'expo_back') {
+          this.emit({ kind: 'flag', name: 'expo_reported' })
+          this.go('midgame')
+          this.emit({ kind: 'save' })
+        }
         return true
       case 'ido_resonance':
         if (this.step === 'resonance') {

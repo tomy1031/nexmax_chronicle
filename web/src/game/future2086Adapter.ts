@@ -4,6 +4,7 @@
 // ・物語：Intro2086Story（導入編 1〜5 章。演出 IntroEffect を受け取って実行し、会話・選択・演出の終わりを送り返す）
 //   新しい演出（回想・レンズの受け渡し・アンテナ・試み・QR など）とソラの動きは IntroDirector（stages/future2086/introDirector2086.ts）
 // ・IDO 展示で 2026年へ：story.onRequestTravel → rt.travel({ to: '2026', cause: 'ido_exhibit' })
+// ・中盤 9章：ソラの羅針盤で 1970年へ：rt.travel({ to: '1970', cause: 'ido_compass' })
 // 読み込みに失敗したときは仮の広場（PlaceholderFutureStage）を使う。
 import * as THREE from 'three'
 import { EDO_SKY } from '../render/sky'
@@ -269,8 +270,9 @@ class Future2086Stage implements Stage {
     document.body.appendChild(this.curtain)
     this.intro = new this.m.introM.IntroDirector(this.fs, this.props, this.sora, this.story, this.ui, rt.camera)
     this.story.onEffect = (e) => this.onEffect(e, rt)
-    this.story.onRequestTravel = () => {
-      const v = rt.travel({ to: '2026', cause: 'ido_exhibit', spawn: 'present_start' })
+    this.story.onRequestTravel = (era, spawn) => {
+      // 2026年：IDO 展示／1970年：羅針盤（中盤 9章）
+      const v = era === '1970' ? rt.travel({ to: '1970', cause: 'ido_compass', spawn }) : rt.travel({ to: '2026', cause: 'ido_exhibit', spawn: 'present_start' })
       if (!v.ok) rt.hud.toast(v.reason)
     }
     this.tear = new this.m.tearM.SkyTear(this.fs.root)

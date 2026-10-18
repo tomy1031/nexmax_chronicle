@@ -1,0 +1,863 @@
+// 戦闘（docs/中盤シナリオとワールド構成_v1.md §4.1）。シェルがステージごとに 1 つ作り、ステージは rt.combat で敵を出す。
+// ・K：3 段の連続攻撃（近くの敵へ向き直って踏み込む）。Shift（戦闘中）：回避
+// ・敵（欠け）：combatLogic の EnemyBrain が行動を決め、ここで動かす（地面に沿って歩く・壁で止まる・住みかへ戻る）
+// ・クロー：敵は enemy_pull（小さい敵・盾を手元へ）／enemy_zip（大きい敵へ飛び込んで蹴る）の対象としてクローに並ぶ
+// ・はじくNMClaw（左腕）：前方へ電気の衝撃。敵をよろけさせ、盾・装甲を割り、ひび割れた壁（breakable）を壊す
+// ・体力 0：暗転してチェックポイントへ戻り、全回復。敵は住みかへ戻って元どおり
+// 敵の当たり判定は物理に入れない（地面と壁はレイで調べる）。見た目・DOM はここで作って dispose() で解放する。
+import * as THREE from 'three'
+import type { Physics } from '../player/physics'
+import type { PlayerController } from '../player/controller'
+import type { ClawSystem } from '../player/clawSystem'
+import type { ClawTargetDef, WireEvent } from '../player/clawLogic'
+import type { Hud } from '../ui/hud'
+import { ATTACK_STEPS, AttackCombo, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind } from './combatLogic'
+import { EnemyModel, type EnemyStyle } from './enemyModels'
+import './combat.css'
+
+const v3 = () => new THREE.Vector3()
+const PLAYER_R = 0.35
+/** これより遠い敵は描かず、住みかで待っているなら考えるのも止める（m） */
+const FAR_HIDE = 55
+
+export type SpawnOptions = {
+  /** 向き（モデルの正面 -Z を回す角度） */
+  yaw?: number
+  /** 住みかから離れてよい距離（m） */
+  leash?: number
+  /** ステージが使う印（倒した数を数えるなど） */
+  tag?: string
+  style?: EnemyStyle
+  /** 体力の上書き（ボスなど） */
+  hp?: number
+  /** 大きさの倍率（見た目と当たり） */
+  scale?: number
+  /** 出てくるまで隠す（appear() で出す） */
+  hidden?: boolean
+  /** 装甲（はじくで割れるまで攻撃が通らない。欠け重の形だけ見た目が付く） */
+  armored?: boolean
+}
+
+export type EnemyHandle = {
+  readonly id: string
+  readonly kind: EnemyKind
+  readonly tag: string
+  readonly brain: EnemyBrain
+  readonly model: EnemyModel
+  readonly pos: THREE.Vector3
+  readonly maxHp: number
+  yaw: number
+  readonly alive: boolean
+}
+
+export type Breakable = {
+  id: string
+  pos: THREE.Vector3
+  radius: number
+  enabled: boolean
+  /** はじくで壊れた */
+  onBreak: () => void
+}
+
+type Enemy = EnemyHandle & {
+  def: ClawTargetDef
+  home: THREE.Vector3
+  homeYaw: number
+  leash: number
+  scale: number
+  knock: THREE.Vector3
+  /** クローで引き寄せている（from から手元へ） */
+  yank: { from: THREE.Vector3; to: THREE.Vector3 } | null
+  /** 盾をはがしている途中（盾が手元へ飛んでくる） */
+  shieldFly: { obj: THREE.Object3D; from: THREE.Vector3; t: number; dropT: number } | null
+  struck: boolean
+  dyingT: number
+  hidden: boolean
+  removed: boolean
+}
+
+/** 小さな破片・火花（使い回し） */
+class Sparks {
+  readonly mesh: THREE.InstancedMesh
+  private readonly n: number
+  private readonly life: Float32Array
+  private readonly vel: Float32Array
+  private readonly pos: Float32Array
+  private next = 0
+  private readonly m = new THREE.Matrix4()
+  private readonly q = new THREE.Quaternion()
+  private readonly s = new THREE.Vector3()
+  private readonly p = new THREE.Vector3()
+  private readonly c = new THREE.Color()
+
+  constructor(n = 96) {
+    this.n = n
+    this.mesh = new THREE.InstancedMesh(new THREE.TetrahedronGeometry(0.07), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), n)
+    this.mesh.frustumCulled = false
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.life = new Float32Array(n)
+    this.vel = new Float32Array(n * 3)
+    this.pos = new Float32Array(n * 3)
+    for (let i = 0; i < n; i++) {
+      this.mesh.setColorAt(i, this.c.set(1, 1, 1))
+      this.m.makeScale(0, 0, 0)
+      this.mesh.setMatrixAt(i, this.m)
+    }
+  }
+
+  burst(at: THREE.Vector3, color: THREE.ColorRepresentation, count: number, speed: number, up = 2): void {
+    this.c.set(color).multiplyScalar(2.5)
+    for (let k = 0; k < count; k++) {
+      const i = this.next
+      this.next = (this.next + 1) % this.n
+      this.life[i] = 0.35 + Math.random() * 0.35
+      const a = Math.random() * Math.PI * 2
+      const r = speed * (0.4 + Math.random() * 0.6)
+      this.vel[i * 3] = Math.cos(a) * r
+      this.vel[i * 3 + 1] = up * (0.5 + Math.random())
+      this.vel[i * 3 + 2] = Math.sin(a) * r
+      this.pos[i * 3] = at.x
+      this.pos[i * 3 + 1] = at.y
+      this.pos[i * 3 + 2] = at.z
+      this.mesh.setColorAt(i, this.c)
+    }
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
+  }
+
+  update(dt: number): void {
+    let any = false
+    for (let i = 0; i < this.n; i++) {
+      if (this.life[i] <= 0) continue
+      any = true
+      this.life[i] -= dt
+      this.vel[i * 3 + 1] -= 9 * dt
+      this.pos[i * 3] += this.vel[i * 3] * dt
+      this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt
+      this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt
+      const k = Math.max(0, Math.min(1, this.life[i] * 3))
+      this.p.set(this.pos[i * 3], this.pos[i * 3 + 1], this.pos[i * 3 + 2])
+      this.q.setFromAxisAngle(this.s.set(0.3, 1, 0.2).normalize(), this.life[i] * 20)
+      this.m.compose(this.p, this.q, this.s.setScalar(k))
+      this.mesh.setMatrixAt(i, this.m)
+    }
+    if (any) this.mesh.instanceMatrix.needsUpdate = true
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose()
+    ;(this.mesh.material as THREE.Material).dispose()
+  }
+}
+
+export type CombatHost = {
+  phys: Physics
+  player: PlayerController
+  claw: ClawSystem
+  hud: Hud
+  ui: HTMLElement | null
+  /** 画面の揺れ（シェルの rt.shake） */
+  shake(amount: number): void
+}
+
+export class CombatSystem {
+  /** このステージで戦闘を使うか（false の間は K は案内だけ、敵は出せるが襲ってこない） */
+  enabled = false
+  /** 敵が襲ってこない（会話・演出の間。ステージが切り替える） */
+  passive = false
+  readonly group = new THREE.Group()
+  readonly health = new PlayerHealth()
+  /** 体力 0 のときに戻る場所（ステージが設定。無ければ到着地点） */
+  checkpoint: THREE.Vector3 | null = null
+  checkpointYaw = 0
+  /** 敵を倒した（倒れて消えたとき） */
+  onEnemyDefeated: ((e: EnemyHandle) => void) | null = null
+  /** 体力 0 から復帰した */
+  onRespawn: (() => void) | null = null
+  private readonly host: CombatHost
+  private readonly enemies: Enemy[] = []
+  private readonly byDef = new Map<ClawTargetDef, Enemy>()
+  private readonly breakables: Breakable[] = []
+  private readonly combo = new AttackCombo()
+  private readonly dodgeState = new Dodge()
+  private readonly sparks = new Sparks()
+  private readonly ring: THREE.Mesh
+  private ringT = -1
+  private hurtT = 0
+  private impactT = 0
+  private impactCd = 0
+  private impactFired = false
+  /** 当たった瞬間の止まり（実時間の秒） */
+  private hitstop = 0
+  private downT = -1
+  private seq = 0
+  private clock = 0
+  private armorHintAt = -99
+  private readonly fade: HTMLDivElement
+  private bossBar: { el: HTMLDivElement; fill: HTMLDivElement; e: Enemy } | null = null
+  private readonly start = v3()
+  private readonly tmp = v3()
+  private readonly tmp2 = v3()
+  private readonly down = new THREE.Vector3(0, -1, 0)
+
+  constructor(host: CombatHost) {
+    this.host = host
+    this.group.name = 'combat'
+    this.group.add(this.sparks.mesh)
+    this.ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1, 0.08, 6, 40),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 2.4, 3.4), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+    )
+    this.ring.visible = false
+    this.group.add(this.ring)
+    this.start.copy(host.player.position)
+    this.fade = document.createElement('div')
+    this.fade.className = 'combat-fade'
+    ;(host.ui ?? document.body).appendChild(this.fade)
+  }
+
+  // ---------------------------------------------------------------- ステージから
+
+  /** 敵を出す */
+  spawn(kind: EnemyKind, pos: THREE.Vector3, o: SpawnOptions = {}): EnemyHandle {
+    const id = `kake_${kind}_${++this.seq}`
+    const brain = new EnemyBrain(kind, this.seq)
+    if (o.hp) brain.hp = o.hp
+    const model = new EnemyModel(kind, o.style)
+    const scale = o.scale ?? 1
+    model.baseScale = scale
+    model.root.scale.setScalar(scale)
+    if (o.armored) {
+      brain.setArmored(true)
+      model.setArmor(true)
+    }
+    model.root.position.copy(pos)
+    model.root.rotation.y = o.yaw ?? 0
+    model.root.visible = !o.hidden
+    this.group.add(model.root)
+    const s = brain.stats
+    const def: ClawTargetDef = {
+      id,
+      type: s.mass === 'heavy' ? 'enemy_zip' : 'enemy_pull',
+      label: s.mass === 'heavy' ? `${s.name}（飛び込む）` : brain.shield ? `${s.name}（盾をはがす）` : s.name,
+      point: pos.clone().add(new THREE.Vector3(0, model.chestY * scale, 0)),
+      radius: s.radius * scale + 0.15,
+      enabled: !o.hidden,
+      noLineOfSight: false,
+      range: 11,
+      landing: pos.clone(),
+    }
+    const e: Enemy = {
+      id,
+      kind,
+      tag: o.tag ?? '',
+      brain,
+      model,
+      pos: model.root.position,
+      maxHp: brain.hp,
+      get yaw() {
+        return model.root.rotation.y
+      },
+      set yaw(y: number) {
+        model.root.rotation.y = y
+      },
+      get alive() {
+        return brain.alive
+      },
+      def,
+      home: pos.clone(),
+      homeYaw: o.yaw ?? 0,
+      leash: o.leash ?? 14,
+      scale,
+      knock: v3(),
+      yank: null,
+      shieldFly: null,
+      struck: false,
+      dyingT: -1,
+      hidden: !!o.hidden,
+      removed: false,
+    }
+    this.enemies.push(e)
+    this.byDef.set(def, e)
+    this.host.claw.targets.push(def)
+    return e
+  }
+
+  /** 隠して出した敵を出す（ボスの登場など） */
+  appear(h: EnemyHandle): void {
+    const e = this.enemies.find((x) => x.id === h.id)
+    if (!e) return
+    e.hidden = false
+    e.model.root.visible = true
+    e.def.enabled = true
+    this.sparks.burst(this.tmp.copy(e.pos).setY(e.pos.y + 0.8), '#b04cff', 20, 4)
+  }
+
+  /** まだ生きている敵（tag で絞れる） */
+  alive(tag?: string): EnemyHandle[] {
+    return this.enemies.filter((e) => e.alive && !e.removed && (tag === undefined || e.tag === tag))
+  }
+
+  /** 演出で倒す（錨がほどけて欠けが消えるときなど）。倒れて消えたら onEnemyDefeated が呼ばれる */
+  kill(h: EnemyHandle): void {
+    const e = this.enemies.find((x) => x.id === h.id)
+    if (!e || !e.alive || e.removed) return
+    e.brain.armor = false
+    const res = e.brain.hurt(e.brain.hp + 99, 0, false)
+    if (res === 'killed') this.onEnemyHurt(e, res, 0, 0)
+  }
+
+  addBreakable(b: Breakable): void {
+    this.breakables.push(b)
+  }
+
+  setCheckpoint(p: THREE.Vector3, yaw = 0): void {
+    this.checkpoint = p.clone()
+    this.checkpointYaw = yaw
+  }
+
+  /** ボスの体力を画面の上に出す（null で消す） */
+  showBoss(h: EnemyHandle | null, name = ''): void {
+    this.bossBar?.el.remove()
+    this.bossBar = null
+    const e = h ? this.enemies.find((x) => x.id === h.id) : null
+    if (!e) return
+    const el = document.createElement('div')
+    el.className = 'combat-boss'
+    el.innerHTML = `<div class="cb-name"></div><div class="cb-bar"><div class="cb-fill"></div></div>`
+    ;(el.querySelector('.cb-name') as HTMLDivElement).textContent = name || e.brain.stats.name
+    ;(this.host.ui ?? document.body).appendChild(el)
+    this.bossBar = { el, fill: el.querySelector('.cb-fill') as HTMLDivElement, e }
+  }
+
+  // ---------------------------------------------------------------- 状態
+
+  /** 近くで敵が襲ってきている（回避・異次元拠点の判定） */
+  get inCombat(): boolean {
+    const p = this.host.player.position
+    return this.enemies.some((e) => e.alive && !e.hidden && e.brain.engaged && e.pos.distanceToSquared(p) < 15 * 15)
+  }
+
+  /** 体力 0 から戻る途中（操作を止める） */
+  get downed(): boolean {
+    return this.downT >= 0
+  }
+
+  /** 攻撃中は歩きを遅く（0〜1） */
+  get moveScale(): number {
+    if (this.downT >= 0) return 0
+    return this.combo.busy || this.impactT > 0 ? 0.25 : 1
+  }
+
+  /** 当たった瞬間の一瞬の止まり（シェルが dt に掛ける） */
+  get timeScale(): number {
+    return this.hitstop > 0 ? 0.08 : 1
+  }
+
+  /** 実時間で進めるもの（止まりの残り）。シェルが dt を縮める前に呼ぶ */
+  tickReal(dt: number): void {
+    this.hitstop = Math.max(0, this.hitstop - dt)
+  }
+
+  /** ネクマックスのポーズ（null なら通常どおり） */
+  poseHint(): 'punch' | 'punchL' | 'dash' | 'hurt' | null {
+    if (this.downT >= 0 || this.hurtT > 0) return 'hurt'
+    if (this.dodgeState.active) return 'dash'
+    if (this.impactT > 0) return 'punchL'
+    const s = this.combo.current
+    if (this.combo.busy && s) return s.hand === 'l' ? 'punchL' : 'punch'
+    return null
+  }
+
+  // ---------------------------------------------------------------- 操作
+
+  /** K */
+  attack(): void {
+    if (this.downT >= 0 || this.impactT > 0) return
+    const w = this.host.claw.wire.phase
+    if (w === 'zipping' || w === 'swinging' || w === 'holding' || w === 'carrying') return
+    for (const ev of this.combo.press()) this.onCombo(ev.kind, ev.kind === 'end' ? -1 : ev.step)
+  }
+
+  /** Shift を押した瞬間（戦闘中だけ）。dx, dz は入力の向き（ワールド） */
+  dodge(dx: number, dz: number): void {
+    const pl = this.host.player
+    if (this.downT >= 0 || pl.isExternal || !pl.grounded) return
+    if (!this.dodgeState.press(dx, dz, pl.facing)) return
+    this.combo.cancel()
+    const D = this.dodgeState
+    pl.burstMove(D.dirX * 11.5, D.dirZ * 11.5, 0.26)
+  }
+
+  /** はじくNMClaw（J。左腕で選んでいるとき）。前方へ衝撃 */
+  impact(): boolean {
+    if (this.downT >= 0 || this.impactCd > 0 || this.host.player.isExternal) return false
+    this.combo.cancel()
+    this.impactT = 0.42
+    this.impactCd = 0.75
+    this.impactFired = false
+    return true
+  }
+
+  // ---------------------------------------------------------------- クロー
+
+  onClawEvent(ev: WireEvent): void {
+    if (!('target' in ev)) return
+    const e = this.byDef.get(ev.target)
+    if (!e) return
+    const pl = this.host.player
+    switch (ev.kind) {
+      case 'connected':
+        if (ev.target.type === 'enemy_pull') {
+          if (e.brain.shield && e.model.shield) {
+            // 盾をはがす：盾だけが手元へ飛んでくる
+            const obj = e.model.shield
+            const wp = obj.getWorldPosition(v3())
+            const wq = obj.getWorldQuaternion(new THREE.Quaternion())
+            obj.removeFromParent()
+            obj.position.copy(wp)
+            obj.quaternion.copy(wq)
+            this.group.add(obj)
+            e.model.shield = null
+            e.shieldFly = { obj, from: wp.clone(), t: 0, dropT: -1 }
+            e.brain.dropShield()
+            e.def.label = e.brain.stats.name
+            this.sparks.burst(wp, '#ffb347', 10, 3)
+          } else {
+            e.brain.stun(1.4)
+            e.yank = { from: e.pos.clone(), to: v3() }
+          }
+        } else if (ev.target.type === 'enemy_zip') e.brain.stun(1.2)
+        break
+      case 'object_arrived':
+      case 'dropped':
+        if (e.yank) {
+          e.yank = null
+          this.sparks.burst(this.tmp.copy(e.pos).setY(e.pos.y + 0.4), '#c77dff', 8, 2.5)
+        }
+        if (e.shieldFly) e.shieldFly.dropT = 0
+        break
+      case 'arrived':
+        if (ev.target.type === 'enemy_zip') {
+          // 飛び込んで蹴る
+          const r = e.brain.hurt(2, 1.4, false)
+          this.onEnemyHurt(e, r, 4, 0.12)
+          this.tmp.subVectors(e.pos, pl.position).setY(0).normalize()
+          pl.burstMove(-this.tmp.x * 4, -this.tmp.z * 4, 0.16)
+          pl.velocity.y = 4.5
+        }
+        break
+    }
+  }
+
+  // ---------------------------------------------------------------- 毎フレーム
+
+  update(dt: number): void {
+    const pl = this.host.player
+    const hud = this.host.hud
+    this.clock += dt
+    this.health.tick(dt)
+    this.dodgeState.tick(dt)
+    this.hurtT = Math.max(0, this.hurtT - dt)
+    this.impactCd = Math.max(0, this.impactCd - dt)
+    // 体力 0 → 暗転して戻る
+    if (this.downT >= 0) {
+      this.downT += dt
+      this.fade.style.opacity = String(Math.min(1, this.downT / 0.6))
+      if (this.downT >= 1.3) this.respawn()
+    } else if (this.fade.style.opacity !== '' && this.fade.style.opacity !== '0') {
+      this.fade.style.opacity = String(Math.max(0, Number(this.fade.style.opacity) - dt * 1.6))
+    }
+    // 連続攻撃
+    for (const ev of this.combo.tick(dt)) this.onCombo(ev.kind, ev.kind === 'end' ? -1 : ev.step)
+    if (this.combo.phase === 'active' && this.combo.lunge > 0 && !pl.bursting) {
+      const near = this.nearestEnemy(1.0, 0.9)
+      if (!near) pl.burstMove(-Math.sin(pl.facing) * this.combo.lunge, -Math.cos(pl.facing) * this.combo.lunge, (this.combo.current?.active ?? 0.1) * 0.9)
+    }
+    // はじく
+    if (this.impactT > 0) {
+      this.impactT -= dt
+      if (!this.impactFired && this.impactT < 0.34) {
+        this.impactFired = true
+        this.fireImpact()
+      }
+    }
+    if (this.ringT >= 0) {
+      this.ringT += dt
+      const k = this.ringT / 0.32
+      this.ring.scale.setScalar(0.4 + k * 3.6)
+      ;(this.ring.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - k)
+      if (k >= 1) {
+        this.ringT = -1
+        this.ring.visible = false
+      }
+    }
+    // 敵
+    const playerDown = this.downT >= 0 || this.health.dead
+    for (const e of this.enemies) if (!e.removed) this.updateEnemy(e, dt, playerDown)
+    for (let i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i].removed) this.enemies.splice(i, 1)
+    this.sparks.update(dt)
+    hud.setHp(this.health.hp)
+    if (this.bossBar) {
+      const b = this.bossBar
+      b.fill.style.transform = `scaleX(${Math.max(0, b.e.brain.hp / b.e.maxHp).toFixed(3)})`
+      if (!b.e.alive && b.e.dyingT > 0.8) this.showBoss(null)
+    }
+  }
+
+  /** 見た目だけ（一時停止中も呼ばれる。dt = 0） */
+  animate(dt: number, t: number): void {
+    const P = this.host.player.position
+    for (const e of this.enemies) {
+      if (e.removed || e.hidden) continue
+      // 遠い敵は描かない（描画の回数を減らす）
+      const far = e.pos.distanceToSquared(P) > FAR_HIDE * FAR_HIDE
+      e.model.root.visible = !far
+      if (far) continue
+      const speed = Math.hypot(e.knock.x, e.knock.z) > 0.5 ? 0 : e.brain.state === 'chase' || e.brain.state === 'idle' ? (e.model.root.userData.speed ?? 0) : 0
+      e.model.animate(dt, t + e.home.x, e.brain.state, e.brain.t, speed, e.dyingT >= 0 ? e.dyingT / 0.6 : 0, e.brain.stats.windup)
+    }
+  }
+
+  // ---------------------------------------------------------------- 内部
+
+  private onCombo(kind: 'swing' | 'hit' | 'end', step: number): void {
+    const pl = this.host.player
+    if (kind === 'swing') {
+      // 近くの敵へ向き直る（ゆるい自動の狙い）
+      const near = this.nearestEnemy(4, 1.5)
+      if (near) pl.facing = Math.atan2(-(near.pos.x - pl.position.x), -(near.pos.z - pl.position.z))
+      return
+    }
+    if (kind !== 'hit') return
+    const s = ATTACK_STEPS[step]
+    const P = pl.position
+    let hitAny = false
+    for (const e of this.enemies) {
+      if (!e.alive || e.hidden || e.removed) continue
+      const r = e.brain.stats.radius * e.scale
+      if (Math.abs(e.pos.y - P.y) > 1.4 + r) continue
+      if (!inArc(P.x, P.z, pl.facing, e.pos.x, e.pos.z, s.range, s.halfArc, r)) continue
+      const front = this.fromFront(e, P)
+      const res = e.brain.hurt(s.damage, s.stagger, front)
+      this.onEnemyHurt(e, res, s.knock * (e.brain.stats.mass === 'heavy' ? 0.25 : 1), step === 2 ? 0.07 : 0.04)
+      hitAny = true
+    }
+    // 壊せる物：3 段目だけ
+    if (step === 2) {
+      for (const b of this.breakables) {
+        if (!b.enabled) continue
+        if (inArc(P.x, P.z, pl.facing, b.pos.x, b.pos.z, s.range + 0.4, s.halfArc, b.radius)) this.host.hud.toast('ひびが固い……はじくなら割れそう')
+      }
+    }
+    if (hitAny) this.host.shake(step === 2 ? 0.22 : 0.1)
+  }
+
+  private fireImpact(): void {
+    const pl = this.host.player
+    const P = pl.position
+    const fx = -Math.sin(pl.facing)
+    const fz = -Math.cos(pl.facing)
+    this.ring.position.set(P.x + fx * 1.2, P.y + 0.75, P.z + fz * 1.2)
+    this.ring.lookAt(P.x + fx * 3, P.y + 0.75, P.z + fz * 3)
+    this.ring.visible = true
+    this.ringT = 0
+    this.sparks.burst(this.tmp.set(P.x + fx * 1.0, P.y + 0.8, P.z + fz * 1.0), '#6fe8ff', 18, 5, 1.2)
+    this.host.shake(0.3)
+    pl.burstMove(-fx * 2.5, -fz * 2.5, 0.12)
+    let hit = false
+    for (const e of this.enemies) {
+      if (!e.alive || e.hidden || e.removed) continue
+      const r = e.brain.stats.radius * e.scale
+      if (Math.abs(e.pos.y - P.y) > 2 + r) continue
+      if (!inArc(P.x, P.z, pl.facing, e.pos.x, e.pos.z, 4.4, 0.85, r)) continue
+      const hadShield = e.brain.shield
+      const hadArmor = e.brain.armor
+      const res = e.brain.hurt(2, e.brain.stats.mass === 'heavy' ? 1.6 : 1.0, this.fromFront(e, P), true)
+      if (hadArmor && !e.brain.armor) {
+        // 装甲が割れる
+        this.sparks.burst(e.model.armorPoint(this.tmp2), '#ffd36a', 30, 6)
+        e.model.setArmor(false)
+        this.host.shake(0.45)
+        this.host.hud.toast('装甲が割れた！ 今のうちに攻撃！', 2.4)
+      }
+      if (hadShield && e.model.shield) {
+        // 盾は砕ける
+        const s = e.model.shield
+        this.sparks.burst(s.getWorldPosition(this.tmp2), '#ffb347', 16, 4)
+        s.removeFromParent()
+        e.model.shield = null
+        e.def.label = e.brain.stats.name
+      }
+      this.onEnemyHurt(e, res, e.brain.stats.mass === 'heavy' ? 4 : 10, 0.08)
+      hit = true
+    }
+    for (const b of this.breakables) {
+      if (!b.enabled) continue
+      if (Math.abs(b.pos.y - P.y) > 3 + b.radius) continue
+      if (!inArc(P.x, P.z, pl.facing, b.pos.x, b.pos.z, 4.6, 1.0, b.radius)) continue
+      b.enabled = false
+      this.sparks.burst(b.pos, '#ffd36a', 26, 5)
+      b.onBreak()
+      hit = true
+    }
+    if (hit) this.hitstop = Math.max(this.hitstop, 0.08)
+  }
+
+  private onEnemyHurt(e: Enemy, res: 'blocked' | 'hurt' | 'killed', knock: number, stop: number): void {
+    const P = this.host.player.position
+    const chest = this.tmp2.copy(e.pos).setY(e.pos.y + e.model.chestY * e.scale)
+    this.tmp.subVectors(e.pos, P).setY(0)
+    if (this.tmp.lengthSq() < 1e-4) this.tmp.set(0, 0, -1)
+    this.tmp.normalize()
+    if (res === 'blocked') {
+      this.sparks.burst(chest, '#9fd8ff', 6, 2.5)
+      if (e.brain.armor && this.armorHintAt + 6 < this.clock) {
+        this.armorHintAt = this.clock
+        this.host.hud.toast('装甲が硬い……はじくNMClaw で割ろう', 2.4)
+      }
+      e.knock.addScaledVector(this.tmp, 2.5)
+      // 盾で弾かれて、こちらも少し下がる
+      this.host.player.burstMove(-this.tmp.x * 2.5, -this.tmp.z * 2.5, 0.1)
+      this.combo.cancel()
+      return
+    }
+    e.model.hit()
+    e.knock.addScaledVector(this.tmp, knock)
+    this.sparks.burst(chest, res === 'killed' ? '#c77dff' : '#ff6fa8', res === 'killed' ? 22 : 9, res === 'killed' ? 5 : 3)
+    this.hitstop = Math.max(this.hitstop, stop)
+    if (res === 'killed') {
+      e.dyingT = 0
+      e.def.enabled = false
+      e.yank = null
+    }
+  }
+
+  /** 敵の正面から当たったか（盾で防げる向き） */
+  private fromFront(e: Enemy, from: THREE.Vector3): boolean {
+    return Math.abs(angleTo(e.yaw, from.x - e.pos.x, from.z - e.pos.z)) < 1.2
+  }
+
+  private nearestEnemy(maxDist: number, maxAngle: number): Enemy | null {
+    const pl = this.host.player
+    let best: Enemy | null = null
+    let bd = Infinity
+    for (const e of this.enemies) {
+      if (!e.alive || e.hidden || e.removed) continue
+      const dx = e.pos.x - pl.position.x
+      const dz = e.pos.z - pl.position.z
+      const d = Math.hypot(dx, dz) - e.brain.stats.radius * e.scale
+      if (d > maxDist || Math.abs(e.pos.y - pl.position.y) > 1.6) continue
+      if (Math.abs(angleTo(pl.facing, dx, dz)) > maxAngle) continue
+      if (d < bd) {
+        bd = d
+        best = e
+      }
+    }
+    return best
+  }
+
+  private updateEnemy(e: Enemy, dt: number, playerDown: boolean): void {
+    const pl = this.host.player
+    const P = pl.position
+    const st = e.brain.stats
+    const r = st.radius * e.scale
+    if (e.hidden) return
+    // 倒れていく
+    if (e.dyingT >= 0) {
+      e.dyingT += dt
+      e.pos.addScaledVector(e.knock, dt)
+      e.knock.multiplyScalar(Math.exp(-5 * dt))
+      if (e.dyingT > 0.6 && !e.removed) {
+        e.removed = true
+        this.sparks.burst(this.tmp.copy(e.pos).setY(e.pos.y + 0.4), '#7a3cff', 12, 3)
+        e.model.root.removeFromParent()
+        e.model.dispose()
+        const i = this.host.claw.targets.indexOf(e.def)
+        if (i >= 0) this.host.claw.targets.splice(i, 1)
+        this.byDef.delete(e.def)
+        if (e.shieldFly) e.shieldFly.obj.removeFromParent()
+        this.onEnemyDefeated?.(e)
+      }
+      return
+    }
+    // 装甲が戻った
+    if (e.brain.armored && e.brain.armor !== e.model.armorShown) {
+      e.model.setArmor(e.brain.armor)
+      if (e.brain.armor) this.sparks.burst(e.model.armorPoint(this.tmp), '#b04cff', 16, 3)
+    }
+    const dx = P.x - e.pos.x
+    const dz = P.z - e.pos.z
+    const dist = Math.hypot(dx, dz)
+    if (dist > FAR_HIDE && e.brain.state === 'idle' && !e.yank && e.knock.lengthSq() < 1e-4) return
+    const leashed = e.pos.distanceTo(e.home) < e.leash
+    const out = e.brain.update(dt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown })
+    if (e.brain.state === 'windup' && e.brain.t <= dt + 1e-6) e.struck = false
+    if (out.face && dist > 0.05) this.turn(e, dx, dz, dt, st.mass === 'heavy' ? 4 : 9)
+    // 動き
+    let vx = 0
+    let vz = 0
+    if (e.yank) {
+      // クローで手元へ：ワイヤーの進み具合に合わせて、プレイヤーの前へ
+      const w = this.host.claw.wire
+      const u = w.phase === 'reeling' ? w.progress : 1
+      e.yank.to.set(P.x - Math.sin(pl.facing) * 1.15, P.y, P.z - Math.cos(pl.facing) * 1.15)
+      e.pos.lerpVectors(e.yank.from, e.yank.to, u * u * (3 - 2 * u))
+      e.pos.y += Math.sin(Math.PI * u) * 0.8
+      this.turn(e, dx, dz, dt, 20)
+    } else {
+      switch (out.move) {
+        case 'toward':
+          vx = (dx / Math.max(dist, 1e-3)) * st.speed
+          vz = (dz / Math.max(dist, 1e-3)) * st.speed
+          break
+        case 'home': {
+          const hx = e.home.x - e.pos.x
+          const hz = e.home.z - e.pos.z
+          const hd = Math.hypot(hx, hz)
+          if (hd > 0.4) {
+            vx = (hx / hd) * st.speed * 0.8
+            vz = (hz / hd) * st.speed * 0.8
+            this.turn(e, hx, hz, dt, 6)
+          } else this.turn(e, -Math.sin(e.homeYaw), -Math.cos(e.homeYaw), dt, 3)
+          break
+        }
+        case 'leap':
+          if (e.brain.t < 0.22) {
+            vx = -Math.sin(e.yaw) * st.leap
+            vz = -Math.cos(e.yaw) * st.leap
+          }
+          break
+      }
+      // 押し出された分
+      vx += e.knock.x
+      vz += e.knock.z
+      e.knock.multiplyScalar(Math.exp(-7 * dt))
+      // 壁：進む向きにレイを飛ばして、当たるなら止まる
+      const sp = Math.hypot(vx, vz)
+      if (sp > 1e-3) {
+        this.tmp.set(e.pos.x, e.pos.y + Math.min(0.6, st.height * 0.5), e.pos.z)
+        this.tmp2.set(vx / sp, 0, vz / sp)
+        const hit = this.host.phys.raycast(this.tmp, this.tmp2, sp * dt + r, pl.collider)
+        if (hit === null) {
+          e.pos.x += vx * dt
+          e.pos.z += vz * dt
+        } else {
+          e.knock.set(0, 0, 0)
+        }
+      }
+      e.model.root.userData.speed = sp
+      // 地面に沿う（足元の少し上から下へ）
+      this.tmp.set(e.pos.x, e.pos.y + 1.2, e.pos.z)
+      const g = this.host.phys.raycast(this.tmp, this.down, 4, pl.collider)
+      if (g !== null) {
+        const gy = this.tmp.y - g
+        e.pos.y += (gy - e.pos.y) * Math.min(1, dt * 14)
+      }
+      // プレイヤーと重ならない
+      if (dist < r + PLAYER_R && dist > 1e-3 && Math.abs(P.y - e.pos.y) < 1.5) {
+        const push = r + PLAYER_R - dist
+        e.pos.x -= (dx / dist) * push
+        e.pos.z -= (dz / dist) * push
+      }
+    }
+    // 攻撃が当たるか（攻撃の間に 1 回だけ）
+    if (e.brain.state === 'attack' && !e.struck && !playerDown) {
+      const reach = st.hitRange * e.scale
+      if (Math.abs(P.y - e.pos.y) < 1.4 * e.scale && inArc(e.pos.x, e.pos.z, e.yaw, P.x, P.z, reach, st.hitArc, PLAYER_R)) {
+        e.struck = true
+        this.hurtPlayer(st.damage, this.tmp.set(dx, 0, dz).normalize(), st.knock)
+      }
+      if (st.mass === 'heavy' && e.brain.t < dt * 1.5) {
+        // 叩きつけの衝撃
+        this.host.shake(0.25)
+        this.sparks.burst(this.tmp2.set(e.pos.x - Math.sin(e.yaw) * 1.6, e.pos.y + 0.1, e.pos.z - Math.cos(e.yaw) * 1.6), '#b04cff', 14, 4, 1.5)
+      }
+    }
+    // 盾が手元へ飛んでくる
+    const sf = e.shieldFly
+    if (sf) {
+      if (sf.dropT < 0) {
+        const w = this.host.claw.wire
+        const u = w.phase === 'reeling' ? w.progress : 1
+        this.tmp.set(P.x - Math.sin(pl.facing) * 0.9, P.y + 0.8, P.z - Math.cos(pl.facing) * 0.9)
+        sf.obj.position.lerpVectors(sf.from, this.tmp, u)
+        sf.obj.rotation.y += dt * 8
+        e.def.point.copy(sf.obj.position)
+      } else {
+        sf.dropT += dt
+        sf.obj.position.y = Math.max(P.y + 0.05, sf.obj.position.y - dt * 4)
+        sf.obj.scale.setScalar(Math.max(0.01, 1 - sf.dropT / 0.8))
+        if (sf.dropT > 0.8) {
+          sf.obj.removeFromParent()
+          e.shieldFly = null
+        }
+      }
+    }
+    // クローの接続点・飛び込みの着地点
+    if (!sf || sf.dropT >= 0) e.def.point.set(e.pos.x, e.pos.y + e.model.chestY * e.scale, e.pos.z)
+    if (e.def.type === 'enemy_zip') {
+      const len = Math.max(dist, 1e-3)
+      e.def.landing?.set(e.pos.x + (dx / len) * (r + 0.7), e.pos.y, e.pos.z + (dz / len) * (r + 0.7))
+    }
+  }
+
+  private turn(e: Enemy, dx: number, dz: number, dt: number, rate: number): void {
+    const d = angleTo(e.yaw, dx, dz)
+    e.yaw = e.yaw + d * Math.min(1, rate * dt)
+  }
+
+  private hurtPlayer(damage: number, dir: THREE.Vector3, knock: number): void {
+    const pl = this.host.player
+    if (this.dodgeState.invulnerable || this.health.invuln > 0) return
+    const res = this.health.damage(damage)
+    if (res === 'ignored') return
+    this.combo.cancel()
+    this.hurtT = 0.35
+    if (!pl.isExternal) pl.burstMove(dir.x * knock, dir.z * knock, 0.18)
+    this.host.hud.flash('danger')
+    this.host.shake(0.35)
+    this.sparks.burst(this.tmp2.copy(pl.position).setY(pl.position.y + 0.7), '#ff4f6a', 10, 3)
+    if (res === 'dead') {
+      this.downT = 0
+      this.host.claw.reset()
+      this.host.hud.banner('やられた……', 'fail', 1.4)
+    }
+  }
+
+  private respawn(): void {
+    const pl = this.host.player
+    this.downT = -1
+    this.health.refill()
+    this.combo.cancel()
+    pl.teleport(this.checkpoint ?? this.start, this.checkpoint ? this.checkpointYaw : undefined)
+    // 敵は住みかへ戻って元どおり
+    for (const e of this.enemies) {
+      if (!e.alive || e.removed) continue
+      e.pos.copy(e.home)
+      e.yaw = e.homeYaw
+      e.knock.set(0, 0, 0)
+      e.yank = null
+      e.brain.hp = e.maxHp
+      e.brain.state = 'idle'
+      e.brain.t = 0
+      if (e.brain.armored) e.brain.setArmored(true)
+    }
+    this.onRespawn?.()
+  }
+
+  dispose(): void {
+    this.showBoss(null)
+    this.fade.remove()
+    for (const e of this.enemies) {
+      e.model.dispose()
+      const i = this.host.claw.targets.indexOf(e.def)
+      if (i >= 0) this.host.claw.targets.splice(i, 1)
+    }
+    this.enemies.length = 0
+    this.byDef.clear()
+    this.sparks.dispose()
+    this.ring.geometry.dispose()
+    ;(this.ring.material as THREE.Material).dispose()
+    this.group.removeFromParent()
+  }
+}

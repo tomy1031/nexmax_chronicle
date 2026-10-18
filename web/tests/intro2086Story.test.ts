@@ -494,6 +494,49 @@ describe("5章 IDO で自分を調べる", () => {
   });
 });
 
+describe("中盤 9章 IDO の羅針盤（docs/中盤シナリオとワールド構成_v1.md）", () => {
+  it("帰ってきてソラに話す → 錨の話と羅針盤 → 1970年の石標だけが反応して 1970年へ", () => {
+    const s = story("returned", 0, ["ido_exhibit_used", "drawing_confirmed"]);
+    let travel: string | null = null;
+    s.onRequestTravel = (era, spawn) => (travel = `${era}:${spawn}`);
+    s.drain();
+    s.send({ kind: "interact", target: "sora" });
+    let e = finish(s);
+    expect(e).toContainEqual({ kind: "flag", name: "compass_built" });
+    expect(s.step).toBe("compass");
+    expect(s.objective().title).toContain("1970年");
+    // 針が指していない石標は読まない
+    s.send({ kind: "interact", target: "stone_2026" });
+    e = s.drain();
+    expect(e.some((x) => x.kind === "qr_scan")).toBe(false);
+    finish(s);
+    s.send({ kind: "interact", target: "stone_1970" });
+    e = s.drain();
+    expect(e).toContainEqual({ kind: "qr_scan", record: "expo1970" });
+    s.send({ kind: "fx_done", fx: "qr" });
+    e = s.drain();
+    expect(s.step).toBe("compass_travel");
+    expect(e).toContainEqual({ kind: "rift", open: true });
+    expect(travel).toBeNull();
+    e = finish(s);
+    expect(e).toContainEqual({ kind: "travel", to: "1970", spawn: "arrive", cause: "ido_compass" });
+    expect(travel).toBe("1970:arrive");
+  });
+
+  it("1970年の錨をほどいて帰ると、ソラに話して続きを待つ", () => {
+    const f = (on: string[]) => (n: string) => on.includes(n);
+    expect(introStartStep(f(["ido_exhibit_used", "compass_built"]))).toBe("compass");
+    expect(introStartStep(f(["compass_built", "expo_anchor_cleared"]))).toBe("expo_back");
+    expect(introStartStep(f(["expo_anchor_cleared", "expo_reported"]))).toBe("midgame");
+    const s = story("expo_back");
+    s.drain();
+    s.send({ kind: "interact", target: "sora" });
+    const e = finish(s);
+    expect(e).toContainEqual({ kind: "flag", name: "expo_reported" });
+    expect(s.step).toBe("midgame");
+  });
+});
+
 describe("全体", () => {
   it("すべての段階に目標・到着地点があり、フラグから再開する段階が決まる", () => {
     for (const st of INTRO_STEPS) {

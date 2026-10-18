@@ -65,6 +65,8 @@ const HOLD_VERB: Record<ClawTargetType, string> = {
   pull_player: 'つないでいる',
   swing_anchor: 'ぶら下がっている',
   hold_mechanism: '支えている',
+  enemy_pull: '引き寄せている',
+  enemy_zip: '飛び込んでいる',
 }
 
 export type ScreenTarget = { def: ClawTargetDef; x: number; y: number; r: number }
@@ -278,7 +280,9 @@ export class ClawSystem {
         break
       case 'reeling':
       case 'carrying':
+        // 敵（引き寄せ）は戦闘側が def.point を動かす
         if (this.carried) this.end.copy(this.carried.def.point)
+        else if (t) this.end.copy(t.point)
         break
       case 'zipping':
       case 'swinging':
@@ -372,7 +376,7 @@ export class ClawSystem {
             m.def.enabled = false
             this.carried = m
           }
-        } else if (t.type === 'pull_player') {
+        } else if (t.type === 'pull_player' || t.type === 'enemy_zip') {
           this.player.beginExternal()
           this.zipStart.copy(this.player.position)
         } else if (t.type === 'swing_anchor') {

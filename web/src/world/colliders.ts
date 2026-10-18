@@ -17,15 +17,17 @@ export class ColliderList {
   readonly items: BoxCollider[] = []
 
   /** 中心と全寸法で箱を登録 */
-  box(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, rotY = 0, rotX = 0, rotZ = 0): void {
-    this.items.push({
+  box(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, rotY = 0, rotX = 0, rotZ = 0): BoxCollider {
+    const item: BoxCollider = {
       kind: 'box',
       center: new THREE.Vector3(cx, cy, cz),
       half: new THREE.Vector3(sx / 2, sy / 2, sz / 2),
       rotY,
       rotX,
       rotZ,
-    })
+    }
+    this.items.push(item)
+    return item
   }
 
   /** 上面の高さと XZ 範囲で床を登録（厚さ thick は下方向） */

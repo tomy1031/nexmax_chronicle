@@ -3,7 +3,7 @@
 
 export type HudStats = { fps: number; ms: number; calls: number; tris: number; ratio: number; quality: string; textures: number; programs: number }
 
-export type ReticleCategory = 'light' | 'anchor' | 'mechanism'
+export type ReticleCategory = 'light' | 'anchor' | 'mechanism' | 'enemy'
 
 export type ReticleState =
   | { mode: 'idle' }
@@ -21,6 +21,8 @@ export type GateView = {
   signal: 'watch' | 'wait' | 'go' | 'done'
   signalText: string
   adjusting: boolean
+  /** 見出しと 2 行の人（無ければ 1726年の水門：源兵衛の歯止め・おはるの合図）。what は [ふだん, 作業中, 完了] */
+  labels?: { title: string; worker: string; what: readonly [string, string, string]; watcher: string }
 }
 
 /** IDO（歴史案内）のパネルの中身 */

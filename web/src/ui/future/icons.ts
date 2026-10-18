@@ -44,12 +44,14 @@ export const SILHOUETTE_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><circ
 export const SYSTEM_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(12 12)">${CRYSTAL_SVG.replace('<svg viewBox="0 0 40 40" aria-hidden="true">', '').replace('</svg>', '')}</g></svg>`
 
 /** 照準の形（対象の種類ごと） */
-export const RETICLE_SVG: Record<'light' | 'anchor' | 'mechanism', string> = {
+export const RETICLE_SVG: Record<'light' | 'anchor' | 'mechanism' | 'enemy', string> = {
   // 軽い物：十字の入った丸（物がこちらへ）
   light: `<svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="32" cy="32" r="18" stroke-width="2"/><circle cx="32" cy="32" r="23" stroke-width="0.9" stroke-dasharray="3 5" opacity="0.7"/><path d="M32 6 V18 M32 46 V58 M6 32 H18 M46 32 H58" stroke-width="2"/><path d="M32 28 L36 32 L32 36 L28 32 Z" fill="currentColor" stroke-width="1"/></svg>`,
   // 固定支点：ひし形（自分が向こうへ）
   anchor: `<svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M32 11 L53 32 L32 53 L11 32 Z" stroke-width="2"/><path d="M32 18 L46 32 L32 46 L18 32 Z" stroke-width="0.9" opacity="0.6"/><path d="M32 3 V11 M32 53 V61 M3 32 H11 M53 32 H61" stroke-width="2"/><circle cx="32" cy="32" r="3.4" fill="currentColor" stroke="none"/></svg>`,
   // 協力装置：歯車（その場で支える）
+  // 敵：四隅のかぎと、まん中の小さな的（引き寄せる・飛び込む）
+  enemy: `<svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 22 V10 H22 M42 10 H54 V22 M54 42 V54 H42 M22 54 H10 V42" stroke-width="2.4"/><circle cx="32" cy="32" r="11" stroke-width="1.6" stroke-dasharray="4 3"/><circle cx="32" cy="32" r="3.6" fill="currentColor" stroke="none"/></svg>`,
   mechanism: `<svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-linejoin="round"><g transform="translate(12 12)"><path d="M17 3h6l1 5 4 2 4-3 4 4-3 4 2 4 5 1v6l-5 1-2 4 3 4-4 4-4-3-4 2-1 5h-6l-1-5-4-2-4 3-4-4 3-4-2-4-5-1v-6l5-1 2-4-3-4 4-4 4 3 4-2z" stroke-width="1.8"/><circle cx="20" cy="20" r="5.5" stroke-width="1.8"/></g><circle cx="32" cy="32" r="27" stroke-width="0.9" stroke-dasharray="2 6" opacity="0.6"/></svg>`,
 }
 

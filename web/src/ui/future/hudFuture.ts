@@ -133,11 +133,15 @@ function ensureFonts(): void {
   document.head.appendChild(link)
 }
 
+/** 水門パネルの既定（1726年：源兵衛が歯止めを入れ、おはるが合図する） */
+const GATE_LABELS_1726 = { title: '水門の仕掛け', worker: '源兵衛', what: ['歯止め', '歯止めを調整中', '歯止め 完了'], watcher: 'おはる' } as const
+
 /** テーマごとに CSS の背景で使う模様（SVG の defs が無い所：時代カード・読み込み・一時停止の背景） */
 const THEME_PATTERNS: Record<HudTheme, { main: [PatternName, string]; sub: [PatternName, string] }> = {
   '2086': { main: ['hex', '#7fe2ff'], sub: ['hex', '#ff6ee0'] },
   '2026': { main: ['grid', '#8ff5ea'], sub: ['grid', '#ffffff'] },
   '1726': { main: ['asanoha', '#f2c662'], sub: ['seigaiha', '#f2c662'] },
+  '1970': { main: ['shippo', '#ffb066'], sub: ['grid', '#7fe8dc'] },
 }
 
 /** ルート要素にテーマのクラスと模様の CSS 変数を付ける（HUD と読み込み画面で共用） */
@@ -229,7 +233,8 @@ function armRingSvg(side: 'left' | 'right'): string {
 
 /** 装備の説明（一時停止の「装備・記録」。見るだけで、ここでは付け替えられない） */
 const PART_DESC: Record<string, string> = {
-  つかむNMClaw: 'ワイヤーを射出して対象をつかむ。射程 約10m。軽い物は手元へ、固定された金具へは自分が移動、仕掛けはその場で保持。',
+  つかむNMClaw: 'ワイヤーを射出して対象をつかむ。射程 約10m。軽い物は手元へ、固定された金具へは自分が移動、仕掛けはその場で保持。小さい敵は引き寄せ、大きい敵へは飛び込む。',
+  はじくNMClaw: '電気で爪を一瞬だけ弾き、前へ衝撃を飛ばす。ひび割れた壁を壊し、敵をよろけさせ、盾や装甲を割る。1970年に佐伯ミチが組み上げた。',
 }
 
 export class HudFuture {
@@ -316,6 +321,7 @@ export class HudFuture {
   private leftPart: string | null = null
   private rightPart = 'つかむNMClaw'
   private gateKey = ''
+  private gatePeople = ''
   private hp = HP_MAX
   private energyV: number | null = null
   private objKey = ''
@@ -393,7 +399,7 @@ export class HudFuture {
       </div>
       <div class="nx-gate" hidden>
         <div class="nx-frame-host" data-frame="panel"></div>
-        <div class="nx-gate-head"><span class="nx-gate-gear">${GEAR_SVG}</span><span>水門の仕掛け</span></div>
+        <div class="nx-gate-head"><span class="nx-gate-gear">${GEAR_SVG}</span><span class="nx-gate-title">水門の仕掛け</span></div>
         <div class="nx-gate-row">
           <span class="nx-gate-face" data-who="源兵衛"></span><span class="nx-gate-who">源兵衛</span>
           <span class="nx-gate-what">歯止め</span>
@@ -1120,10 +1126,21 @@ export class HudFuture {
       this.gateKey = ''
       return
     }
-    if (this.gate.hidden) {
+    const L = g.labels ?? GATE_LABELS_1726
+    const people = `${L.title}|${L.worker}|${L.watcher}`
+    if (this.gate.hidden || people !== this.gatePeople) {
       this.gate.hidden = false
-      if (this.opts.speakerIcons) this.icons.preload(['源兵衛', 'おはる'])
+      this.gatePeople = people
+      ;(this.gate.querySelector('.nx-gate-title') as HTMLElement).textContent = L.title
+      const faces = this.gate.querySelectorAll<HTMLElement>('.nx-gate-face')
+      const whos = this.gate.querySelectorAll<HTMLElement>('.nx-gate-who')
+      faces[0].dataset.who = L.worker
+      faces[1].dataset.who = L.watcher
+      whos[0].textContent = L.worker
+      whos[1].textContent = L.watcher
+      if (this.opts.speakerIcons) this.icons.preload([L.worker, L.watcher])
       this.refreshFaces()
+      this.gateKey = ''
     }
     const pct = Math.round(Math.max(0, Math.min(1, g.progress)) * 100)
     const key = `${pct}|${g.signal}|${g.signalText}|${g.adjusting}`
@@ -1132,7 +1149,7 @@ export class HudFuture {
     const lit = Math.round((pct / 100) * this.gateSegs.length)
     this.gateSegs.forEach((s, i) => s.classList.toggle('on', i < lit))
     this.gatePct.textContent = `${pct}%`
-    this.gateWhat.textContent = g.progress >= 1 ? '歯止め 完了' : g.adjusting ? '歯止めを調整中' : '歯止め'
+    this.gateWhat.textContent = g.progress >= 1 ? L.what[2] : g.adjusting ? L.what[1] : L.what[0]
     this.gate.classList.toggle('adjusting', g.adjusting && g.progress < 1)
     this.gate.classList.toggle('complete', g.progress >= 1)
     this.gateSignalText.textContent = g.signalText

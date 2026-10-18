@@ -1,5 +1,6 @@
 // ワイヤー式「つかむNMClaw」の純粋なロジック（操作マニュアル v1.1 §1.1・§2.1・§2.2・§8.3〜8.4）。
 // ・対象の種類（データ）：pull_object / pull_player / swing_anchor / hold_mechanism
+//   敵（combat/）：enemy_pull（小さい敵・盾を手元へ引き寄せる）／enemy_zip（大きい敵へ自分が飛び込む）
 // ・中央照準の自動選択（スコア）と R によるロック切り替え
 // ・J で射出 → 接続 → もう一度 J で解除（長押し不要）。Space はぶら下がり・引き寄せ中の離脱
 // ・引き寄せは決められた曲線、振り子は許可した支点だけで軽量に（ロープの物理演算はしない）
@@ -7,16 +8,18 @@
 import * as THREE from 'three'
 import { ClawEvent, ClawStateMachine } from '../core/clawStateMachine'
 
-export type ClawTargetType = 'pull_object' | 'pull_player' | 'swing_anchor' | 'hold_mechanism'
+export type ClawTargetType = 'pull_object' | 'pull_player' | 'swing_anchor' | 'hold_mechanism' | 'enemy_pull' | 'enemy_zip'
 
-/** 照準の見た目の分類（マニュアル §7：軽い物／固定支点／協力装置） */
-export type TargetCategory = 'light' | 'anchor' | 'mechanism'
+/** 照準の見た目の分類（マニュアル §7：軽い物／固定支点／協力装置。敵は赤） */
+export type TargetCategory = 'light' | 'anchor' | 'mechanism' | 'enemy'
 
 export const TARGET_CATEGORY: Record<ClawTargetType, TargetCategory> = {
   pull_object: 'light',
   pull_player: 'anchor',
   swing_anchor: 'anchor',
   hold_mechanism: 'mechanism',
+  enemy_pull: 'enemy',
+  enemy_zip: 'enemy',
 }
 
 export type ClawTargetDef = {
@@ -175,9 +178,9 @@ export type WirePhase =
   | 'idle'
   | 'firing' // ワイヤーが対象へ伸びている
   | 'miss' // 空振り（伸びて戻る）
-  | 'reeling' // pull_object：物が手元へ飛んでくる
+  | 'reeling' // pull_object：物が手元へ飛んでくる（enemy_pull：敵・盾が手元へ。届いたら爪を戻す）
   | 'carrying' // pull_object：手元で持っている（J で置く）
-  | 'zipping' // pull_player：支点へ引き寄せられている
+  | 'zipping' // pull_player・enemy_zip：支点（敵の前）へ引き寄せられている
   | 'swinging' // swing_anchor：ぶら下がっている
   | 'holding' // hold_mechanism：仕掛けを支えている
   | 'retracting' // 爪を外して戻している
@@ -311,8 +314,10 @@ export class WireClaw {
       case 'reeling':
         this.elapsed += dt
         if (this.elapsed >= this.duration && this.target) {
-          this.phase = 'carrying'
           out.push({ kind: 'object_arrived', target: this.target })
+          // 敵は持たない：手元まで引いたら爪を戻す（殴るのは K）
+          if (this.target.type === 'enemy_pull') this.startRetract(0.5)
+          else this.phase = 'carrying'
         }
         break
       case 'zipping':
@@ -341,7 +346,13 @@ export class WireClaw {
         this.phase = 'reeling'
         this.duration = Math.max(0.28, this.distance / this.tuning.pullSpeed)
         break
+      case 'enemy_pull':
+        // 敵はぐいっと速く
+        this.phase = 'reeling'
+        this.duration = Math.max(0.2, this.distance / (this.tuning.pullSpeed * 1.5))
+        break
       case 'pull_player':
+      case 'enemy_zip':
         this.phase = 'zipping'
         // 経路は直線より長い（手すり越えの山なり）ので 1.25 倍で見積もる
         this.duration = Math.max(0.45, (this.distance * 1.25) / this.tuning.zipSpeed)

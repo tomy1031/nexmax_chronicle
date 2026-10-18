@@ -1,6 +1,6 @@
 // 導入編（docs/シナリオ改訂案_導入編_v1.md の 1〜5 章）で足す会場の小物。どれも root の下に入れる（解放はシェルが行う）。
 // ・中継アンテナ（北の回廊の東の端。外れた線 → F でつなぐ）・会場の大画面（ステージの上。映像信号なし → 開場）
-// ・街頭ビジョン（南の入口。毎朝同じ日付とニュース）・街灯と子どもの風船（毎朝同じ時刻に同じ街灯へ引っかかる）
+// ・街頭ビジョン（南の入口。毎朝同じ日付とニュース）・街灯と子どもの風船（毎朝同じ時刻に同じ街灯へ引っかかる。J で引き寄せると子どもに返る）
 // ・運営本部のテント（南の入口。4章①）・非常警報の柱（J で引く。4章②。つかめる対象＝pull_object として足す）
 // ・記録の石標 3 本（2026年の IDO の石標の再現。QR を読む。5章）・紙吹雪（開場の歓声）
 // 形は軽い（箱・円柱・板・キャンバスの文字）。毎フレームの更新は動いているものだけ。
@@ -22,10 +22,12 @@ export const INTRO_LAYOUT = {
   screen: v(12.5, 12.4, -16.2),
   screenYaw: 0,
   screenSize: [8.4, 4.725] as const,
-  street: v(6.6, 0, 8.4),
-  streetYaw: -0.62,
+  /** 街頭ビジョン：風船の街灯の北、桜の枝の外。南の入口（到着地点）の方を向く */
+  street: v(-1.4, 0, 7.4),
+  streetYaw: 0.36,
   lamp: v(-2.8, 0, 9.6),
-  balloonStart: v(-2.3, 1.05, 11.9),
+  /** 風船の子ども（crowd.ts の INTRO_CROWD の balloon_child）の右手 */
+  balloonStart: v(-2.3, 1.05, 11.7),
   hq: v(6.4, 0, 16.9),
   alarm: v(-3.4, 0, 15.4),
   /** 記録の石標の足元（ブースの台座の前の縁、左から 1970・2026・1726） */
@@ -408,8 +410,9 @@ function buildLampBalloon(root: THREE.Group, col: ColliderList, mats: Mats) {
   g.add(pole, arm, head, glow)
   col.box(L.x, 2.1, L.z, 0.24, 4.2, 0.24)
   const catchAt = v(L.x + 0.55, 4.2, L.z)
-  // 風船
+  // 風船（原点は玉の中心）
   const balloon = new THREE.Group()
+  balloon.name = 'festival_balloon'
   const ball = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 14), new THREE.MeshStandardMaterial({ color: '#ff6fa8', roughness: 0.25, metalness: 0.0, emissive: new THREE.Color('#ff2a7a'), emissiveIntensity: 0.25 }))
   ball.scale.set(1, 1.15, 1)
   const knot = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.06, 8), ball.material)
@@ -421,49 +424,90 @@ function buildLampBalloon(root: THREE.Group, col: ColliderList, mats: Mats) {
   const str = new THREE.Line(strGeo, new THREE.LineBasicMaterial({ color: '#f4f4f4' }))
   str.frustumCulled = false
   g.add(str)
+  // 街灯に引っかかった風船は J で引き寄せられる（動かせる物。物理の箱は街灯の上に作られ、そこへ戻る）
+  const home = catchAt.clone().add(v(0, 0.62, 0))
+  balloon.position.copy(home)
+  const def: ClawTargetDef = { id: 'festival_balloon', type: 'pull_object', label: '風船', point: home.clone(), radius: 0.42, enabled: false, noLineOfSight: true, range: 13 }
+  const movable: MovableInput = { def, object: balloon, half: new THREE.Vector3(0.18, 0.18, 0.18), home: home.clone() }
   const start = INTRO_LAYOUT.balloonStart
-  let t = -1
+  /** held：子どもが持っている／float：手を離れて街灯へ／caught：引っかかっている／claw：クローが運ぶ／back：子どもの手へ戻る */
+  let mode: 'held' | 'float' | 'caught' | 'claw' | 'back' = 'held'
+  let t = 0
   const p = new THREE.Vector3()
   const end = new THREE.Vector3()
+  const backFrom = new THREE.Vector3()
   const pa = strGeo.attributes.position as THREE.BufferAttribute
-  const place = (time: number) => {
+  const inHand = (out: THREE.Vector3, T: number) => out.copy(start).add(v(Math.sin(T * 1.3) * 0.04, Math.sin(T * 1.9) * 0.03 + 0.35, 0))
+  const place = () => {
     const T = uTime.value
-    if (t < 0) {
+    if (mode === 'held') {
       // 子どもが持っている（ゆれる）
-      p.copy(start).add(v(Math.sin(T * 1.3) * 0.04, Math.sin(T * 1.9) * 0.03 + 0.35, 0))
+      inHand(p, T)
       end.copy(start).add(v(0, -0.45, 0))
-    } else if (time < 3.4) {
+    } else if (mode === 'float') {
       // 手から離れて、ゆらゆらと街灯へ
-      const k = time / 3.4
+      const k = Math.min(1, t / 3.4)
       const e = k * k * (3 - 2 * k)
       p.lerpVectors(start, catchAt, e)
       p.y += Math.sin(k * Math.PI) * 0.35 + 0.35 * (1 - e) + 0.32 * e
-      p.x += Math.sin(time * 3.1) * 0.12 * (1 - e)
-      end.copy(p).add(v(Math.sin(time * 4) * 0.1, -0.75, 0.05))
-    } else {
+      p.x += Math.sin(t * 3.1) * 0.12 * (1 - e)
+      end.copy(p).add(v(Math.sin(t * 4) * 0.1, -0.75, 0.05))
+      if (t >= 3.4) mode = 'caught'
+    } else if (mode === 'caught') {
       // 引っかかった：糸の先が腕に絡んでいる
       p.copy(catchAt).add(v(Math.sin(T * 1.7) * 0.06, 0.62 + Math.sin(T * 2.3) * 0.03, Math.cos(T * 1.3) * 0.05))
       end.copy(catchAt)
+      def.point.copy(p)
+    } else if (mode === 'claw') {
+      // クローが動かしている（位置はそのまま。糸だけ垂らす）
+      p.copy(balloon.position)
+      end.copy(p).add(v(Math.sin(T * 4) * 0.06, -0.7, 0.04))
+    } else {
+      // 子どもの手へ、ふわっと戻る
+      const k = Math.min(1, t / 0.9)
+      const e = k * k * (3 - 2 * k)
+      inHand(end, T)
+      p.lerpVectors(backFrom, end, e)
+      p.y += Math.sin(k * Math.PI) * 0.5
+      end.copy(p).add(v(0, -0.7, 0))
+      if (k >= 1) mode = 'held'
     }
-    balloon.position.copy(p)
+    if (mode !== 'claw') balloon.position.copy(p)
     pa.setXYZ(0, p.x, p.y - 0.31, p.z)
     pa.setXYZ(1, end.x, end.y, end.z)
     pa.needsUpdate = true
   }
-  place(0)
   return {
     group: g,
+    def,
+    movable,
     catchAt: catchAt.clone(),
+    /** 目印を出す位置（風船の上） */
+    get markPos(): THREE.Vector3 {
+      return balloon.position
+    },
     play() {
+      mode = 'float'
+      t = 0
+    },
+    /** クローが引っかけた（以後の位置はクローが決める） */
+    grab() {
+      mode = 'claw'
+    },
+    /** 子どもの手へ返す（from：いまの見た目の位置） */
+    giveBack(from: THREE.Vector3) {
+      backFrom.copy(from)
+      mode = 'back'
       t = 0
     },
     reset() {
-      t = -1
-      place(0)
+      mode = 'held'
+      t = 0
+      place()
     },
     update(dt: number) {
-      if (t >= 0) t += dt
-      place(t)
+      t += dt
+      place()
     },
   }
 }

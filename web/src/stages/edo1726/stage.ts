@@ -25,7 +25,7 @@ import { edoIntroObjective, edoObjective } from '../../core/storyDirector'
 import { DialogueDB } from '../../core/dialogue'
 import type { DialogueLine } from '../../game/dialogueQueue'
 import { skyEnvironment, type EnvTexture } from '../../game/env'
-import type { SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageShots, StageWorld } from '../../game/stage'
+import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageShots, StageWorld } from '../../game/stage'
 import data1726 from '../../data/dialogue_1726.json'
 import { Townsfolk } from './townsfolk'
 import { MobTalk1726 } from './mobTalk1726'
@@ -659,6 +659,23 @@ export class EdoStage implements Stage {
     if (this.ringOpen) return RETURN_RING
     if (this.gateFlow.done) return null
     return this.nearPier(rt) ? this.edo.gate.gearCenter : PIER_CENTER
+  }
+
+  private readonly markAt = new THREE.Vector3()
+  private readonly marks: ObjectiveMark[] = []
+
+  /** 目標の目印（頭の上の「！」と名前）：おはる・源兵衛・水門の大歯車・帰りの光の輪 */
+  objectiveMarkers(rt: StageRuntime): readonly ObjectiveMark[] | null {
+    const out = this.marks
+    out.length = 0
+    const t = this.objectiveTarget(rt)
+    if (!t) return out
+    const c = t === this.oharu.root.position ? this.oharu : t === this.genbei.root.position ? this.genbei : null
+    if (c) out.push({ pos: this.markAt.copy(t).setY(t.y + c.height + 0.3), label: c === this.oharu ? 'おはる' : '源兵衛' })
+    else if (t === RETURN_RING) out.push({ pos: this.markAt.copy(t).setY(t.y + 2.6), label: '光の輪' })
+    else if (t === this.edo.gate.gearCenter) out.push({ pos: this.markAt.copy(t).setY(t.y + 1.5), label: '大歯車' })
+    else out.push({ pos: this.markAt.copy(t).setY(t.y + 1.8), label: '水門' })
+    return out
   }
 
   // ---------------------------------------------------------------- クロー・水門パズル

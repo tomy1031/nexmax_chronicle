@@ -16,7 +16,7 @@ import type { ActionFrame } from '../player/inputActions'
 import type { WireEvent } from '../player/clawLogic'
 import type { Hint } from '../ui/hud'
 import { skyEnvironment, type EnvTexture } from './env'
-import type { SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from './stage'
+import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from './stage'
 import type { FutureScene } from '../stages/future2086/scene'
 import type { FocusTarget, Intro2086Story as StoryT, IntroEffect, IntroInteract } from '../stages/future2086/intro2086Story'
 import type { IntroDirector as IntroDirectorT } from '../stages/future2086/introDirector2086'
@@ -205,10 +205,10 @@ class Future2086Stage implements Stage {
     ctx.progress(0.45, 'ナンバタウンを組み立て中…')
     await ctx.yieldFrame()
     this.fs = this.m.sceneM.buildFutureScene(mats, ctx.quality, { aniso })
-    // 導入編の小物（当たり判定は物理を作る前に足す）と、非常警報の柱（つかめる対象）
+    // 導入編の小物（当たり判定は物理を作る前に足す）と、非常警報の柱・街灯の風船（つかめる対象）
     this.props = this.m.propsM.buildIntroProps(this.fs.root, this.fs.colliders)
-    this.fs.claw.targets.push(this.props.alarm.def)
-    this.fs.claw.movables.push(this.props.alarm.movable)
+    this.fs.claw.targets.push(this.props.alarm.def, this.props.balloon.def)
+    this.fs.claw.movables.push(this.props.alarm.movable, this.props.balloon.movable)
     this.interactables = [
       ...this.fs.interactables.filter((it) => it.id !== 'ido_exhibit').map((it) => ({ id: it.id as IntroInteract, pos: it.pos, reach: it.reach })),
       ...this.props.interactables,
@@ -505,6 +505,11 @@ class Future2086Stage implements Stage {
   objectiveTarget(): THREE.Vector3 | null {
     const mk = this.fs.markers
     return this.intro?.objectiveTarget(this.story.step, this.lensPos(), mk.hook, mk.swing) ?? null
+  }
+
+  objectiveMarkers(): readonly ObjectiveMark[] | null {
+    if (this.blocked) return null
+    return this.intro?.objectiveMarkers(this.story.step, this.lensPos()) ?? null
   }
 
   onClawEvent(e: WireEvent): void {

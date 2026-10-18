@@ -1,13 +1,35 @@
 // 導入編の画面の重ね物（DOM）：1-0 の回想・4章③の白いかすみ・4章の試みの一覧。見た目は introOverlay2086.css。
 // 回想の絵は public/textures/story/flashback_2071.webp（リードが用意。読めるまで・無いときはキャンバスで描いた仮の絵）。
+// 回想は台詞（intro_2086.json の flashback）を 1 行ずつ出す：ソラが名前しか覚えていないロボットを見つけ、
+// 「昨日のことが分からなくても、今日はここにいるよ。」で手を引くまで。F で次の行へ。
 import './introOverlay2086.css'
 import { mulberry32 } from '../../render/noise'
 import type { AttemptItem } from './intro2086Story'
 
 export const FLASHBACK_IMAGE = './textures/story/flashback_2071.webp'
 
-/** 回想の時間（秒） */
-export const FLASHBACK_TIMING = { fadeIn: 0.9, place: 1.6, quote: 3.4, white: 9.4, whiteDur: 1.3, out: 10.9, outDur: 1.3 } as const
+/** 回想の時間（秒）。台詞の行の時刻は flashbackSchedule で決める */
+export const FLASHBACK_TIMING = { fadeIn: 0.9, place: 1.2, firstLine: 2.8, lastHold: 1.8, whiteDur: 1.3, outDur: 1.3, swap: 0.32 } as const
+
+export type FlashbackLine = { speaker: string; text: string }
+
+/** 1 行を出しておく秒（文字数で決める） */
+export function flashbackLineSec(text: string): number {
+  return Math.min(5.6, Math.max(2.6, 1.4 + text.length * 0.09))
+}
+
+/** 台詞の行ごとの出始め・白くなる時刻・終わる時刻 */
+export function flashbackSchedule(lines: readonly FlashbackLine[]): { starts: number[]; white: number; out: number } {
+  const T = FLASHBACK_TIMING
+  const starts: number[] = []
+  let t = T.firstLine
+  for (const l of lines) {
+    starts.push(t)
+    t += flashbackLineSec(l.text)
+  }
+  const white = t + T.lastHold
+  return { starts, white, out: white + 1.5 }
+}
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
 
@@ -135,21 +157,30 @@ export class Flashback {
   private readonly photo: HTMLDivElement
   private readonly place: HTMLDivElement
   private readonly quote: HTMLDivElement
+  private readonly who: HTMLSpanElement
+  private readonly line: HTMLSpanElement
   private readonly white: HTMLDivElement
+  private readonly lines: readonly FlashbackLine[]
+  private readonly plan: { starts: number[]; white: number; out: number }
   private t = 0
   private done = false
+  /** いま出している行（-1 = なし）と、入れ替えの待ち */
+  private shown = -1
+  private swapAt = 0
   onDone: (() => void) | null = null
 
-  constructor(speaker: string, line: string) {
+  constructor(lines: readonly FlashbackLine[]) {
+    this.lines = lines
+    this.plan = flashbackSchedule(lines)
     const touch = document.documentElement.classList.contains('touch-ui')
     const el = document.createElement('div')
     el.className = 'intro-flashback'
     el.innerHTML =
       '<div class="ifb-photo"><canvas></canvas><img alt=""></div><div class="ifb-tint"></div><div class="ifb-tone"></div><div class="ifb-grain"></div>' +
       '<div class="ifb-place"><b>15年前</b>旧なんば地下・ロボット回収施設</div>' +
-      `<div class="ifb-quote"><span class="who">${escapeHtml(speaker)}</span><span class="line">「${escapeHtml(line)}」</span></div>` +
-      `<div class="ifb-white"></div><div class="ifb-skip">${touch ? 'タップでスキップ' : 'F：スキップ'}</div>`
-    // タッチ：画面をタップで飛ばす
+      '<div class="ifb-quote"><span class="who"></span><span class="line"></span></div>' +
+      `<div class="ifb-white"></div><div class="ifb-skip">${touch ? 'タップで次へ' : 'F：次へ'}</div>`
+    // タッチ：画面をタップで次の行へ
     if (touch) {
       el.style.pointerEvents = 'auto'
       el.addEventListener('pointerdown', (e) => {
@@ -162,6 +193,8 @@ export class Flashback {
     this.photo = el.querySelector('.ifb-photo') as HTMLDivElement
     this.place = el.querySelector('.ifb-place') as HTMLDivElement
     this.quote = el.querySelector('.ifb-quote') as HTMLDivElement
+    this.who = el.querySelector('.ifb-quote .who') as HTMLSpanElement
+    this.line = el.querySelector('.ifb-quote .line') as HTMLSpanElement
     this.white = el.querySelector('.ifb-white') as HTMLDivElement
     paintFlashback(el.querySelector('canvas') as HTMLCanvasElement)
     const img = el.querySelector('img') as HTMLImageElement
@@ -174,25 +207,50 @@ export class Flashback {
     return !this.done
   }
 
-  /** 白へ飛ばす */
+  /** 次の行へ（最後の行なら白へ） */
   skip(): void {
-    if (this.t < FLASHBACK_TIMING.white) this.t = FLASHBACK_TIMING.white
+    const { starts, white } = this.plan
+    const next = starts.find((s) => s > this.t + 0.05)
+    // 最初の行が出る前なら、最初の行へ
+    this.t = Math.max(this.t, next ?? white)
   }
 
   update(dt: number): void {
     if (this.done) return
     this.t += dt
     const T = FLASHBACK_TIMING
+    const { starts, white, out } = this.plan
     const t = this.t
-    const k = Math.min(1, t / T.white)
+    const k = Math.min(1, t / white)
     // ゆっくり寄る（Ken Burns）
     this.photo.style.transform = `scale(${(1.14 - k * 0.12).toFixed(4)}) translate(${(-k * 1.6).toFixed(3)}%, ${(k * 0.8).toFixed(3)}%)`
     this.photo.style.opacity = String(Math.min(1, t / T.fadeIn))
-    this.place.classList.toggle('on', t > T.place && t < T.white)
-    this.quote.classList.toggle('on', t > T.quote && t < T.white + 0.4)
-    this.white.style.opacity = String(Math.min(1, Math.max(0, (t - T.white) / T.whiteDur)))
-    this.el.style.opacity = String(1 - Math.min(1, Math.max(0, (t - T.out) / T.outDur)))
-    if (t >= T.out + T.outDur) {
+    this.place.classList.toggle('on', t > T.place && t < white)
+    // 台詞：いまの行へ入れ替える（出ている行をいったん消してから）
+    let want = -1
+    if (t < white + 0.4) for (let i = 0; i < starts.length; i++) if (starts[i] <= t) want = i
+    if (want !== this.shown) {
+      if (this.quote.classList.contains('on')) {
+        this.quote.classList.remove('on')
+        this.swapAt = t + T.swap
+      } else if (t >= this.swapAt) {
+        this.shown = want
+        if (want >= 0) {
+          const l = this.lines[want]
+          this.who.textContent = l.speaker
+          this.line.textContent = `「${l.text}」`
+          this.quote.classList.toggle('sora', l.speaker.includes('ソラ'))
+          // 最後の一言は大きく、あたたかい光で
+          const last = want === this.lines.length - 1
+          this.quote.classList.toggle('last', last)
+          this.el.classList.toggle('warm', last)
+          this.quote.classList.add('on')
+        }
+      }
+    }
+    this.white.style.opacity = String(Math.min(1, Math.max(0, (t - white) / T.whiteDur)))
+    this.el.style.opacity = String(1 - Math.min(1, Math.max(0, (t - out) / T.outDur)))
+    if (t >= out + T.outDur) {
       this.done = true
       this.el.remove()
       this.onDone?.()

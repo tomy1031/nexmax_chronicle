@@ -13,7 +13,7 @@ import type { ActionFrame } from '../../player/inputActions'
 import type { Character } from '../../world/characters'
 import type { Hint } from '../../ui/hud'
 import { lineDuration, type DialogueLine } from '../../game/dialogueQueue'
-import type { CineShot, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageShots, StageWorld } from '../../game/stage'
+import type { CineShot, ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageShots, StageWorld } from '../../game/stage'
 import type { SkyPalette } from '../../render/sky'
 import data2026 from '../../data/dialogue_2026.json'
 import { buildNambaScene, type NambaScene } from './scene'
@@ -842,6 +842,30 @@ export class NambaStage implements Stage {
       return best
     }
     return null
+  }
+
+  private readonly markAt = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]
+  private readonly marks: ObjectiveMark[] = []
+
+  /** 目標の目印（頭の上の「！」と名前）：社長・佐伯・IDO の石標（まだ読んでいない石標はすべて。近いものだけ画面の縁にも） */
+  objectiveMarkers(rt: StageRuntime): readonly ObjectiveMark[] | null {
+    const f = (n: string) => rt.story.get(n)
+    const o = presentObjective(f)
+    const out = this.marks
+    out.length = 0
+    const head = (c: Character, label: string) => out.push({ pos: this.markAt[0].copy(c.root.position).setY(c.root.position.y + c.height + 0.3), label })
+    if (o.target === 'matsui') head(this.matsui, 'マツイ社長')
+    else if (o.target === 'saeki') head(this.saeki, '佐伯')
+    else if (o.target === 'ido') out.push({ pos: this.markAt[0].copy(this.scene.ido.base).setY(1.75), label: 'IDO の石標' })
+    else if (o.target === 'ido_markers') {
+      const near = this.objectiveTarget(rt)
+      for (const id of idoMarkersLeft(f)) {
+        if (!idoMarkerVisible(id, f) || out.length >= this.markAt.length) continue
+        const b = this.scene.idos[id].base
+        out.push({ pos: this.markAt[out.length].copy(b).setY(1.75), label: `石標 ${id.toUpperCase()}`, edge: b === near })
+      }
+    }
+    return out
   }
 
   // ---------------------------------------------------------------- 毎フレーム

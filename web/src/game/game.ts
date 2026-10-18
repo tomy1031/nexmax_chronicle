@@ -34,6 +34,7 @@ import { DialogueQueue, lineDuration, type DialogueLine } from './dialogueQueue'
 import { createStage, DEFAULT_STAGE, STAGE_INFO } from './registry'
 import { CineDirector, autoFramePosition, type CineShot } from './cinematic'
 import { CineMarkerFx } from './cineMarker'
+import { ObjectiveMarkerFx } from './objectiveMarker'
 import type { Stage, StageLoadContext, StageRuntime, StageWorld } from './stage'
 
 /** 読み込み表示を更新するために 1 フレーム譲る（非表示タブで rAF が止まっても進むよう setTimeout も併用） */
@@ -124,6 +125,8 @@ export class Game {
   /** カメラの演出（rt.cinematic）とその目印・上下の黒帯 */
   private readonly cine = new CineDirector()
   private readonly cineMarker: CineMarkerFx
+  /** 目標の目印（いまやることの相手の頭の上の「！」。ステージの objectiveMarkers） */
+  private readonly objMarks: ObjectiveMarkerFx
   private readonly cineBars: HTMLDivElement
   private readonly cineAuto = new THREE.Vector3()
   private readonly cineDir = new THREE.Vector3()
@@ -188,6 +191,7 @@ export class Game {
     ui.insertBefore(this.cineBars, ui.firstChild)
     this.cineMarker = new CineMarkerFx(ui)
     this.scene.add(this.cineMarker.group)
+    this.objMarks = new ObjectiveMarkerFx(ui)
     // 提灯などの点光源（数は固定：近い候補へ毎回移す。ステージをまたいで使い回す）
     for (let i = 0; i < 6; i++) {
       const pl = new THREE.PointLight('#ffae5a', 0, 7, 2)
@@ -663,6 +667,7 @@ export class Game {
     this.nexmax.handAnchor.getWorldPosition(this.hand)
     if (this.shotIndex >= 0 && shots) {
       shots.update(this.shotIndex, dt, this.hand, rt)
+      this.objMarks.hide()
     } else {
       claw.updateVisuals(ndt, this.hand)
       const { w, h } = this.size()
@@ -683,6 +688,12 @@ export class Game {
       }
       if (this.touch) this.hud.setClawPrompt(this.clawLabel, u.selected !== null && !active && !this.cine.active)
       if (frozen || this.travel.busy) this.hud.setHints([])
+      // 目標の目印：操作できるときだけ（会話・カメラの演出・操作を止めている間・一時停止中は隠す）
+      const marks = !frozen && !this.travel.busy && !this.cine.active && !this.talk && !this.controlLocked ? (stage.objectiveMarkers?.(rt) ?? null) : null
+      if (marks?.length) {
+        this.camera.updateMatrixWorld()
+        this.objMarks.update(this.camera, marks, w, h)
+      } else this.objMarks.hide()
     }
     this.rift.update(ndt, this.camera)
     this.hud.tick(dt)

@@ -25,6 +25,7 @@ three.js 版は **シェル（ずっと残るもの）＋ステージ（時代�
 - `dialogueQueue.ts` … 複数行の会話を順に出す（文字数で自動送り、F で早送り）
 - `cinematic.ts` … カメラの演出（`rt.cinematic(shot)`）の時間の進み・加減速・自動のカメラ位置・ディレクター（純粋な計算＋THREE の数学。`tests/cinematic.test.ts`）
 - `cineMarker.ts` … 演出中の目印（脈打つ光る輪・光の柱・名前の札）。シェルが 1 組だけ持って使い回す
+- `objectiveMarker.ts` … 目標の目印（いまやることの相手の頭の上に弾む金色の「！」と名前の札。画面の外なら縁に寄せて矢印）。DOM だけ。ステージの `objectiveMarkers(rt)` を毎フレーム映す。置き場所の計算 `placeMarker` は `tests/objectiveMarker.test.ts`
 - `params.ts` … URL パラメータ
 - `future2086Adapter.ts` … 2086 年ステージ（別担当）をつなぐところ
 - `game.css` … 時空移動・時代カード・IDO パネル・話者の色
@@ -48,6 +49,7 @@ interface Stage {
   hints(rt): Hint[] | null         // キー案内（null ならシェルの既定）
   objective(rt): { title, sub }    // 左上の目標
   objectiveTarget?(rt): Vector3 | null   // 目標の位置（HUD の方位磁針用）
+  objectiveMarkers?(rt): ObjectiveMark[] | null   // 頭の上の目印 { pos, label?, edge? }（最大 4。会話・演出・操作停止中はシェルが隠す）
   onClawEvent?(e, rt): void        // NMClaw のお知らせ（connected / released など）
   onRespawn?(rt): void
   shots?: StageShots               // ?shot= の固定カメラ（P キーで切替）

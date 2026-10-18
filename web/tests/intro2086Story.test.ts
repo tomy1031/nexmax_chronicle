@@ -1,15 +1,20 @@
 // 2086年 導入編（docs/シナリオ改訂案_導入編_v1.md の 1〜5 章）の物語の状態機械（src/stages/future2086/intro2086Story.ts）。
-// シーン無しで、回想 → レンズの受け渡し → アンテナ → 約束 → 夜 → ループ → 気づき → 試み（順番自由）→ 打ち明け → QR → 2026年 を通す。
+// シーン無しで、回想 → 朝の始まり（街頭ビジョン・風船・選択）→ レンズの受け渡し → アンテナ → 約束 → 夜 → ループ → 気づき
+// → 試み（順番自由）→ 打ち明け → QR → 2026年 を通す。
 import { describe, expect, it } from "vitest";
 import {
   ATTEMPTS,
   ATTEMPT_CHOICE,
+  BALLOON_CHOICE,
+  BALLOON_LABELS,
+  BALLOON_OBJECTIVE,
   CONFRONT_TIMEOUT,
   EVADE_TIMEOUT,
+  INTRO_IDS,
   INTRO_OBJECTIVES,
   INTRO_STEPS,
   Intro2086Story,
-  MORNING_EVENTS,
+  MORNING_DELAY,
   introSpawn,
   introStartStep,
   type IntroEffect,
@@ -18,10 +23,16 @@ import {
 import table from "../src/stages/future2086/intro_2086.json";
 
 type Dlg = Extract<IntroEffect, { kind: "dialogue" }>;
+type Choice = Extract<IntroEffect, { kind: "choice" }>;
 const story = (start?: IntroStep, loopCount = 0, flags: string[] = []) =>
   new Intro2086Story({ start, loopCount, flags: (n) => flags.includes(n) }).record();
 const lastDlg = (e: IntroEffect[]) => e.filter((x): x is Dlg => x.kind === "dialogue").pop();
 const has = (e: IntroEffect[], kind: IntroEffect["kind"]) => e.some((x) => x.kind === kind);
+/** 演出の列の中で最後に出た操作のロック（出ていなければ null） */
+const lastLock = (e: IntroEffect[]) => {
+  const l = e.filter((x): x is Extract<IntroEffect, { kind: "lock" }> => x.kind === "lock").pop();
+  return l ? l.on : null;
+};
 
 /** 待っている会話を最後まで聞く（続けて出た会話も、なくなるまで。選択肢や演出の待ちで止まる） */
 function finish(s: Intro2086Story, max = 8): IntroEffect[] {
@@ -30,6 +41,17 @@ function finish(s: Intro2086Story, max = 8): IntroEffect[] {
     s.send({ kind: "dialogue_done", key: s.pending });
     all.push(...s.drain());
   }
+  return all;
+}
+
+/** 朝の始まり（独白・街頭ビジョン・風船）を聞いて、風船の選択肢で option を選ぶ（選択肢が出ていなければ失敗） */
+function passMorning(s: Intro2086Story, option: "take" | "go" = "go"): IntroEffect[] {
+  const all = finish(s);
+  expect(s.step).toBe("morning");
+  const ch = all.filter((x): x is Choice => x.kind === "choice").pop();
+  expect(ch?.id).toBe(BALLOON_CHOICE.id);
+  s.send({ kind: "choice", id: BALLOON_CHOICE.id, option });
+  all.push(...finish(s));
   return all;
 }
 
@@ -44,7 +66,7 @@ function playChapter1And2(s: Intro2086Story): IntroEffect[] {
   s.begin();
   pump();
   s.send({ kind: "fx_done", fx: "flashback" });
-  pump();
+  all.push(...passMorning(s));
   s.send({ kind: "zone", zone: "booth" });
   s.send({ kind: "interact", target: "sora" });
   pump();
@@ -67,7 +89,7 @@ function playChapter1And2(s: Intro2086Story): IntroEffect[] {
   s.send({ kind: "zone", zone: "south_gate" });
   pump();
   s.send({ kind: "fx_done", fx: "loop" });
-  pump();
+  all.push(...passMorning(s));
   return all;
 }
 
@@ -81,9 +103,10 @@ describe("1章 祭りの朝", () => {
     expect(s.busy).toBe(true);
     s.send({ kind: "fx_done", fx: "flashback" });
     let e = s.drain();
-    expect(s.step).toBe("go_booth");
+    expect(s.step).toBe("morning");
     expect(lastDlg(e)!.lines[0].text).toContain("あれから15年");
-    s.send({ kind: "dialogue_done", key: "opening_mono" });
+    passMorning(s);
+    expect(s.step).toBe("go_booth");
     s.send({ kind: "zone", zone: "booth" });
     expect(s.step).toBe("talk_sora");
     s.drain();
@@ -163,27 +186,116 @@ describe("2章 その夜", () => {
 });
 
 describe("3章 繰り返す朝", () => {
-  it("毎朝、同じ時刻に街頭ビジョンと風船。1 回目のループでだけネクマックスが気づく", () => {
-    const s0 = story("go_booth");
-    s0.begin();
-    s0.drain();
-    for (let t = 0; t < MORNING_EVENTS.balloon + 8; t += 0.5) s0.send({ kind: "tick", dt: 0.5 });
-    const e0 = s0.drain();
-    expect(has(e0, "announce")).toBe(true);
-    expect(has(e0, "balloon")).toBe(true);
-    expect(e0.some((e) => e.kind === "say" && e.text.includes("19日"))).toBe(false);
-    const s1 = story("loop_cues", 1);
-    s1.begin();
-    s1.drain();
-    for (let t = 0; t < MORNING_EVENTS.balloon + 8; t += 0.5) s1.send({ kind: "tick", dt: 0.5 });
-    const e1 = s1.drain();
-    const says = e1.filter((e): e is Extract<IntroEffect, { kind: "say" }> => e.kind === "say");
-    // 街頭ビジョンの言葉は毎朝同じ
-    expect(says.find((x) => x.speaker === "街頭ビジョン")!.text).toBe(table.announce[0].text);
-    expect(says.find((x) => x.speaker === "街頭ビジョン")!.text).toContain("10月18日");
-    expect(says.some((x) => x.text.includes("19日のはず"))).toBe(true);
-    expect(says.some((x) => x.text.includes("同じ街灯"))).toBe(true);
-    expect(e1).toContainEqual({ kind: "focus", target: "balloon", short: true });
+  it("1周目の朝：独白のあと街頭ビジョン（10月18日）を映し、風船が街灯に引っかかってから選ぶ。選ぶまで操作は止まる", () => {
+    const s = story();
+    s.begin();
+    expect(lastLock(s.drain())).toBe(true);
+    s.send({ kind: "fx_done", fx: "flashback" });
+    let e = s.drain();
+    expect(lastLock(e)).toBe(null); // 回想からロックのまま
+    expect(s.busy).toBe(true);
+    s.send({ kind: "dialogue_done", key: "opening_mono" });
+    e = s.drain();
+    expect(has(e, "announce")).toBe(true);
+    expect(e).toContainEqual({ kind: "focus", target: "street", short: false });
+    const news = lastDlg(e)!;
+    expect(news.lines).toEqual(table.announce);
+    expect(news.lines[0].text).toContain("10月18日");
+    s.send({ kind: "dialogue_done", key: news.key });
+    e = s.drain();
+    expect(has(e, "balloon")).toBe(true);
+    expect(e).toContainEqual({ kind: "focus", target: "balloon", short: false });
+    const cry = lastDlg(e)!;
+    expect(cry.lines).toEqual(table.balloon_cry);
+    expect(has(e, "choice")).toBe(false);
+    s.send({ kind: "dialogue_done", key: cry.key });
+    e = s.drain();
+    const ch = e.find((x): x is Choice => x.kind === "choice")!;
+    expect(ch.id).toBe(BALLOON_CHOICE.id);
+    expect(ch.options.map((o) => o.label)).toEqual([BALLOON_LABELS.take, BALLOON_LABELS.go]);
+    expect(s.canInteract("sora")).toBe(false);
+    s.send({ kind: "choice", id: ch.id, option: "go" });
+    e = s.drain();
+    expect(s.step).toBe("go_booth");
+    expect(lastLock(e)).toBe(false);
+    expect(lastDlg(e)!.key).toBe("balloon_leave");
+    expect(s.objective()).toEqual(INTRO_OBJECTIVES.go_booth);
+  });
+
+  it("風船を取ってあげる：目標が風船になり、J で引き寄せると子どもに返ってお礼。そのあとソラへ", () => {
+    const s = story();
+    s.begin();
+    s.send({ kind: "fx_done", fx: "flashback" });
+    passMorning(s, "take");
+    expect(s.step).toBe("go_booth");
+    expect(s.objective()).toEqual(BALLOON_OBJECTIVE);
+    expect(s.hints().map((h) => h.key)).toEqual(["J", "↑↓←→"]);
+    expect(s.balloonCatchable()).toBe(true);
+    s.send({ kind: "claw", event: "connected", targetId: INTRO_IDS.balloon });
+    expect(s.balloonCatchable()).toBe(false);
+    s.drain();
+    s.send({ kind: "claw", event: "object_arrived", targetId: INTRO_IDS.balloon });
+    const e = s.drain();
+    expect(has(e, "balloon_return")).toBe(true);
+    expect(lastDlg(e)!.lines).toEqual(table.balloon_thanks);
+    finish(s);
+    expect(s.objective()).toEqual(INTRO_OBJECTIVES.go_booth);
+    expect(s.step).toBe("go_booth");
+  });
+
+  it("風船を取らずにブースへ来たら、取ってあげる目標は下ろす", () => {
+    const s = story();
+    s.begin();
+    s.send({ kind: "fx_done", fx: "flashback" });
+    passMorning(s, "take");
+    s.send({ kind: "zone", zone: "booth" });
+    expect(s.step).toBe("talk_sora");
+    expect(s.balloonCatchable()).toBe(false);
+    expect(s.objective()).toEqual(INTRO_OBJECTIVES.talk_sora);
+  });
+
+  it("繰り返しの朝：同じニュースと風船に気づき、最初にまた選ぶ。選んだら操作が戻る（固まらない）", () => {
+    const s = story();
+    const all = playChapter1And2(s);
+    expect(s.step).toBe("loop_cues");
+    // 飲み込まれたときのロックが、朝の選択のあとで外れている
+    expect(lastLock(all)).toBe(false);
+    const says = all.filter((x): x is Dlg => x.kind === "dialogue").flatMap((d) => d.lines);
+    expect(says.filter((l) => l.speaker === "街頭ビジョン").map((l) => l.text)).toEqual([table.announce[0].text, table.announce[0].text]);
+    expect(says.some((l) => l.text.includes("19日のはず"))).toBe(true);
+    expect(says.some((l) => l.text.includes("同じ街灯"))).toBe(true);
+    const choices = all.filter((x): x is Choice => x.kind === "choice");
+    expect(choices.map((c) => c.id)).toEqual([BALLOON_CHOICE.id, BALLOON_CHOICE.id]);
+    expect(s.canInteract("sora")).toBe(true);
+  });
+
+  it("繰り返しの朝で風船を取ってあげると、お礼の言葉まで同じだと気づく", () => {
+    const s = story();
+    s.begin();
+    s.send({ kind: "fx_done", fx: "flashback" });
+    passMorning(s);
+    const t = story("loop_cues", 1);
+    t.begin();
+    for (let i = 0; i < 4; i++) t.send({ kind: "tick", dt: MORNING_DELAY / 2 });
+    passMorning(t, "take");
+    t.send({ kind: "claw", event: "connected", targetId: INTRO_IDS.balloon });
+    t.send({ kind: "claw", event: "object_arrived", targetId: INTRO_IDS.balloon });
+    const d = lastDlg(t.drain())!;
+    expect(d.lines).toEqual(table.balloon_thanks_loop);
+  });
+
+  it("繰り返しの朝から再開：時代カードが出てから街頭ビジョンを映す。それまでは操作を止めておく", () => {
+    const s = story("loop_cues", 1, ["festival_morning_seen", "orum_seen"]);
+    s.begin();
+    let e = s.drain();
+    expect(s.step).toBe("morning");
+    expect(lastLock(e)).toBe(true);
+    expect(has(e, "announce")).toBe(false);
+    s.send({ kind: "tick", dt: MORNING_DELAY + 0.1 });
+    e = s.drain();
+    expect(has(e, "announce")).toBe(true);
+    passMorning(s);
+    expect(s.step).toBe("loop_cues");
   });
 
   it("ソラは一字一句同じあいさつ。手伝うと言った瞬間に腕を受け止め、夜の話には初めて聞いた返事", () => {
@@ -258,6 +370,13 @@ describe("4章 あらがう（順番は自由）", () => {
     let w = lastDlg(e)!;
     expect(w.lines.some((l) => l.text.includes("変えられないの"))).toBe(false);
     s.send({ kind: "dialogue_done", key: w.key });
+    // 試みの朝も、最初に風船を選ぶ（行き先はソラとは限らないので「先を急ぐ」）
+    const m = passMorning(s);
+    expect(m.find((x): x is Choice => x.kind === "choice")!.options.map((o) => o.label)).toEqual([BALLOON_LABELS.take, BALLOON_LABELS.hurry]);
+    expect(m).toContainEqual({ kind: "focus", target: "street", short: true });
+    expect(m.some((x) => x.kind === "dialogue" && x.lines.some((l) => l.text === "……また、10月18日。"))).toBe(true);
+    expect(lastLock(m)).toBe(false);
+    expect(has(m, "save")).toBe(true);
     expect(s.step).toBe("attempts");
     expect(s.attemptItems()!.find((x) => x.id === "alarm")!.done).toBe(true);
     // ソラ：あいさつ（毎周同じ）→ 選択肢
@@ -282,6 +401,7 @@ describe("4章 あらがう（順番は自由）", () => {
     w = lastDlg(e)!;
     expect(w.lines.some((l) => l.text === "ぼくには……未来は、変えられないの……？")).toBe(true);
     s.send({ kind: "dialogue_done", key: w.key });
+    passMorning(s);
     expect(s.despaired).toBe(true);
     expect(s.objective().title).toBe("ソラに打ち明けよう");
     // 打ち明けるが選べる（まだの試みも選べる）

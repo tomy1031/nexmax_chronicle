@@ -1,4 +1,5 @@
 // 後処理：N8AO（環境遮蔽）→ 層状のかすみ（距離と高さ）→ ブルーム＋色調（露出・ACES・彩度・コントラスト・暖色・周辺減光）→ SMAA。
+// 画質（render/quality.ts）で AO・ブルーム・SMAA を外せる（setQuality でその場で組み直す）。
 import * as THREE from 'three'
 import { BloomEffect, BlendFunction, Effect, EffectAttribute, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing'
 import { N8AOPostPass } from 'n8ao'
@@ -146,46 +147,86 @@ export type PostChain = {
   ao: N8AOPostPass | null
   setSize(w: number, h: number): void
   render(dt: number): void
+  /** 画質を変える：パスを組み直す（エフェクト・色調の値はそのまま。AO・ブルーム・SMAA が無ければその処理ごと省く） */
+  setQuality(q: QualitySettings): void
 }
 
+/**
+ * 後処理の組み立て。画質で次のように変える（重い順）：
+ * ・AO（N8AO）：高画質だけ。半透明の物をもう一度描く処理（transparencyAware）は使わない
+ * ・ブルーム：省電力では入れない（強さ 0 にしても縮小・拡大の 17 回は描いてしまうので、パスから外す）
+ * ・SMAA：高画質は HIGH、標準は MEDIUM、省電力は無し
+ * かすみと色調はいつも 1 回の全画面処理にまとめる
+ */
 export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, q: QualitySettings): PostChain {
   const composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 })
-  const size = renderer.getSize(new THREE.Vector2())
-  composer.addPass(new RenderPass(scene, camera))
-  let ao: N8AOPostPass | null = null
-  if (q.ao) {
-    ao = new N8AOPostPass(scene, camera, size.x, size.y)
-    ao.setQualityMode(q.level === 'high' ? 'Medium' : 'Performance')
-    ao.configuration.aoRadius = 1.1
-    ao.configuration.distanceFalloff = 1.0
-    ao.configuration.intensity = 2.6
-    ao.configuration.color = new THREE.Color('#2a160a')
-    ao.configuration.halfRes = q.aoHalfRes
-    ao.configuration.gammaCorrection = false
-    composer.addPass(ao)
-  }
+  const renderPass = new RenderPass(scene, camera)
   const bloom = new BloomEffect({
     mipmapBlur: true,
     luminanceThreshold: 0.95,
     luminanceSmoothing: 0.35,
-    intensity: q.bloom ? 1.2 : 0,
+    intensity: 1.2,
     radius: 0.72,
   })
   const grade = new GradeEffect()
   const haze = new HazeEffect(camera)
-  composer.addPass(new EffectPass(camera, haze, bloom, grade))
-  const smaa = new SMAAEffect({ preset: q.level === 'high' ? SMAAPreset.HIGH : SMAAPreset.MEDIUM })
-  composer.addPass(new EffectPass(camera, smaa))
-  return {
+  let ao: N8AOPostPass | null = null
+  let fx: EffectPass | null = null
+  let aa: EffectPass | null = null
+  let key = ''
+  /** 使わなくなったパスを捨てる（使い回すエフェクトは解放しない） */
+  const drop = (p: EffectPass | null, keepEffects: boolean) => {
+    if (!p) return
+    // setEffects は protected：エフェクトの change の購読だけ外す（dispose でエフェクトまで解放されないように）
+    if (keepEffects) (p as unknown as { setEffects(e: Effect[]): void }).setEffects([])
+    p.dispose()
+  }
+  const chain: PostChain = {
     composer,
     grade,
     bloom,
-    ao,
+    ao: null,
     setSize(w: number, h: number) {
       composer.setSize(w, h)
     },
     render(dt: number) {
       composer.render(dt)
     },
+    setQuality(q: QualitySettings) {
+      const k = `${q.ao ? 1 : 0}${q.aoHalfRes ? 1 : 0}|${q.level}|${q.bloom ? 1 : 0}|${q.smaa ?? '-'}`
+      if (k === key) return
+      key = k
+      composer.removeAllPasses()
+      composer.addPass(renderPass)
+      if (q.ao) {
+        const size = renderer.getSize(new THREE.Vector2())
+        if (!ao) {
+          ao = new N8AOPostPass(scene, camera, size.x, size.y)
+          ao.configuration.aoRadius = 1.1
+          ao.configuration.distanceFalloff = 1.0
+          ao.configuration.intensity = 2.6
+          ao.configuration.color = new THREE.Color('#2a160a')
+          ao.configuration.gammaCorrection = false
+          // 半透明の物を AO のためにもう一度描かない（毎フレーム 50 回ほどの描画と、その分の全画面処理が増えるため）
+          ao.autoDetectTransparency = false
+          ao.configuration.transparencyAware = false
+        }
+        ao.setQualityMode(q.level === 'high' ? 'Medium' : 'Performance')
+        ao.configuration.halfRes = q.aoHalfRes
+        composer.addPass(ao)
+      }
+      chain.ao = q.ao ? ao : null
+      drop(fx, true)
+      fx = new EffectPass(camera, ...(q.bloom ? [haze, bloom, grade] : [haze, grade]))
+      composer.addPass(fx)
+      drop(aa, false)
+      aa = null
+      if (q.smaa) {
+        aa = new EffectPass(camera, new SMAAEffect({ preset: q.smaa === 'high' ? SMAAPreset.HIGH : SMAAPreset.MEDIUM }))
+        composer.addPass(aa)
+      }
+    },
   }
+  chain.setQuality(q)
+  return chain
 }

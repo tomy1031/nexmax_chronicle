@@ -122,8 +122,28 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 ## URL パラメータ（開発・検証用）
 
 `?stage=1726|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
-`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low`・`?stats`・`?debug`・`?slowmo=0.3`。
-開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`。
+`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
+（どちらも保存した設定より優先）・`?fixed`（解像度を固定）・`?stats`（F3 と同じ計測表示）・`?debug`・`?slowmo=0.3`。
+開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`・
+`window.__game.graphics({ quality: 'low', fps: 30 })`（画質・フレームレートをその場で変える）。
+
+## 画質とフレームレート（`render/quality.ts`）
+
+一時停止の「設定」タブで選び、この端末（localStorage の `nexmax.graphics.v1`）に保存する。スマホ・タブレット（タッチ操作）は「標準・30」、PC は「高画質・60」から始まる。
+変えるとその場で効く（後処理のパスの組み直し・影の解像度・点光源の数・解像度の上限。花びらの数だけは次の時代から）。
+
+| | 省電力 | 標準 | 高画質 |
+|---|---|---|---|
+| 環境遮蔽（N8AO） | なし | なし | あり（半分の解像度） |
+| ブルーム | なし（パスから外す） | あり | あり |
+| アンチエイリアス（SMAA） | なし | MEDIUM | HIGH |
+| 影の解像度・ぼかし | 1024・1 | 1024・2 | 2048・3 |
+| 解像度の上限（CSS の画素あたり） | 0.85 | 1.0 | 1.25 |
+| 点光源（提灯など） | 2 | 4 | 6 |
+| 左上の顔の更新 | 8 回／秒 | 12 回／秒 | 20 回／秒 |
+
+フレームレートは requestAnimationFrame を間引いて上限（30・60）に合わせる（120Hz の画面でも 60 を超えない）。一時停止中・メニュー中は 12 まで下げる。
+適応解像度（`render/renderer.ts` の `AdaptiveResolution`）は上限のフレームレートを目標に、毎フレームの実時間で測って解像度を下げ、余裕が続けば戻す。
 
 ## 2086 年ステージのつなぎ方（`future2086Adapter.ts`）
 

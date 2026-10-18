@@ -3,7 +3,7 @@
 // 新しいステージを組み立て、シェーダを事前コンパイルしてから見せる。毎フレームの流れは 1726年の縦切り試作（slice.ts）と同じ。
 // スマホのときだけタッチ操作（player/touchInput.ts）を足す。PC の操作・表示は変えない。
 import * as THREE from 'three'
-import { readParams, type QualitySettings } from '../render/quality'
+import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs, savePrefs, type GraphicsPrefs, type QualitySettings } from '../render/quality'
 import { createRenderer, AdaptiveResolution } from '../render/renderer'
 import { createPost, type PostChain } from '../render/post'
 import { uTime } from '../render/materials'
@@ -96,7 +96,12 @@ const SPEAKERS_BY_STAGE: Partial<Record<StageKey, string[]>> = {
 
 export class Game {
   private readonly app: HTMLDivElement
-  private readonly q: QualitySettings
+  /** いまの画質（設定の「画質」。ステージの読み込み・後処理・影・点光源の数に使う） */
+  private q: QualitySettings
+  /** 遊ぶ人の設定（画質・フレームレートの上限。この端末に保存） */
+  private prefs: GraphicsPrefs
+  /** フレームレートの上限（一時停止中・メニュー中はさらに下げる） */
+  private readonly limiter: FrameLimiter
   private readonly fixedRatio: boolean
   private readonly gp: GameParams
   private readonly urlp: URLSearchParams
@@ -153,25 +158,31 @@ export class Game {
   constructor(app: HTMLDivElement, ui: HTMLDivElement) {
     this.app = app
     const params = readParams()
-    this.q = params.quality
     this.fixedRatio = params.fixedRatio
     this.gp = parseGameParams(location.search)
     this.urlp = new URLSearchParams(location.search)
-    this.loading = new LoadingOverlay(ui)
-    this.renderer = createRenderer(app, this.q)
-    const { w, h } = this.size()
-    this.camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 2500)
-    this.post = createPost(this.renderer, this.scene, this.camera, this.q)
-    this.hud = new Hud(ui)
-    if (this.gp.nohud) ui.style.display = 'none'
-    this.input = createInput(this.renderer.domElement)
-    // スマホ（指が主な入力の端末）だけタッチ操作。つないだキーボードも使えるよう割り当てを足す
+    // スマホ（指が主な入力の端末）だけタッチ操作。画質の初期値もこれで決める（スマホは「標準・30」）
     const useTouch = shouldUseTouch({
       param: this.urlp.get('touch'),
       coarse: matchMedia('(pointer: coarse)').matches,
       hoverNone: matchMedia('(hover: none)').matches,
       touchPoints: navigator.maxTouchPoints ?? 0,
     })
+    this.prefs = resolvePrefs(useTouch, loadSavedPrefs(), this.urlp)
+    this.q = qualitySettings(this.prefs.quality)
+    this.limiter = new FrameLimiter(this.prefs.fps)
+    this.loading = new LoadingOverlay(ui)
+    this.renderer = createRenderer(app, this.q)
+    const { w, h } = this.size()
+    this.camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 2500)
+    this.post = createPost(this.renderer, this.scene, this.camera, this.q)
+    this.hud = new Hud(ui)
+    this.hud.setPortraitFps(this.q.portraitFps)
+    this.hud.setGraphicsPrefs(this.prefs)
+    this.hud.onGraphicsChange = (p) => this.setGraphics(p)
+    if (this.gp.nohud) ui.style.display = 'none'
+    this.input = createInput(this.renderer.domElement)
+    // つないだキーボードも使えるよう割り当てを足す
     this.bindings = useTouch ? [...KEYBOARD_BINDINGS, ...TOUCH_BINDINGS] : KEYBOARD_BINDINGS
     this.touch = useTouch ? new TouchControls(ui, this.input) : null
     if (this.touch) {
@@ -192,9 +203,10 @@ export class Game {
     this.cineMarker = new CineMarkerFx(ui)
     this.scene.add(this.cineMarker.group)
     this.objMarks = new ObjectiveMarkerFx(ui)
-    // 提灯などの点光源（数は固定：近い候補へ毎回移す。ステージをまたいで使い回す）
+    // 提灯などの点光源（近い候補へ毎回移す。ステージをまたいで使い回す）。使う数は画質で決める（見えない光は描画の計算に入らない）
     for (let i = 0; i < 6; i++) {
       const pl = new THREE.PointLight('#ffae5a', 0, 7, 2)
+      pl.visible = i < this.q.pointLights
       this.scene.add(pl)
       this.lanternLights.push(pl)
     }
@@ -237,10 +249,15 @@ export class Game {
     this.hud.setTheme(stageKey)
     // ネクマックス（主人公）はシェルが持ち、ステージをまたいで使い回す
     const nexP = loadCharacter('nexmax', 1.05)
-    this.adaptive = new AdaptiveResolution(0.7, Math.min(window.devicePixelRatio, this.q.maxPixelRatio), (r) => {
-      this.renderer.setPixelRatio(r)
-      this.resize()
-    })
+    this.adaptive = new AdaptiveResolution(
+      this.q.minPixelRatio,
+      Math.min(window.devicePixelRatio, this.q.maxPixelRatio),
+      (r) => {
+        this.renderer.setPixelRatio(r)
+        this.resize()
+      },
+      this.prefs.fps,
+    )
     window.addEventListener('resize', () => this.resize())
     this.nexmax = await nexP
     this.scene.add(this.nexmax.root)
@@ -263,15 +280,20 @@ export class Game {
     let fpsAcc = 0
     let fpsFrames = 0
     let fps = 60
-    this.renderer.setAnimationLoop(() => {
+    this.renderer.setAnimationLoop((now) => {
+      // フレームレートの上限（30・60）。一時停止中・メニュー中は画面がほとんど動かないので 12 まで下げる
+      this.limiter.setFps(this.paused || this.menuOpen ? 12 : this.prefs.fps)
+      if (!this.limiter.shouldRender(now ?? performance.now())) return
       timer.update()
-      const dt = Math.min(timer.getDelta(), 0.1) * timeScale
+      const raw = timer.getDelta()
+      const dt = Math.min(raw, 0.1) * timeScale
       this.frame(dt)
+      // 適応解像度は毎フレームの実時間で測る（一時停止中・メニュー中・時空移動中は間引いているので測らない）
+      if (!this.fixedRatio && this.active && !this.paused && !this.menuOpen && !this.travel.busy) this.adaptive.sample(Math.min(raw, 0.25))
       fpsAcc += dt
       fpsFrames++
       if (fpsAcc >= 0.5) {
         fps = fpsFrames / fpsAcc
-        if (!this.fixedRatio && this.active) this.adaptive.sample(fpsAcc / fpsFrames)
         fpsAcc = 0
         fpsFrames = 0
       }
@@ -282,6 +304,23 @@ export class Game {
     })
     if (this.gp.stats) this.hud.toggleStats(true)
     window.__sliceReady = true
+  }
+
+  /** 画質・フレームレートの設定を変える（一時停止の「設定」タブから。その場で効き、この端末に保存する） */
+  setGraphics(p: GraphicsPrefs): void {
+    this.prefs = { ...p }
+    savePrefs(this.prefs)
+    this.q = qualitySettings(p.quality)
+    this.post.setQuality(this.q)
+    this.active?.env.sun.setQuality(this.q)
+    this.lanternLights.forEach((pl, i) => (pl.visible = i < this.q.pointLights))
+    this.hud.setPortraitFps(this.q.portraitFps)
+    this.hud.setGraphicsPrefs(this.prefs)
+    const max = Math.min(window.devicePixelRatio, this.q.maxPixelRatio)
+    if (this.fixedRatio) {
+      this.renderer.setPixelRatio(max)
+      this.resize()
+    } else this.adaptive?.configure(this.q.minPixelRatio, max, p.fps)
   }
 
   private resize(): void {
@@ -670,7 +709,8 @@ export class Game {
       this.objMarks.hide()
     } else {
       claw.updateVisuals(ndt, this.hand)
-      const { w, h } = this.size()
+      // 画面の大きさは resize のときに測った値（毎フレーム clientWidth を読むと、HUD を書き換えた直後にレイアウトの計算が走る）
+      const { w, h } = this.view
       const u = claw.uiState(this.camera, w, h)
       const s = u.selected ?? u.far
       if (s && !frozen && !this.travel.busy) {
@@ -1007,6 +1047,11 @@ export class Game {
         return g.equipment
       },
       story: g.story,
+      /** 開発用：画質・フレームレートを変える（例 graphics({ quality: 'low', fps: 30 })）。いまの設定を返す */
+      graphics: (p?: Partial<GraphicsPrefs>) => {
+        if (p) g.setGraphics({ ...g.prefs, ...p })
+        return { ...g.prefs, pixelRatio: g.renderer.getPixelRatio() }
+      },
       travel: (to: StageKey, spawn?: string, cause: TravelRequest['cause'] = 'debug') => g.requestTravel({ to, spawn, cause }),
       memory: () => ({ ...g.renderer.info.memory, programs: g.renderer.info.programs?.length ?? 0 }),
       /** 開発用：カメラの演出を試す（座標は [x, y, z] の配列でよい） */

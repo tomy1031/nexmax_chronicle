@@ -634,6 +634,26 @@
 .nx-store i { height: calc(46 * var(--u)); background: color-mix(in srgb, var(--nx-line) 6%, rgba(2, 10, 30, 0.5)); box-shadow: inset 0 0 0 max(1px, calc(0.8 * var(--u))) var(--nx-line-dim);
   clip-path: polygon(calc(6 * var(--u)) 0, 100% 0, 100% calc(100% - 6 * var(--u)), calc(100% - 6 * var(--u)) 100%, 0 100%, 0 calc(6 * var(--u))); }
 
+/* 設定タブ（画質・フレームレート）。キーボードは W/S で項目、A/D で変更。スマホは選択肢をタップ */
+.nx-settings { margin-top: calc(16 * var(--u)); display: grid; gap: calc(6 * var(--u)); }
+.nx-set-row { display: flex; align-items: center; gap: calc(16 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--nx-line) 10%, transparent), transparent); border-left: max(1px, calc(1.5 * var(--u))) solid var(--nx-line-dim); }
+.nx-set-row.sel { border-left-color: var(--nx-line-hi); background: linear-gradient(90deg, color-mix(in srgb, var(--nx-line) 24%, transparent), transparent); }
+.nx-set-name { flex: none; min-width: calc(150 * var(--u)); font: 700 calc(16 * var(--u)) / 1.2 var(--nx-jp); letter-spacing: 0.08em; }
+.nx-set-row.sel .nx-set-name { color: #fff; text-shadow: 0 0 calc(8 * var(--u)) var(--nx-glow); }
+.nx-set-opts { display: flex; gap: calc(10 * var(--u)); }
+.nx-set-opt { min-width: calc(96 * var(--u)); box-sizing: border-box; text-align: center; padding: calc(9 * var(--u)) calc(14 * var(--u)); font: 700 calc(15 * var(--u)) / 1 var(--nx-jp); letter-spacing: 0.06em;
+  color: var(--nx-ink-dim); background: rgba(2, 10, 30, 0.45); box-shadow: inset 0 0 0 max(1px, calc(1 * var(--u))) var(--nx-line-dim);
+  clip-path: polygon(calc(7 * var(--u)) 0, 100% 0, 100% calc(100% - 7 * var(--u)), calc(100% - 7 * var(--u)) 100%, 0 100%, 0 calc(7 * var(--u))); }
+.nx-set-opt.on { color: #fff; background: var(--nx-tab-on); box-shadow: inset 0 0 0 max(1px, calc(1.6 * var(--u))) var(--nx-line); text-shadow: 0 0 calc(8 * var(--u)) var(--nx-glow); }
+.nx-set-desc { margin: 0 0 calc(8 * var(--u)) calc(14 * var(--u)); min-height: 3em; font: 500 calc(13 * var(--u)) / 1.5 var(--nx-jp); color: var(--nx-ink-dim); }
+.nx-foot-set { display: flex; align-items: center; gap: calc(6 * var(--u)); color: var(--nx-ink-dim); }
+.nx-foot-set > span { margin: 0 calc(8 * var(--u)) 0 calc(2 * var(--u)); }
+.nx-foot-set[hidden] { display: none; }
+/* スマホ：指で押しやすい大きさに */
+.nx-touch .nx-set-opt { min-width: calc(160 * var(--u)); padding: calc(22 * var(--u)) calc(18 * var(--u)); font-size: calc(20 * var(--u)); }
+.nx-touch .nx-set-opts { gap: calc(14 * var(--u)); }
+
 /* ---------------------------------------------------------------- 時代カード（到着時） */
 .nx-eracard { --ec-tint: var(--nx-line); position: absolute; left: 50%; top: 24%; transform: translateX(-50%); box-sizing: border-box; min-width: calc(620 * var(--u)); padding: calc(18 * var(--u)) calc(64 * var(--u)) calc(20 * var(--u)); text-align: center; }
 .nx-eracard > * { position: relative; }

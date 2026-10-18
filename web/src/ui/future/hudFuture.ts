@@ -655,7 +655,8 @@ export class HudFuture {
     // 会話ウィンドウ
     const m = this.board.main
     if (m) this.updateDialogFace(m.speaker)
-    // 水門パネル
+    // 水門パネル（出ているときだけ。隠れているのに顔を作ると、1726年以外でも源兵衛・おはるのモデルを読み込んでしまう）
+    if (this.gate.hidden) return
     this.root.querySelectorAll<HTMLElement>('.nx-gate-face').forEach((f) => {
       const who = f.dataset.who ?? ''
       f.style.setProperty('--spk', speakerStyle(who).color)

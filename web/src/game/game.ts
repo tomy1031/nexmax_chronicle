@@ -724,7 +724,7 @@ export class Game {
       fireTimer: this.fireTimer,
     })
     applyPose(nexmax, pose, player.speed)
-    const aimAt = pose === 'fire' || pose === 'hold' || pose === 'pulled' || pose === 'swing' ? (w.target?.point ?? claw.end) : null
+    const aimAt = pose === 'fire' || pose === 'hold' || pose === 'pulled' || pose === 'swing' ? claw.aimPoint : null
     nexmax.setAim(aimAt)
     applyRigClaw(nexmax, w.phase === 'firing' || w.phase === 'miss', w.phase !== 'idle')
     applyRigSwing(nexmax, claw.swingAngle())
@@ -770,8 +770,8 @@ export class Game {
     switch (w.phase) {
       case 'swinging':
         return [
-          { key: 'WASD', label: '揺らす' },
-          { key: 'Space', label: '離脱' },
+          { key: 'WASD', label: 'こいで揺らす' },
+          { key: 'Space', label: '飛び移る' },
           { key: 'J', label: '離す' },
         ]
       case 'zipping':

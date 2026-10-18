@@ -182,9 +182,25 @@ function arch(c: FCtx): void {
   const an = SWING.anchor
   c.b.add(new THREE.CylinderGeometry(0.03, 0.03, top - 0.38 - an.y - 0.3, 8), c.fm.metal, M(an.x, (top - 0.38 + an.y + 0.3) / 2, an.z))
   c.b.add(rbox(0.4, 0.25, 0.4, 0.06), c.fm.darkMetal, M(an.x, top - 0.5, an.z))
-  c.b.add(new THREE.TorusGeometry(0.3, 0.05, 10, 28), c.m.brass, M(an.x, an.y, an.z, 0, 0, 0))
-  c.b.add(new THREE.TorusGeometry(0.37, 0.014, 6, 32), c.fm.glow, M(an.x, an.y, an.z, 0, 0, 0), { tint: NEON.cyan, cast: false })
-  c.b.add(new THREE.SphereGeometry(0.08, 10, 6), c.m.brass, M(an.x, an.y + 0.33, an.z))
+  // 遠くからでも「ここにクローを引っかける」と分かるように、大きめの輪を水色に光らせ、光の輪を脈打たせる
+  c.b.add(new THREE.TorusGeometry(0.5, 0.06, 12, 40), c.m.brass, M(an.x, an.y, an.z, 0, 0, 0))
+  c.b.add(new THREE.TorusGeometry(0.5, 0.03, 8, 48), c.fm.glow, M(an.x, an.y, an.z + 0.045, 0, 0, 0), { tint: NEON.cyan, cast: false })
+  c.b.add(new THREE.TorusGeometry(0.5, 0.03, 8, 48), c.fm.glow, M(an.x, an.y, an.z - 0.045, 0, 0, 0), { tint: NEON.cyan, cast: false })
+  c.b.add(new THREE.SphereGeometry(0.09, 10, 6), c.m.brass, M(an.x, an.y + 0.53, an.z))
+  const haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 1.6, 2.4), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.56, 0.62, 48), haloMat)
+  halo.position.copy(an)
+  halo.renderOrder = 4
+  const halo2 = halo.clone()
+  halo2.rotation.y = Math.PI / 2
+  c.root.add(halo, halo2)
+  c.updaters.push((_dt, t) => {
+    const k = (t * 0.7) % 1
+    const sc = 1 + k * 0.9
+    halo.scale.setScalar(sc)
+    halo2.scale.setScalar(sc)
+    haloMat.opacity = 0.85 * (1 - k) * (1 - k)
+  })
   // 梁の上のホロ「時代博覧祭」
   holoSign(c, 'matsuri_logo', 0, top + 2.3, A.z + 0.1, 10.5, 0)
   // 梁から下がる提灯

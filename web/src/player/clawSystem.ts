@@ -31,6 +31,10 @@ import {
 
 /** 足元から胸（照準・射程の基準）までの高さ */
 export const CHEST_HEIGHT = 0.72
+/** 空振りの上下の角度（ラジアン）：カメラの見下ろしに少し足して、この範囲に収める */
+const MISS_PITCH_LIFT = 0.12
+const MISS_PITCH_MIN = -0.08
+const MISS_PITCH_MAX = 0.45
 /** ぶら下がるとき、足元からワイヤーの付け根（右手を上げた位置）までの高さ */
 export const HANG_HEIGHT = 1.0
 /** 水に落ちたとみなす高さ */
@@ -93,6 +97,7 @@ export class ClawSystem {
   private carried: Movable | null = null
   private readonly lastEnd = new THREE.Vector3()
   private readonly missEnd = new THREE.Vector3()
+  private readonly missDir = new THREE.Vector3()
   /** 爪の先の現在位置（ポーズの狙い先にも使う） */
   readonly end = new THREE.Vector3()
   /** 射出・解除・到着などのお知らせ（パズル・HUD・台詞へ） */
@@ -151,6 +156,14 @@ export class ClawSystem {
     this.far = this.selected ? null : nearestOutOfRange(this.views)
   }
 
+  /** 腕を向ける先：つないだ対象、空振りなら伸ばす先 */
+  get aimPoint(): THREE.Vector3 {
+    const w = this.wire
+    if (w.target) return w.target.point
+    if (w.phase === 'miss') return this.missEnd
+    return this.end
+  }
+
   get selectedTarget(): ClawTargetDef | null {
     return this.selected?.def ?? null
   }
@@ -174,6 +187,8 @@ export class ClawSystem {
       const idle = this.wire.phase === 'idle'
       const t = idle ? (this.selected?.def ?? null) : null
       if (idle && !t) this.computeMissEnd(camera)
+      // 撃つ瞬間に体を狙う向きへそろえる（爪がいつも体の正面から出るように）
+      if (idle) this.snapFacing(t ? t.point : this.missEnd)
       const evs = this.wire.press(t, t ? (this.selected?.distance ?? 0) : 0)
       for (const e of evs) this.handle(e)
     }
@@ -195,6 +210,12 @@ export class ClawSystem {
     const t = w.target
     switch (w.phase) {
       case 'firing':
+        // 伸びている間は歩いても向きを変えない
+        if (t) this.faceToward(t.point, dt, 40)
+        break
+      case 'miss':
+        this.faceToward(this.missEnd, dt, 40)
+        break
       case 'holding':
         if (t) this.faceToward(t.point, dt)
         break
@@ -420,22 +441,35 @@ export class ClawSystem {
     m.def.point.y += m.half.y
   }
 
-  private faceToward(p: THREE.Vector3, dt: number): void {
-    this.player.turnToward(p.x - this.player.position.x, p.z - this.player.position.z, dt, 14)
+  private faceToward(p: THREE.Vector3, dt: number, rate = 14): void {
+    this.player.turnToward(p.x - this.player.position.x, p.z - this.player.position.z, dt, rate)
   }
 
-  /** 空振り：画面中央の先（当たる物があればそこまで）へ伸ばす */
+  /** すぐに p の方を向く（水平だけ） */
+  private snapFacing(p: THREE.Vector3): void {
+    const dx = p.x - this.player.position.x
+    const dz = p.z - this.player.position.z
+    if (Math.hypot(dx, dz) > 0.2) this.player.facing = Math.atan2(-dx, -dz)
+  }
+
+  /**
+   * 空振り：カメラの向いている方へ、胸の高さからまっすぐ伸ばす（当たる物があればそこまで）。
+   * 上下はカメラの見下ろしをそのまま使うと足元の地面へ刺さるので、水平に近い範囲へ抑える。
+   */
   private computeMissEnd(camera: THREE.PerspectiveCamera): void {
-    const from = camera.position
-    camera.getWorldDirection(this.tmp)
-    const hit = this.phys.raycast(from, this.tmp, 16, this.player.collider, true)
-    this.tmp2.copy(from).addScaledVector(this.tmp, hit ?? 16)
+    // chestPos() は tmp2 を使うので、向きは専用の missDir に作る（以前は tmp2 が上書きされ、世界の原点の方へ飛んでいた）
     this.chestPos(this.missEnd)
-    const dir = this.tmp2.sub(this.missEnd)
-    const len = Math.min(CLAW_TUNING.range * 0.7, dir.length())
-    dir.normalize()
-    const h2 = this.phys.raycast(this.missEnd, dir, len, this.player.collider, true)
-    this.missEnd.addScaledVector(dir, h2 ?? len)
+    camera.getWorldDirection(this.tmp)
+    const flat = Math.hypot(this.tmp.x, this.tmp.z)
+    const pitch = THREE.MathUtils.clamp(Math.atan2(this.tmp.y, flat) + MISS_PITCH_LIFT, MISS_PITCH_MIN, MISS_PITCH_MAX)
+    const dir = this.missDir
+    if (flat < 1e-3) {
+      dir.set(-Math.sin(this.player.facing), 0, -Math.cos(this.player.facing))
+    } else dir.set(this.tmp.x / flat, 0, this.tmp.z / flat)
+    dir.multiplyScalar(Math.cos(pitch)).setY(Math.sin(pitch))
+    const len = CLAW_TUNING.range * 0.7
+    const hit = this.phys.raycast(this.missEnd, dir, len, this.player.collider, true)
+    this.missEnd.addScaledVector(dir, hit ?? len)
   }
 
   private updateMovable(m: Movable, dt: number): void {

@@ -185,7 +185,9 @@ export class Game {
     const unknown = this.story.applyFlagList(this.gp.flags)
     if (unknown.length) console.warn('[game] 未知のフラグ', unknown)
     this.loading.setEra(STAGE_INFO[stageKey].label)
+    this.loading.setTheme(stageKey)
     this.hud.setEra(STAGE_INFO[stageKey].label)
+    this.hud.setTheme(stageKey)
     // ネクマックス（主人公）はシェルが持ち、ステージをまたいで使い回す
     const nexP = loadCharacter('nexmax', 1.05)
     this.adaptive = new AdaptiveResolution(0.7, Math.min(window.devicePixelRatio, this.q.maxPixelRatio), (r) => {
@@ -261,6 +263,7 @@ export class Game {
   private async loadStage(key: StageKey, spawnId: string | null, from: StageKey | null, progress: (p: number, msg: string) => void, initial = false): Promise<void> {
     const stage = await createStage(key)
     this.hud.setEra(stage.label)
+    this.hud.setTheme(key)
     // その時代の話者アイコンを先に作っておく（初めて話したときに止まらないように）
     this.hud.preloadSpeakers(SPEAKERS_BY_STAGE[key] ?? [])
     const loadCtx: StageLoadContext = {

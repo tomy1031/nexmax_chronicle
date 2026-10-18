@@ -113,6 +113,7 @@ export class CompassBar {
       <div class="nx-cmp-pin" hidden>
         <div class="nx-cmp-pinicon">${PIN_SVG}</div>
         <div class="nx-cmp-edge"></div>
+        <div class="nx-cmp-ring"></div>
         <div class="nx-cmp-dist"></div>
       </div>`
     this.windowEl = this.el.querySelector('.nx-cmp-window') as HTMLDivElement
@@ -185,5 +186,5 @@ function buildStrip(): string {
   return parts.join('')
 }
 
-const PIN_SVG = `<svg viewBox="0 0 40 52" aria-hidden="true"><defs><linearGradient id="nx-pin-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2a0"/><stop offset="1" stop-color="#ffc21a"/></linearGradient></defs><path d="M20 50 C14 39 5 31 5 19 A15 15 0 0 1 35 19 C35 31 26 39 20 50 Z" fill="url(#nx-pin-g)" stroke="#fff8d0" stroke-width="2"/><circle cx="20" cy="19" r="6.2" fill="#0d3a6e"/><circle cx="20" cy="19" r="3.4" fill="#dffbff"/></svg>`
+const PIN_SVG = `<svg viewBox="0 0 40 52" aria-hidden="true"><defs><linearGradient id="nx-pin-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2a0"/><stop offset="1" stop-color="#ffc21a"/></linearGradient></defs><path d="M20 50 C14 39 5 31 5 19 A15 15 0 0 1 35 19 C35 31 26 39 20 50 Z" fill="url(#nx-pin-g)" stroke="#fff8d0" stroke-width="1.4"/><circle cx="20" cy="19" r="6.2" fill="#0d3a6e"/><circle cx="20" cy="19" r="3.4" fill="#dffbff"/></svg>`
 

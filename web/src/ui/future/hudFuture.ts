@@ -1,16 +1,19 @@
-// 近未来ホログラム HUD（コンセプト B ＋ A の話者の顔）。ui/hud.ts の Hud と同じ公開 API で差し替えられる。
-// ネクマックスの体内の時空鉱石の水色の光をテーマに、半透明のガラス・光る細い線・角を落としたパネル。
+// 近未来ホログラム HUD（コンセプト B ＋ A の話者の顔、色と細部は nx_ui_v2_2_holo）。ui/hud.ts の Hud と同じ公開 API。
+// ネクマックスの体内の時空鉱石の光をテーマに、深い紺の半透明ガラス・細く光る線・白いハイライト・小さなさし色・走査線。
 // ・左上：本物の 3D モデルのポートレート（portrait.ts）、体力 5、鉱石エネルギー、時代と場所
 // ・上中央：コンパス（setCompass）　・右上：目的　・中央：照準（対象の種類ごとの形と色）
-// ・左下：左腕（Q・装備なし）　・右下：右腕（J・つかむNMClaw・つかんでいる物）
-// ・下中央：会話ウィンドウ（話者の顔つき・2 行・▷）、必要なときだけのキー案内
-// ・お知らせ・大きな文字・画面のふち光り・水門パズル・時代カード・IDO・一時停止・装備と記録・読み込み
+// ・左下：左腕（Q。左腕に装備があるときだけ出す）　・右下：右腕（J・つかむNMClaw・つかんでいる物）
+// ・下中央：会話ウィンドウ（話者の顔・名札・2 行・▷）、必要なときだけのキー案内
+// ・お知らせ・大きな文字・画面のふち光り・水門パズル・時代カード・IDO・一時停止（装備・記録／操作一覧）・読み込み
 // 表示はキーボードの表記だけ（マウス・コントローラーの絵や文字は出さない）。
 // 毎フレーム呼ばれる set* は、値が変わったときだけ DOM を触る（位置は transform で動かす）。
+// ・見た目は時代ごとのテーマ（setTheme：2086 ホログラム／2026 研究室／1726 江戸の和柄）。立体的な傾きは付けない
+// ・大きさは 1600×900 を基準に、画面の幅・高さの小さいほうに合わせて全体を一律に拡大縮小（CSS の --u）。
+//   どの画面でも配置の比率が同じ（16:9 でない画面では四隅に寄せる）
 import './hudFuture.css'
 import { CompassBar, headingFromCameraYaw } from './compass'
 import { DialogueBoard, breakLines, textSizeStep } from './dialogueBoard'
-import { FrameManager, frameDefs } from './frame'
+import { FrameManager, frameDefs, hudScale, scaleDefs } from './frame'
 import {
   BRACKET_SVG,
   CHEVRON_SVG,
@@ -26,10 +29,13 @@ import {
   RETICLE_SVG,
   SILHOUETTE_SVG,
   SYSTEM_SVG,
+  WAVE_SVG,
 } from './icons'
 import { MiniRenderer } from './miniRenderer'
 import { LivePortrait } from './portrait'
 import { SpeakerIconCache, speakerStyle } from './speakerIcons'
+import { PAUSE_DEFAULT_TAB, filterHintsForArms, nextPauseTab, type PauseTab } from './hudLogic'
+import { DEFAULT_THEME, HUD_THEMES, normalizeTheme, patternDataUri, themeClass, themeFromText, type HudTheme, type PatternName } from './themes'
 import {
   CONTROL_LIST,
   type ArmView,
@@ -46,6 +52,7 @@ import {
 
 export * from './types'
 export { speakerStyle } from './speakerIcons'
+export { DEFAULT_THEME, HUD_THEMES, normalizeTheme, themeFromText, type HudTheme } from './themes'
 
 export type HudFutureOptions = {
   /** 左上に本物の 3D モデルのポートレートを出す（既定 true。false なら SVG の顔） */
@@ -70,7 +77,8 @@ function escapeHtml(s: string): string {
 function keycap(key: string): string {
   const k = key.trim()
   const wide = [...k].length > 1 ? ' wide' : ''
-  return `<span class="nx-key${wide}">${escapeHtml(k)}</span>`
+  const arrow = /^[↑↓←→]+$/.test(k) ? ' arrow' : ''
+  return `<span class="nx-key${wide}${arrow}">${escapeHtml(k)}</span>`
 }
 
 /** 操作一覧の「W／A／S／D」→ 4 つのキー */
@@ -81,52 +89,46 @@ function keycaps(spec: string): string {
     .join('<span class="nx-key-sep">/</span>')
 }
 
-/** Google Fonts の Orbitron（数字・英字の見出し用）を 1 回だけ読み込む。日本語は M PLUS Rounded 1c */
+/**
+ * Google Fonts を 1 回だけ読み込む。日本語は角の立ったゴシック M PLUS 1p（500／700）、
+ * 数字・英字の見出しは Orbitron（500／700）。無いときはヒラギノ角ゴなどで表示（崩れはしない）。
+ */
 function ensureFonts(): void {
   if (typeof document === 'undefined' || document.getElementById('nx-hud-fonts')) return
   const link = document.createElement('link')
   link.id = 'nx-hud-fonts'
   link.rel = 'stylesheet'
-  link.href = 'https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&display=swap'
+  link.href = 'https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@500;700&family=Orbitron:wght@500;700&display=swap'
   document.head.appendChild(link)
+}
+
+/** テーマごとに CSS の背景で使う模様（SVG の defs が無い所：時代カード・読み込み・一時停止の背景） */
+const THEME_PATTERNS: Record<HudTheme, { main: [PatternName, string]; sub: [PatternName, string] }> = {
+  '2086': { main: ['hex', '#7fe2ff'], sub: ['hex', '#ff6ee0'] },
+  '2026': { main: ['grid', '#8ff5ea'], sub: ['grid', '#ffffff'] },
+  '1726': { main: ['asanoha', '#f2c662'], sub: ['seigaiha', '#f2c662'] },
+}
+
+/** ルート要素にテーマのクラスと模様の CSS 変数を付ける（HUD と読み込み画面で共用） */
+function applyThemeTo(root: HTMLElement, t: HudTheme): void {
+  for (const k of HUD_THEMES) root.classList.toggle(themeClass(k), k === t)
+  root.dataset.theme = t
+  const p = THEME_PATTERNS[t]
+  root.style.setProperty('--nx-pat-uri', patternDataUri(p.main[0], p.main[1]))
+  root.style.setProperty('--nx-pat-uri2', patternDataUri(p.sub[0], p.sub[1], 1, t === '1726' ? '#0b0f38' : 'none'))
+}
+
+/** ルート要素の大きさから --u（デザイン 1px の画面上の大きさ）を決める。値を返す */
+function applyScaleTo(root: HTMLElement): number {
+  const w = root.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 1600)
+  const h = root.clientHeight || (typeof window !== 'undefined' ? window.innerHeight : 900)
+  const s = hudScale(w, h)
+  root.style.setProperty('--u', `${s.toFixed(5)}px`)
+  return s
 }
 
 /** ネクマックスの顔（3D が使えないときの代わり・読み込み中） */
 const NEXMAX_FACE_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><radialGradient id="nx-fb-h" cx="0.4" cy="0.32" r="0.75"><stop offset="0" stop-color="#9ad0ff"/><stop offset="1" stop-color="#4c9ae6"/></radialGradient></defs><ellipse cx="11" cy="54" rx="6" ry="10" fill="#5ea8ee"/><ellipse cx="89" cy="54" rx="6" ry="10" fill="#5ea8ee"/><ellipse cx="50" cy="50" rx="40" ry="37" fill="url(#nx-fb-h)" stroke="#16223a" stroke-width="1.6"/><path d="M50 30 C44 26 34 24 26 28 C19 32 17 42 18 54 C19 68 31 77 50 77 C69 77 81 68 82 54 C83 42 81 32 74 28 C66 24 56 26 50 30 Z" fill="#f6f6f4" stroke="#4f6f98" stroke-width="1"/><path d="M30 35 Q35 31 40 34 M60 34 Q65 31 70 35" stroke="#202228" stroke-width="2.2" fill="none" stroke-linecap="round"/><ellipse cx="38" cy="47" rx="5" ry="6.4" fill="#141416"/><ellipse cx="62" cy="47" rx="5" ry="6.4" fill="#141416"/><path d="M44 58 Q50 66 56 58 Z" fill="#fb7a52" stroke="#3a1c16" stroke-width="1.2" stroke-linejoin="round"/></svg>`
-
-/** 左上のポートレートの枠（八角形＋光る輪） */
-const PORTRAIT_FRAME_SVG = `<svg class="nx-pf-frame" viewBox="0 0 160 160" aria-hidden="true">
-  <path class="pf-plate" d="M53 7 H107 L153 53 V107 L107 153 H53 L7 107 V53 Z"/>
-  <path class="pf-scan" d="M53 7 H107 L153 53 V107 L107 153 H53 L7 107 V53 Z"/>
-  <g filter="url(#nxf-glow)">
-    <path class="pf-line" d="M53 7 H107 L153 53 V107 L107 153 H53 L7 107 V53 Z"/>
-    <path class="pf-acc" d="M7 70 V53 L53 7 H74 M153 90 V107 L107 153 H86"/>
-    <circle class="pf-ring" cx="80" cy="80" r="57"/>
-  </g>
-  <path class="pf-outer" d="M38 3 H50 M110 3 H122 L157 38 V56 M157 104 V122 M3 104 V122 L38 157 H56"/>
-  <path class="pf-ticks" d="M80 15 V20 M80 140 V145 M15 80 H20 M140 80 H145 M34 34 L37.5 37.5 M126 34 L122.5 37.5 M34 126 L37.5 122.5 M126 126 L122.5 122.5"/>
-</svg>`
-
-/** ポートレートの周りでゆっくり回る点線の輪 */
-const PORTRAIT_SPIN_SVG = `<svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="64" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 6 18 6 2 30" opacity="0.8"/></svg>`
-
-/** 腕の枠の輪（左：控えめ、右：明るい） */
-function armRingSvg(side: 'left' | 'right'): string {
-  const R = side === 'right' ? 70 : 66
-  return `<svg class="nx-arm-svg" viewBox="0 0 180 180" aria-hidden="true">
-    <circle class="arm-disk" cx="90" cy="90" r="${R - 12}"/>
-    <circle class="arm-scan" cx="90" cy="90" r="${R - 12}"/>
-    <circle class="arm-inner" cx="90" cy="90" r="${R - 19}"/>
-    <g filter="url(#nxf-glow)">
-      <circle class="arm-ring" cx="90" cy="90" r="${R - 12}"/>
-      <path class="arm-arc" d="${arc(90, 90, R, 196, 262)}"/>
-      <path class="arm-arc thin" d="${arc(90, 90, R, 278, 330)}"/>
-      <path class="arm-arc" d="${arc(90, 90, R, 16, 58)}"/>
-      <path class="arm-arc thin" d="${arc(90, 90, R, 100, 150)}"/>
-    </g>
-    <path class="arm-outer" d="${arc(90, 90, R + 9, 200, 250)} ${arc(90, 90, R + 9, 290, 312)} ${arc(90, 90, R + 9, 30, 70)}"/>
-  </svg>`
-}
 
 /** 円弧の path（角度は度、12 時が 0、時計回り） */
 function arc(cx: number, cy: number, r: number, a0: number, a1: number): string {
@@ -138,8 +140,70 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number): string 
   return `M${p(a0)}A${r} ${r} 0 ${large} 1 ${p(a1)}`
 }
 
+/** 円周の目盛り（step 度ごと、major 度ごとに長く） */
+function ringTicks(cx: number, cy: number, r: number, len: number, step: number, major: number, skip: Array<[number, number]> = []): string {
+  const out: string[] = []
+  for (let a = 0; a < 360; a += step) {
+    if (skip.some(([s0, s1]) => a >= s0 && a <= s1)) continue
+    const l = a % major === 0 ? len * 1.9 : len
+    const t = ((a - 90) * Math.PI) / 180
+    const c = Math.cos(t)
+    const sn = Math.sin(t)
+    out.push(`M${(cx + r * c).toFixed(1)} ${(cy + r * sn).toFixed(1)}L${(cx + (r + l) * c).toFixed(1)} ${(cy + (r + l) * sn).toFixed(1)}`)
+  }
+  return out.join('')
+}
+
+/** 左上のポートレートの枠（丸いガラス＋光る輪＋目盛り＋外側の弧） */
+const PORTRAIT_FRAME_SVG = `<svg class="nx-pf-frame" viewBox="0 0 160 160" aria-hidden="true">
+  <circle class="pf-plate" cx="80" cy="80" r="61"/>
+  <circle class="pf-pat" cx="80" cy="80" r="61"/>
+  <circle class="pf-scan" cx="80" cy="80" r="61"/>
+  <circle class="pf-rim" cx="80" cy="80" r="61"/>
+  <circle class="pf-in" cx="80" cy="80" r="58.6"/>
+  <path class="pf-ticks" d="${ringTicks(80, 80, 65.5, 2.2, 6, 30, [[204, 246], [24, 66]])}"/>
+  <g filter="url(#nxf-glow-d)">
+    <circle class="pf-ring" cx="80" cy="80" r="55.5"/>
+    <path class="pf-acc" d="${arc(80, 80, 55.5, 296, 344)} ${arc(80, 80, 55.5, 116, 164)}"/>
+    <path class="pf-arc" d="${arc(80, 80, 62, 206, 244)} ${arc(80, 80, 62, 26, 64)}"/>
+  </g>
+  <path class="pf-outer" d="${arc(80, 80, 74, 214, 276)} ${arc(80, 80, 74, 300, 326)} ${arc(80, 80, 74, 24, 62)} ${arc(80, 80, 74, 104, 150)}"/>
+  <path class="pf-mark" d="${arc(80, 80, 74, 280, 294)} ${arc(80, 80, 74, 154, 160)}"/>
+</svg>`
+
+/** ポートレートの周りでゆっくり回る点線の輪 */
+const PORTRAIT_SPIN_SVG = `<svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="69.5" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="1.5 5 14 5 1.5 26" opacity="0.75"/></svg>`
+
+/** 腕の枠の輪（左：控えめ、右：明るい） */
+function armRingSvg(side: 'left' | 'right'): string {
+  const R = side === 'right' ? 64 : 60
+  const c = 100
+  return `<svg class="nx-arm-svg" viewBox="0 0 200 200" aria-hidden="true">
+    <circle class="arm-disk" cx="${c}" cy="${c}" r="${R}"/>
+    <circle class="arm-pat" cx="${c}" cy="${c}" r="${R}"/>
+    <circle class="arm-scan" cx="${c}" cy="${c}" r="${R}"/>
+    <circle class="arm-rim" cx="${c}" cy="${c}" r="${R}"/>
+    <circle class="arm-inner" cx="${c}" cy="${c}" r="${R - 8}"/>
+    <path class="arm-ticks" d="${ringTicks(c, c, R + 5, 2.4, 5, 45, [[150, 210]])}"/>
+    <g filter="url(#nxf-glow-d)">
+      <circle class="arm-ring" cx="${c}" cy="${c}" r="${R}"/>
+      <path class="arm-acc" d="${arc(c, c, R, 300, 344)} ${arc(c, c, R, 112, 140)}"/>
+      <path class="arm-arc" d="${arc(c, c, R + 14, 200, 262)} ${arc(c, c, R + 14, 18, 60)}"/>
+      <path class="arm-arc thin" d="${arc(c, c, R + 14, 276, 330)} ${arc(c, c, R + 14, 92, 128)}"/>
+    </g>
+    <path class="arm-outer" d="${arc(c, c, R + 23, 206, 252)} ${arc(c, c, R + 23, 290, 316)} ${arc(c, c, R + 23, 30, 74)}"/>
+    <path class="arm-mark" d="${arc(c, c, R + 23, 258, 270)} ${arc(c, c, R + 23, 80, 85)}"/>
+  </svg>`
+}
+
+/** 装備の説明（一時停止の「装備・記録」。見るだけで、ここでは付け替えられない） */
+const PART_DESC: Record<string, string> = {
+  つかむNMClaw: 'ワイヤーを射出して対象をつかむ。射程 約10m。軽い物は手元へ、固定された金具へは自分が移動、仕掛けはその場で保持。',
+}
+
 export class HudFuture {
   private readonly root: HTMLDivElement
+  private readonly defs: SVGSVGElement
   private readonly frames = new FrameManager()
   private readonly compass: CompassBar
   private readonly board = new DialogueBoard()
@@ -181,6 +245,7 @@ export class HudFuture {
   private readonly ghost: HTMLDivElement
   private readonly armR: HTMLDivElement
   private readonly armL: HTMLDivElement
+  private readonly armLIcon: HTMLDivElement
   private readonly armRHold: HTMLDivElement
   private readonly armRName: HTMLSpanElement
   private readonly armLName: HTMLSpanElement
@@ -196,14 +261,16 @@ export class HudFuture {
   private readonly bannerText: HTMLSpanElement
   private readonly flashEl: HTMLDivElement
   private readonly pause: HTMLDivElement
-  private readonly menu: HTMLDivElement
   private readonly eraCard: HTMLDivElement
   private readonly ido: HTMLDivElement
   private readonly shotLabel: HTMLDivElement
   private readonly stats: HTMLDivElement
   // 状態
+  private theme: HudTheme = DEFAULT_THEME
+  private scale = 1
   private statsVisible = false
   private hintKey = ''
+  private lastHints: Hint[] = []
   private retMode: 'idle' | 'target' | 'far' = 'idle'
   private retCategory: ReticleCategory | null = null
   private retLabelKey = ''
@@ -215,6 +282,8 @@ export class HudFuture {
   private bannerTimer = 0
   private eraCardTimer = 0
   private armKey = ''
+  private leftPart: string | null = null
+  private rightPart = 'つかむNMClaw'
   private gateKey = ''
   private hp = HP_MAX
   private energyV: number | null = null
@@ -225,13 +294,24 @@ export class HudFuture {
   private faceMirror: CanvasRenderingContext2D | null = null
   private nextHintKey: string | null = null
   private compassOn = false
+  // 一時停止（装備・記録／操作一覧）
+  private pauseOn = false
+  private menuOn = false
+  private pauseTab: PauseTab = PAUSE_DEFAULT_TAB
   // 表情
   private moodOverride: PortraitExpression | null = null
   private moodTimed: { e: PortraitExpression; t: number } | null = null
   private poseMood: PortraitExpression | null = null
   private armsBusy = false
   private oreGlow = 1
-  private readonly onResize = () => this.frames.rescale()
+  private readonly ro: ResizeObserver | null = null
+  private readonly onResize = () => this.applyScale()
+  /** 一時停止パネルが出ているあいだだけ ← → を聞いてタブを切り替える（ゲームはこの間止まっている） */
+  private readonly onPauseKey = (e: KeyboardEvent) => {
+    if (e.repeat) return
+    const t = nextPauseTab(this.pauseTab, e.code)
+    if (t !== this.pauseTab) this.setPauseTab(t)
+  }
 
   constructor(ui: HTMLElement, options: HudFutureOptions = {}) {
     this.opts = { livePortrait: options.livePortrait ?? true, speakerIcons: options.speakerIcons ?? true, portraitFps: options.portraitFps ?? 20, ghostSeconds: options.ghostSeconds ?? 3.2 }
@@ -243,6 +323,7 @@ export class HudFuture {
       <div class="nx-status">
         <div class="nx-bars">
           <div class="nx-hp"><div class="nx-frame-host" data-frame="bar"></div><div class="nx-hearts" aria-label="体力">${`<span class="nx-heart">${HEART_SVG}</span>`.repeat(HP_MAX)}</div></div>
+          <div class="nx-micro nx-micro-hp"><span>NX-01 · VITAL</span><i class="nx-barcode"></i></div>
           <div class="nx-energy"><div class="nx-frame-host" data-frame="bar"></div><span class="nx-crystal">${CRYSTAL_SVG}</span><div class="nx-gauge"><div class="nx-gauge-fill"></div><div class="nx-gauge-seg"></div></div></div>
         </div>
         <div class="nx-portrait">
@@ -258,7 +339,7 @@ export class HudFuture {
         <div class="nx-frame-host" data-frame="objective"></div>
         <div class="nx-sweep"></div>
         <div class="nx-obj-icon">${DIAMOND_SVG}</div>
-        <div class="nx-obj-text"><div class="nx-obj-title"></div><div class="nx-obj-sub"></div></div>
+        <div class="nx-obj-text"><div class="nx-obj-title"></div><i class="nx-obj-rule"></i><div class="nx-obj-sub"></div></div>
       </div>
       <div class="nx-gate" hidden>
         <div class="nx-frame-host" data-frame="panel"></div>
@@ -293,57 +374,68 @@ export class HudFuture {
         <div class="nx-dlg-box">
           <div class="nx-frame-host" data-frame="dialog"></div>
           <div class="nx-sweep"></div>
-          <div class="nx-dlg-face"><div class="nx-face-img"></div></div>
+          <div class="nx-dlg-wave">${WAVE_SVG}</div>
           <div class="nx-dlg-text"></div>
           <div class="nx-dlg-next"><span class="nx-dlg-nextkey" hidden></span><span class="nx-dlg-arrow">${NEXT_SVG}</span></div>
         </div>
-        <div class="nx-dlg-name"><div class="nx-frame-host" data-frame="plate"></div><span></span></div>
+        <div class="nx-dlg-face"><div class="nx-frame-host" data-frame="face"></div><div class="nx-face-img"></div></div>
+        <div class="nx-dlg-name"><div class="nx-frame-host" data-frame="plate"></div><span></span><i class="nx-dlg-slash"></i></div>
       </div>
       <div class="nx-hints"></div>
-      <div class="nx-arm nx-arm-left">
+      <div class="nx-arm nx-arm-left empty" hidden>
         <div class="nx-arm-ringbox">${armRingSvg('left')}<div class="nx-arm-icon">${HAND_SVG}</div>${keycap('Q')}</div>
-        <div class="nx-arm-plate"><div class="nx-frame-host" data-frame="plateSmall"></div><span class="nx-arm-name">装備なし</span></div>
+        <div class="nx-arm-plate"><div class="nx-frame-host" data-frame="armPlate"></div><span class="nx-arm-name">装備なし</span><span class="nx-arm-code">L-ARM · ITEM</span></div>
       </div>
       <div class="nx-arm nx-arm-right">
         <div class="nx-arm-hold" hidden><span class="nx-hold-dot"></span><span class="nx-hold-text"></span></div>
         <div class="nx-arm-ringbox">${armRingSvg('right')}<div class="nx-arm-spin"></div><div class="nx-arm-icon">${CLAW_SVG}</div>${keycap('J')}</div>
-        <div class="nx-arm-plate"><div class="nx-frame-host" data-frame="plate"></div><span class="nx-arm-name">つかむNMClaw</span></div>
+        <div class="nx-arm-plate"><div class="nx-frame-host" data-frame="armPlate"></div><span class="nx-arm-name">つかむNMClaw</span><span class="nx-arm-code">R-ARM · ACTION</span></div>
       </div>
       <div class="nx-modal nx-pause" hidden>
         <div class="nx-panel">
           <div class="nx-frame-host" data-frame="panel"></div>
-          <div class="nx-panel-head"><span class="nx-panel-tag">PAUSE</span><span class="nx-panel-title">一時停止</span></div>
-          <div class="nx-panel-sub">操作一覧（キーボード）</div>
-          <div class="nx-controls">${CONTROL_LIST.map(([k, d]) => `<div class="nx-ctl"><span class="nx-ctl-keys">${keycaps(k)}</span><span class="nx-ctl-desc">${escapeHtml(d)}</span></div>`).join('')}</div>
-          <div class="nx-panel-note">キー設定は今後のバージョンで対応します</div>
-          <div class="nx-panel-foot">${keycap('Esc')}<span>ゲームに戻る</span></div>
-        </div>
-      </div>
-      <div class="nx-modal nx-menu" hidden>
-        <div class="nx-panel wide">
-          <div class="nx-frame-host" data-frame="panel"></div>
-          <div class="nx-panel-head"><span class="nx-panel-tag">MENU</span><span class="nx-panel-title">装備・記録</span></div>
-          <div class="nx-menu-grid">
-            <div class="nx-menu-card">
-              <div class="nx-frame-host" data-frame="card"></div>
-              <div class="nx-menu-head">装備</div>
-              <div class="nx-menu-slot"><span class="nx-slot-icon">${CLAW_SVG}</span><span class="nx-slot-side">右腕</span><span class="nx-slot-part">つかむNMClaw</span></div>
-              <div class="nx-menu-desc">ワイヤーを射出して対象をつかむ。射程 約10m。軽い物は手元へ、固定された金具へは自分が移動、仕掛けはその場で保持。</div>
-              <div class="nx-menu-slot empty"><span class="nx-slot-icon">${HAND_SVG}</span><span class="nx-slot-side">左腕</span><span class="nx-slot-part">装備なし</span></div>
-              <div class="nx-menu-desc">装備の交換は異次元拠点の装備台で行えます。</div>
-            </div>
-            <div class="nx-menu-card">
-              <div class="nx-frame-host" data-frame="card"></div>
-              <div class="nx-menu-head">記録</div>
-              <div class="nx-menu-desc">IDO で見た記録：まだありません。</div>
-              <div class="nx-menu-desc">収納：0 / 8</div>
+          <div class="nx-panel-head">
+            <span class="nx-panel-tag">PAUSE</span><span class="nx-panel-title">一時停止</span>
+            <div class="nx-tabs" role="tablist">
+              ${keycap('←')}
+              <div class="nx-tab" data-tab="equip" role="tab"><div class="nx-frame-host" data-frame="tab"></div><span>装備・記録</span></div>
+              <div class="nx-tab" data-tab="controls" role="tab"><div class="nx-frame-host" data-frame="tab"></div><span>操作一覧</span></div>
+              ${keycap('→')}
             </div>
           </div>
-          <div class="nx-panel-foot">${keycap('Tab')}<span>閉じる</span></div>
+          <div class="nx-panes">
+            <div class="nx-pane" data-pane="equip">
+              <div class="nx-menu-grid">
+                <div class="nx-menu-card">
+                  <div class="nx-frame-host" data-frame="card"></div>
+                  <div class="nx-menu-head">装備<span class="nx-menu-ro">確認のみ</span></div>
+                  <div class="nx-menu-slot" data-side="right"><span class="nx-slot-icon">${CLAW_SVG}</span><span class="nx-slot-side">右腕</span><span class="nx-slot-part">つかむNMClaw</span></div>
+                  <div class="nx-menu-desc" data-desc="right">${escapeHtml(PART_DESC['つかむNMClaw'])}</div>
+                  <div class="nx-menu-slot empty" data-side="left"><span class="nx-slot-icon">${HAND_SVG}</span><span class="nx-slot-side">左腕</span><span class="nx-slot-part">装備なし</span></div>
+                  <div class="nx-menu-desc" data-desc="left" hidden></div>
+                  <div class="nx-menu-desc nx-menu-note">装備の交換は異次元拠点の装備台で行えます。</div>
+                </div>
+                <div class="nx-menu-card">
+                  <div class="nx-frame-host" data-frame="card"></div>
+                  <div class="nx-menu-head">記録</div>
+                  <div class="nx-menu-desc">IDO で見た記録：まだありません。</div>
+                  <div class="nx-menu-desc">収納：0 / 8</div>
+                  <div class="nx-store">${'<i></i>'.repeat(8)}</div>
+                </div>
+              </div>
+            </div>
+            <div class="nx-pane" data-pane="controls">
+              <div class="nx-panel-sub">操作一覧（キーボード）</div>
+              <div class="nx-controls">${CONTROL_LIST.map(([k, d]) => `<div class="nx-ctl"><span class="nx-ctl-keys">${keycaps(k)}</span><span class="nx-ctl-desc">${escapeHtml(d)}</span></div>`).join('')}</div>
+              <div class="nx-panel-note">キー設定は今後のバージョンで対応します</div>
+            </div>
+          </div>
+          <div class="nx-panel-foot"><span class="nx-foot-tabs">${keycap('←')}${keycap('→')}<span>切り替え</span></span><span class="nx-foot-close"></span></div>
         </div>
       </div>
       <div class="nx-eracard" hidden>
         <div class="nx-ec-glow"></div>
+        <div class="nx-ec-pat"></div>
         <div class="nx-ec-line top"><i></i></div>
         <div class="nx-ec-tag">TIME LINK</div>
         <div class="nx-ec-year"></div>
@@ -363,7 +455,9 @@ export class HudFuture {
         </div>
       </div>
       <div class="nx-stats"></div>`
-    this.root.prepend(frameDefs())
+    this.defs = frameDefs()
+    this.root.prepend(this.defs)
+    applyThemeTo(this.root, this.theme)
     ui.appendChild(this.root)
     const r = this.root
     // コンパス（上中央）
@@ -404,6 +498,7 @@ export class HudFuture {
     this.ghost = el(r, '.nx-dlg-ghost')
     this.armR = el(r, '.nx-arm-right')
     this.armL = el(r, '.nx-arm-left')
+    this.armLIcon = el(r, '.nx-arm-left .nx-arm-icon')
     this.armRHold = el(r, '.nx-arm-hold')
     this.armRName = el(r, '.nx-arm-right .nx-arm-name')
     this.armLName = el(r, '.nx-arm-left .nx-arm-name')
@@ -419,13 +514,19 @@ export class HudFuture {
     this.bannerText = el(r, '.nx-bn-text')
     this.flashEl = el(r, '.nx-flash')
     this.pause = el(r, '.nx-pause')
-    this.menu = el(r, '.nx-menu')
     this.eraCard = el(r, '.nx-eracard')
     this.ido = el(r, '.nx-ido')
     this.shotLabel = el(r, '.nx-shot')
     this.stats = el(r, '.nx-stats')
 
+    // 大きさ：先に --u を決めてから枠を描く（どの画面でも同じ比率）
+    this.applyScale()
     this.frames.attachAll(r)
+    this.setPauseTab(PAUSE_DEFAULT_TAB)
+    if (typeof ResizeObserver !== 'undefined') {
+      this.ro = new ResizeObserver(() => this.applyScale())
+      this.ro.observe(this.root)
+    }
     window.addEventListener('resize', this.onResize)
     this.icons = new SpeakerIconCache()
     this.icons.onReady(() => this.refreshFaces())
@@ -438,6 +539,37 @@ export class HudFuture {
       if (w.requestIdleCallback) w.requestIdleCallback(start, { timeout: 900 })
       else setTimeout(start, 250)
     }
+  }
+
+  // ================================================================ 大きさ・テーマ
+
+  /** 画面（ルート要素）の大きさから全体の拡大率を決め、枠・模様・にじみを描き直す */
+  private applyScale(): void {
+    const s = applyScaleTo(this.root)
+    if (Math.abs(s - this.scale) < 1e-4 && this.root.dataset.scaled === '1') return
+    this.root.dataset.scaled = '1'
+    this.scale = s
+    scaleDefs(this.defs, s)
+    this.frames.setScale(s)
+    // 照準の括弧の幅・大きさは px で置いているので測り直す
+    this.bracketW = 0
+    this.retSize = 0
+  }
+
+  /**
+   * 時代ごとの見た目（'1726' 江戸の和柄／'2026' 研究室／'2086' ホログラム）。呼ばれるまでは 2086。
+   * 知らない値は既定に戻す（年を含む文 '1726年…' も受け付ける）。
+   */
+  setTheme(key: HudTheme | string): void {
+    const t = normalizeTheme(key)
+    if (t === this.theme) return
+    this.theme = t
+    applyThemeTo(this.root, t)
+  }
+
+  /** いまのテーマ */
+  get currentTheme(): HudTheme {
+    return this.theme
   }
 
   // ================================================================ ポートレート・話者アイコン
@@ -566,6 +698,7 @@ export class HudFuture {
     if (this.objTitle.textContent !== title) this.objTitle.textContent = title
     if (this.objSub.textContent !== sub) this.objSub.textContent = sub
     this.objSub.hidden = !sub
+    this.objective.classList.toggle('no-sub', !sub)
     if (!first) this.retrigger(this.objective, 'updated')
   }
 
@@ -595,6 +728,7 @@ export class HudFuture {
   setEnergy(v: number | null): void {
     const show = v !== null
     if (this.energy.hidden === show) this.energy.hidden = !show
+    this.root.classList.toggle('nx-has-energy', show)
     if (v === null) {
       this.energyV = null
       return
@@ -673,7 +807,9 @@ export class HudFuture {
       this.retY = s.y
       this.retTarget.style.transform = `translate3d(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px, 0)`
     }
-    const size = Math.round(Math.max(64, Math.min(280, s.r * 2.3 + 24)))
+    // 括弧の大きさ：対象の画面上の大きさ（px）に合わせ、最小・最大は HUD の拡大率に合わせる
+    const k = this.scale
+    const size = Math.round(Math.max(64 * k, Math.min(280 * k, s.r * 2.3 + 24 * k)))
     if (size !== this.retSize) {
       this.retSize = size
       const half = size / 2
@@ -682,8 +818,8 @@ export class HudFuture {
       this.retBrkR.style.height = bh
       this.retBrkL.style.transform = `translate3d(${(-half).toFixed(0)}px, ${(-half).toFixed(0)}px, 0)`
       this.retBrkR.style.transform = `translate3d(${(half - this.bracketWidth()).toFixed(0)}px, ${(-half).toFixed(0)}px, 0) scaleX(-1)`
-      this.retArrow.style.transform = `translate3d(-50%, ${(half * 0.55 + 6).toFixed(0)}px, 0)`
-      this.retLabel.style.transform = `translate3d(-50%, ${(half + 10).toFixed(0)}px, 0)`
+      this.retArrow.style.transform = `translate3d(-50%, ${(half * 0.55 + 6 * k).toFixed(0)}px, 0)`
+      this.retLabel.style.transform = `translate3d(-50%, ${(half + 10 * k).toFixed(0)}px, 0)`
     }
     const label = s.mode === 'far' ? `${s.label}（遠い）` : s.label
     const multi = s.candidates > 1 && !s.connected
@@ -696,7 +832,7 @@ export class HudFuture {
 
   private bracketW = 0
   private bracketWidth(): number {
-    if (!this.bracketW) this.bracketW = this.retBrkL.offsetWidth || 16
+    if (!this.bracketW) this.bracketW = this.retBrkL.offsetWidth || 16 * this.scale
     return this.bracketW
   }
 
@@ -704,19 +840,29 @@ export class HudFuture {
 
   /** 必要なときだけのキー案内。同じ内容なら DOM を触らない */
   setHints(list: Hint[]): void {
-    const key = list.map((h) => `${h.key}:${h.label}`).join('|')
+    this.lastHints = list
+    // 左腕に装備が無いあいだは Q の案内を出さない
+    const shown = filterHintsForArms(list, this.leftPart !== null)
+    const key = shown.map((h) => `${h.key}:${h.label}`).join('|')
     if (key === this.hintKey) return
     this.hintKey = key
     // 「F：次へ」は会話ウィンドウの ▷ の横に出す
-    const next = list.find((h) => h.label === '次へ') ?? null
+    const next = shown.find((h) => h.label === '次へ') ?? null
     this.nextHintKey = next ? next.key : null
     this.updateNextMark()
-    const rest = list.filter((h) => h !== next)
+    const rest = shown.filter((h) => h !== next)
     const row = rest.length >= 4
     this.hints.classList.toggle('row', row)
+    const host = '<span class="nx-frame-host" data-frame="chip"></span>'
     this.hints.innerHTML = rest
-      .map((h, i) => (row ? `<span class="nx-chip small">${keycap(h.key)}<span class="nx-chip-label">${escapeHtml(h.label)}</span></span>` : `<span class="nx-chip${i === 0 ? ' primary' : ''}">${keycap(h.key)}<span class="nx-chip-de">で</span><span class="nx-chip-label">${escapeHtml(h.label)}</span></span>`))
+      .map((h, i) =>
+        row
+          ? `<span class="nx-chip small">${host}${keycap(h.key)}<span class="nx-chip-label">${escapeHtml(h.label)}</span></span>`
+          : `<span class="nx-chip${i === 0 ? ' primary' : ''}">${host}${keycap(h.key)}<span class="nx-chip-de">で</span><span class="nx-chip-label">${escapeHtml(h.label)}</span></span>`,
+      )
       .join('')
+    this.frames.prune()
+    this.frames.attachAll(this.hints)
   }
 
   /** 短いお知らせ（「左腕：装備なし」など） */
@@ -836,14 +982,46 @@ export class HudFuture {
     const holdText = el<HTMLSpanElement>(this.armRHold, '.nx-hold-text')
     holdText.textContent = a.right.holding ?? ''
     this.armRHold.hidden = !a.right.holding
+    // 左腕：装備があるときだけ出す（初期の「装備なし」は画面に置かない）
+    const leftChanged = a.left.name !== this.leftPart
+    this.leftPart = a.left.name
+    this.armL.hidden = a.left.name === null
     this.armL.classList.toggle('selected', a.left.selected)
     this.armL.classList.toggle('empty', a.left.name === null)
     this.armLName.textContent = a.left.name ?? '装備なし'
+    if (leftChanged) {
+      this.armLIcon.innerHTML = a.left.name ? CLAW_SVG : HAND_SVG
+      this.armLIcon.classList.toggle('mirror', !!a.left.name)
+      // Q の案内の出し分けをやり直す
+      this.hintKey = '\u0000'
+      this.setHints(this.lastHints)
+    }
+    if (a.right.name !== this.rightPart || leftChanged) {
+      this.rightPart = a.right.name
+      this.updateEquipCard()
+    }
     const busy = a.right.active || !!a.right.holding
     if (busy !== this.armsBusy) {
       this.armsBusy = busy
       this.applyMood()
     }
+  }
+
+  /** 一時停止の「装備」カード（見るだけ） */
+  private updateEquipCard(): void {
+    const slot = (side: 'left' | 'right', name: string | null) => {
+      const s = el(this.pause, `.nx-menu-slot[data-side="${side}"]`)
+      s.classList.toggle('empty', !name)
+      el(s, '.nx-slot-part').textContent = name ?? '装備なし'
+      el(s, '.nx-slot-icon').innerHTML = name ? CLAW_SVG : HAND_SVG
+      el(s, '.nx-slot-icon').classList.toggle('mirror', side === 'left' && !!name)
+    }
+    slot('right', this.rightPart)
+    slot('left', this.leftPart)
+    el(this.pause, '.nx-menu-desc[data-desc="right"]').textContent = PART_DESC[this.rightPart] ?? ''
+    const ld = el(this.pause, '.nx-menu-desc[data-desc="left"]')
+    ld.textContent = this.leftPart ? (PART_DESC[this.leftPart] ?? '') : ''
+    ld.hidden = !ld.textContent
   }
 
   /** Q／E を押したときに腕の枠を光らせる */
@@ -895,14 +1073,49 @@ export class HudFuture {
     if (kind === 'danger') this.moodFor('surprised', 1.2)
   }
 
-  // ================================================================ 一時停止・メニュー
+  // ================================================================ 一時停止（装備・記録／操作一覧）
 
+  /** 一時停止（Esc）。「装備・記録」と「操作一覧」の 2 つのタブ（← → で切り替え）。開いたときは「装備・記録」 */
   setPaused(on: boolean): void {
-    this.pause.hidden = !on
+    if (on === this.pauseOn) return
+    this.pauseOn = on
+    this.syncPausePanel()
   }
 
+  /** 装備・記録（Tab）。一時停止と同じパネルを「装備・記録」のタブで開く（見るだけ） */
   setMenu(on: boolean): void {
-    this.menu.hidden = !on
+    if (on === this.menuOn) return
+    this.menuOn = on
+    this.syncPausePanel()
+  }
+
+  private syncPausePanel(): void {
+    const show = this.pauseOn || this.menuOn
+    if (show && this.pause.hidden) {
+      this.setPauseTab(PAUSE_DEFAULT_TAB)
+      this.pause.hidden = false
+      window.addEventListener('keydown', this.onPauseKey)
+    } else if (!show && !this.pause.hidden) {
+      this.pause.hidden = true
+      window.removeEventListener('keydown', this.onPauseKey)
+    }
+    if (!show) return
+    const mode = this.pauseOn ? 'pause' : 'menu'
+    if (this.pause.dataset.mode === mode) return
+    this.pause.dataset.mode = mode
+    el<HTMLSpanElement>(this.pause, '.nx-panel-tag').textContent = mode === 'pause' ? 'PAUSE' : 'MENU'
+    el<HTMLSpanElement>(this.pause, '.nx-panel-title').textContent = mode === 'pause' ? '一時停止' : '装備・記録'
+    el<HTMLSpanElement>(this.pause, '.nx-foot-close').innerHTML = mode === 'pause' ? `${keycap('Esc')}<span>ゲームに戻る</span>` : `${keycap('Tab')}<span>閉じる</span>`
+  }
+
+  private setPauseTab(t: PauseTab): void {
+    this.pauseTab = t
+    this.pause.querySelectorAll<HTMLElement>('.nx-tab').forEach((e) => {
+      const on = e.dataset.tab === t
+      e.classList.toggle('on', on)
+      e.setAttribute('aria-selected', on ? 'true' : 'false')
+    })
+    this.pause.querySelectorAll<HTMLElement>('.nx-pane').forEach((e) => e.classList.toggle('on', e.dataset.pane === t))
   }
 
   // ================================================================ 時空移動（時代カード）・IDO
@@ -1006,6 +1219,8 @@ export class HudFuture {
   dispose(): void {
     clearTimeout(this.dlgTimer)
     window.removeEventListener('resize', this.onResize)
+    window.removeEventListener('keydown', this.onPauseKey)
+    this.ro?.disconnect()
     this.clearFaceMirror()
     this.portrait?.dispose()
     this.mini?.dispose()
@@ -1027,6 +1242,10 @@ export class LoadingOverlayFuture {
   private readonly bar: HTMLDivElement
   private readonly msg: HTMLDivElement
   private readonly pct: HTMLDivElement
+  private theme: HudTheme | null = null
+  /** setTheme が呼ばれたら、時代の文からの自動の切り替えはしない */
+  private themeFixed = false
+  private readonly onResize = () => applyScaleTo(this.el)
 
   constructor(ui: HTMLElement) {
     ensureFonts()
@@ -1034,23 +1253,43 @@ export class LoadingOverlayFuture {
     this.el.className = 'nx-loading'
     this.el.innerHTML = `
       <div class="nx-ld-grid"></div>
+      <div class="nx-ld-pat"></div>
+      <div class="nx-ld-corner tl"></div><div class="nx-ld-corner tr"></div><div class="nx-ld-corner bl"></div><div class="nx-ld-corner br"></div>
       <div class="nx-ld-box">
-        <div class="nx-ld-ring">${CRYSTAL_SVG}</div>
+        <div class="nx-ld-ring"><i class="nx-ld-orbit"></i>${CRYSTAL_SVG}</div>
         <div class="nx-ld-title">NEXMAX CHRONICLE</div>
         <div class="nx-ld-sub">― はじまりの未来 ―</div>
         <div class="nx-ld-era">1726年　大坂・仕掛け横丁</div>
         <div class="nx-ld-bar"><div class="nx-ld-fill"></div><div class="nx-ld-seg"></div></div>
         <div class="nx-ld-row"><div class="nx-ld-msg">準備中…</div><div class="nx-ld-pct">0%</div></div>
       </div>`
+    this.setTheme(DEFAULT_THEME)
+    this.themeFixed = false
     ui.appendChild(this.el)
+    applyScaleTo(this.el)
+    window.addEventListener('resize', this.onResize)
     this.bar = this.el.querySelector('.nx-ld-fill') as HTMLDivElement
     this.msg = this.el.querySelector('.nx-ld-msg') as HTMLDivElement
     this.pct = this.el.querySelector('.nx-ld-pct') as HTMLDivElement
   }
 
-  /** 読み込む時代の表示（例「2026年　大阪・なんば」） */
+  /** 時代ごとの見た目（HudFuture.setTheme と同じ）。呼ばれなければ setEra の年から決める（既定 2086） */
+  setTheme(key: HudTheme | string): void {
+    this.themeFixed = true
+    this.applyTheme(normalizeTheme(key))
+  }
+
+  private applyTheme(t: HudTheme): void {
+    if (t === this.theme) return
+    this.theme = t
+    applyThemeTo(this.el, t)
+  }
+
+  /** 読み込む時代の表示（例「2026年　大阪・なんば」）。年が入っていればその時代の見た目にする */
   setEra(text: string): void {
     ;(this.el.querySelector('.nx-ld-era') as HTMLDivElement).textContent = text
+    const t = themeFromText(text)
+    if (t && !this.themeFixed) this.applyTheme(t)
   }
 
   set(progress: number, msg: string): void {
@@ -1062,6 +1301,7 @@ export class LoadingOverlayFuture {
 
   hide(): void {
     this.el.classList.add('done')
+    window.removeEventListener('resize', this.onResize)
     setTimeout(() => this.el.remove(), 700)
   }
 }

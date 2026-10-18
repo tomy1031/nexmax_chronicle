@@ -10,7 +10,10 @@
 //   hints=start|ctx|talk|none   キー案内（開始直後の一覧／状況に応じた案内／会話中の F 次へ）
 //   heading=度  dist=m  bearing=度   コンパス（heading=none で隠す）、spin=1 で回す
 //   era=1  pause=1  menu=1  toast=1  banner=success|fail  flash=danger|success  ido=1|glitch  loading=1  ghost=1
-import { HudFuture, LoadingOverlayFuture, type ReticleCategory } from './hudFuture'
+//   theme=1726|2026|2086   時代ごとの見た目（既定は背景に合わせる：bg=1726 → 1726、bg=2026 → 2026、bg=none → 2086）
+//   left=1                 左腕に装備あり（左下の Q の枠が出る。既定は装備なしで出ない）
+//   tab=controls           一時停止パネルを「操作一覧」のタブで開く（pause=1 と一緒に）
+import { HudFuture, LoadingOverlayFuture, type HudTheme, type ReticleCategory } from './hudFuture'
 import { CLAW_SVG, CRYSTAL_SVG, DIAMOND_SVG, HAND_SVG, RETICLE_SVG } from './icons'
 import { MiniRenderer } from './miniRenderer'
 import { SpeakerIconCache } from './speakerIcons'
@@ -57,6 +60,13 @@ async function iconSheet(): Promise<void> {
 const hud = new HudFuture(ui, q.get('ghost') === '1' ? { ghostSeconds: 600 } : {})
 ;(window as unknown as { __hud: HudFuture }).__hud = hud
 
+const ERA_TEXT: Record<HudTheme, string> = { '1726': '1726年　大坂・仕掛け横丁', '2026': '2026年　大阪・なんば', '2086': '2086年　ナンバタウン' }
+const themeKey = (q.get('theme') ?? (bgKey === '2026' ? '2026' : bgKey === 'none' ? '2086' : '1726')) as HudTheme
+function theme(t: HudTheme): void {
+  hud.setTheme(t)
+  hud.setEra(ERA_TEXT[t])
+}
+
 // ---------------------------------------------------------------- 既定（コンセプト B の場面）
 
 const LINES: Record<string, string> = {
@@ -80,12 +90,13 @@ const target = () => {
 }
 const compassOn = q.get('heading') !== 'none'
 
-hud.setEra('1726年　大坂・仕掛け横丁')
+theme(themeKey)
 hud.setObjective('大歯車を支えて、水門を直そう', '桟橋から照準を歯車へ向けて J でつかむ')
 hud.setHp(Number(q.get('hp') ?? 5))
 const en = q.get('energy') ?? '0.82'
 hud.setEnergy(en === 'none' ? null : Number(en))
-hud.setArms({ right: { name: 'つかむNMClaw', holding: null, selected: true, active: false }, left: { name: null, selected: false } })
+let leftPart: string | null = q.get('left') === '1' ? 'つかむNMClaw' : null
+hud.setArms({ right: { name: 'つかむNMClaw', holding: null, selected: true, active: false }, left: { name: leftPart, selected: false } })
 hud.preloadSpeakers(['源兵衛', 'おはる'])
 
 function setCompass(): void {
@@ -160,7 +171,7 @@ hud.setHints(HINTS[q.get('hints') ?? 'ctx'] ?? [])
 // ---------------------------------------------------------------- その他の状態
 
 function hold(on: boolean): void {
-  hud.setArms({ right: { name: 'つかむNMClaw', holding: on ? '支えている：大歯車' : null, selected: true, active: on }, left: { name: null, selected: false } })
+  hud.setArms({ right: { name: 'つかむNMClaw', holding: on ? '支えている：大歯車' : null, selected: true, active: on }, left: { name: leftPart, selected: false } })
   if (on) {
     reticle('connected')
     hud.setObjective('歯車を動かないように支えよう', '源兵衛が水門を調整中')
@@ -174,8 +185,20 @@ function gate(sig: string): void {
 }
 if (q.get('gate')) gate(q.get('gate') as string)
 if (q.get('expr')) hud.setPortraitExpression(q.get('expr') as 'happy')
-if (q.get('era') === '1') hud.showEraCard('2026年', '大阪・なんば', 'ネクマックスが生まれた時代', 600, '#8fd8ff')
-if (q.get('pause') === '1') hud.setPaused(true)
+const ERA_CARD: Record<HudTheme, [string, string, string, string]> = {
+  '1726': ['1726年', '大坂・仕掛け横丁', 'からくり職人の町', '#ffd27a'],
+  '2026': ['2026年', '大阪・なんば', 'ネクマックスが生まれた時代', '#8fd8ff'],
+  '2086': ['2086年', 'ナンバタウン', '時代博覧祭', '#9fe8ff'],
+}
+function eraCard(t: HudTheme, seconds = 3.4): void {
+  const [y, p, sub, tint] = ERA_CARD[t]
+  hud.showEraCard(y, p, sub, seconds, tint)
+}
+if (q.get('era') === '1') eraCard(themeKey, 600)
+if (q.get('pause') === '1') {
+  hud.setPaused(true)
+  if (q.get('tab') === 'controls') window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight' }))
+}
 if (q.get('menu') === '1') hud.setMenu(true)
 if (q.get('toast') === '1') hud.toast('左腕：装備なし', 600)
 if (q.get('banner')) hud.banner(q.get('banner') === 'fail' ? '危ない！ 舟が下にいる' : '水門 修理完了！', q.get('banner') === 'fail' ? 'fail' : 'success', 600)
@@ -183,7 +206,7 @@ if (q.get('flash')) hud.flash(q.get('flash') === 'success' ? 'success' : 'danger
 if (q.get('ido')) showIdo(q.get('ido') === 'glitch')
 if (q.get('loading') === '1') {
   const l = new LoadingOverlayFuture(ui)
-  l.setEra('2026年　大阪・なんば')
+  l.setEra(ERA_TEXT[themeKey])
   l.set(0.62, 'ステージを組み立て中…')
 }
 
@@ -227,12 +250,13 @@ type Btn = [string, () => void]
 const groups: Array<[string, Btn[]]> = [
   ['会話（話者）', [...Object.keys(LINES).map((n): Btn => [n, () => hud.say(n, LINES[n], 8)]), ['2人同時', () => (hud.say('源兵衛', '歯止めは入っとる。おはるの合図で離すんやで。', 8), setTimeout(() => hud.say('おはる', '待って！ 舟が来るよ！', 6), 400))]]],
   ['照準', ['light', 'anchor', 'mechanism', 'far', 'multi', 'connected', 'none'].map((k): Btn => [k, () => reticle(k)])],
-  ['腕', [['支える', () => hold(true)], ['離す', () => hold(false)], ['Q（装備なし）', () => (hud.pulseArm('left'), hud.toast('左腕：装備なし'))], ['E', () => hud.pulseArm('right')]]],
+  ['テーマ', (['2086', '2026', '1726'] as HudTheme[]).map((t): Btn => [t, () => theme(t)])],
+  ['腕', [['支える', () => hold(true)], ['離す', () => hold(false)], ['左腕 装備', () => ((leftPart = 'つかむNMClaw'), hold(false))], ['左腕 なし', () => ((leftPart = null), hold(false))], ['Q', () => (hud.pulseArm('left'), hud.toast(leftPart ? '左腕：つかむNMClaw' : '左腕：装備なし'))], ['E', () => hud.pulseArm('right')]]],
   ['体力・鉱石', [['HP -1', () => hud.setHp(Math.max(0, hpNow() - 1))], ['HP +1', () => hud.setHp(Math.min(5, hpNow() + 1))], ['鉱石 0.3', () => hud.setEnergy(0.3)], ['鉱石 1.0', () => hud.setEnergy(1)], ['鉱石 なし', () => hud.setEnergy(null)], ['鉱石が光る', () => hud.setOreGlow(2.5)]]],
   ['表情', [...(['happy', 'determined', 'worried', 'surprised'] as const).map((e): Btn => [e, () => hud.setPortraitExpression(e)]), ['自動', () => hud.setPortraitExpression(null)]]],
   ['キー案内', Object.keys(HINTS).map((k): Btn => [k, () => hud.setHints(HINTS[k])])],
   ['水門', [...['watch', 'wait', 'go', 'done'].map((k): Btn => [k, () => gate(k)]), ['閉じる', () => hud.setGate(null)]]],
-  ['演出', [['お知らせ', () => hud.toast('水に落ちた！ 近くのチェックポイントから再開')], ['成功', () => (hud.flash('success'), hud.banner('水門 修理完了！', 'success'))], ['失敗', () => (hud.flash('danger'), hud.banner('まだ早い！', 'fail', 1.6))], ['時代カード', () => hud.showEraCard('2026年', '大阪・なんば', 'ネクマックスが生まれた時代')], ['目的を変える', () => hud.setObjective('IDOマーカーを調べよう', '水路沿いの石の標識で F')]]],
+  ['演出', [['お知らせ', () => hud.toast('水に落ちた！ 近くのチェックポイントから再開')], ['成功', () => (hud.flash('success'), hud.banner('水門 修理完了！', 'success'))], ['失敗', () => (hud.flash('danger'), hud.banner('まだ早い！', 'fail', 1.6))], ['時代カード', () => eraCard(hud.currentTheme)], ['目的を変える', () => hud.setObjective('IDOマーカーを調べよう', '水路沿いの石の標識で F')]]],
   ['パネル', [['一時停止', () => hud.setPaused(true)], ['装備・記録', () => hud.setMenu(true)], ['閉じる', () => (hud.setPaused(false), hud.setMenu(false), hud.hideIdo())], ['IDO', () => showIdo(false)], ['IDO ゆがみ', () => showIdo(true)], ['読み込み', () => showLoading()]]],
   ['コンパス', [['左へ', () => ((heading -= 25), setCompass())], ['右へ', () => ((heading += 25), setCompass())], ['真後ろ', () => ((heading = bearing + 180), setCompass())]]],
 ]
@@ -249,7 +273,7 @@ hud.setHp = (n: number) => {
 
 function showLoading(): void {
   const l = new LoadingOverlayFuture(ui)
-  l.setEra('2086年　ナンバタウン')
+  l.setEra(ERA_TEXT[hud.currentTheme])
   let p = 0
   const id = setInterval(() => {
     p += 0.08

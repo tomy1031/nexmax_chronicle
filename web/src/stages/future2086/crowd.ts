@@ -252,6 +252,9 @@ export const INTRO_CROWD: ReadonlyArray<{ tag: string; x: number; y: number; z: 
   { tag: 'queue', x: -13.3, y: 0, z: 4.5, yaw: 2.5, role: 'street' },
   // 南の入口の運営本部（テントの机の向こう。広場を向く）
   { tag: 'hq_staff', x: 6.4, y: 0, z: 17.6, yaw: 0, role: 'street' },
+  // 風船の子ども（右手の先に風船の糸。毎朝、手を離れて同じ街灯に引っかかる）と、その母親。どちらも街灯を見上げる向き
+  { tag: 'balloon_child', x: -2.49, y: 0, z: 11.76, yaw: 0.28, role: 'street', child: true },
+  { tag: 'balloon_parent', x: -3.3, y: 0, z: 11.35, yaw: 0.5, role: 'street' },
 ]
 
 export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {

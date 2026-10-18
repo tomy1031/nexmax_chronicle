@@ -1,8 +1,11 @@
 // 2086年 導入編（docs/シナリオ改訂案_導入編_v1.md の 1〜5 章）の物語の進行（状態機械）。three.js・DOM には依存しない純粋なロジック。
-//   1章 祭りの朝：回想（15年前）→ ブースへ → ソラが IDO と展示を説明 → 腕が落ちる → 共鳴レンズ（J で取って F でソラに渡す）
+//   毎朝の始まり（morning）：街頭ビジョンの日付（10月18日）→ 子どもの風船が同じ街灯に引っかかる → 選ぶ（風船を取ってあげる／ソラのところへ行く）。
+//       1周目から同じ出来事を見せておき、ループの朝に「同じだ」と気づけるようにする。取ってあげるなら J で引き寄せると子どもに返る
+//   1章 祭りの朝：回想（15年前。名前しか覚えていないロボットをソラが見つける）→ 朝の始まり → ブースへ → ソラが IDO と展示を説明
+//       → 腕が落ちる → 共鳴レンズ（J で取って F でソラに渡す）
 //       → 中継アンテナ（金具 → 光る輪 → アンテナで F）→ 大画面に「開場」→ 約束（そのとき IDO を体験させてあげる）
 //   2章 その夜：ソラと歩く → 空が裂ける（emergence2086）→ 破片をよけて南のゲートへ → 飲み込まれる → 朝へ（ループ）
-//   3章 繰り返す朝：同じ朝 → 街頭ビジョンの日付（10月18日）・同じ街灯に引っかかる風船・落ちる前に受け止める腕
+//   3章 繰り返す朝：同じ朝 → 朝の始まり（日付と風船に気づく）→ 落ちる前に受け止める腕
 //       → ソラは一字一句同じあいさつ、夜の話には「初めて聞いた」返事（毎周同じ）
 //   4章 あらがう：試みの一覧（順番は自由）①運営本部で中止を頼む（＋ソラにも）②非常警報の柱を J で引く
 //       ③ソラと南のゲートから町の外へ（白くかすんで広場へ戻る）④夜に空の存在へ J（すり抜ける）。どれも夜へ飛んで失敗し、朝へ戻る。
@@ -15,6 +18,7 @@ import lines from './intro_2086.json'
 
 export type IntroStep =
   | 'opening'
+  | 'morning'
   | 'go_booth'
   | 'talk_sora'
   | 'fetch_lens'
@@ -43,6 +47,7 @@ export type IntroStep =
 
 export const INTRO_STEPS: readonly IntroStep[] = [
   'opening',
+  'morning',
   'go_booth',
   'talk_sora',
   'fetch_lens',
@@ -98,7 +103,7 @@ export type IntroFx = 'flashback' | 'night' | 'loop' | 'whiteout' | 'qr'
 export type ClawEventKind = 'fired' | 'missed' | 'connected' | 'object_arrived' | 'dropped' | 'arrived' | 'detached' | 'released' | 'retracted'
 
 /** シェルの動かせる物・つかめる対象の ID */
-export const INTRO_IDS = { lens: 'ido_lens', hook: 'walkway_hook', ring: 'arch_ring', alarm: 'alarm_lever' } as const
+export const INTRO_IDS = { lens: 'ido_lens', hook: 'walkway_hook', ring: 'arch_ring', alarm: 'alarm_lever', balloon: 'festival_balloon' } as const
 
 export type IntroEvent =
   | { kind: 'zone'; zone: IntroZone }
@@ -118,7 +123,7 @@ export type IntroFlag = 'festival_morning_seen' | 'lens_installed' | 'orum_seen'
 export const ATTEMPT_FLAG: Record<Attempt, IntroFlag> = { cancel: 'try_cancel', alarm: 'try_alarm', escape: 'try_escape', confront: 'try_confront' }
 
 export type SoraSpot = 'booth' | 'exhibit' | 'night' | 'gate'
-export type FocusTarget = 'lens' | 'hook' | 'ring' | 'sky' | 'antenna' | 'screen' | 'balloon' | 'exhibit' | 'install'
+export type FocusTarget = 'lens' | 'hook' | 'ring' | 'sky' | 'antenna' | 'screen' | 'street' | 'balloon' | 'exhibit' | 'install'
 export type ChoiceOption = { id: string; label: string }
 export type AttemptItem = { id: Attempt; label: string; done: boolean; active: boolean }
 
@@ -154,6 +159,8 @@ export type IntroEffect =
   | { kind: 'announce' }
   /** 子どもの風船が同じ街灯に引っかかる（毎朝同じ時刻） */
   | { kind: 'balloon' }
+  /** 引き寄せた風船を子どもの手に返す */
+  | { kind: 'balloon_return' }
   /** 右上の試みの一覧（null で隠す） */
   | { kind: 'attempts_ui'; items: readonly AttemptItem[] | null }
   /** 昼のうちに人が避難して広場が空になる（朝に戻ると元どおり） */
@@ -182,8 +189,8 @@ export const EVADE_TIMEOUT = 40
 export const CONFRONT_TIMEOUT = 30
 /** チュートリアルで進まないまま経ったら、目標を短く見せ直す（秒） */
 export const FOCUS_REPLAY_SEC = 40
-/** 毎朝の出来事の時刻（朝が始まってからの秒） */
-export const MORNING_EVENTS = { announce: 3, balloon: 12 } as const
+/** 途中から再開した朝：時代カードが出てから街頭ビジョンを映すまで（秒） */
+export const MORNING_DELAY = 1.2
 /** 夜の散歩の長さ（ソラの一言が終わってから、秒） */
 export const NIGHT_WALK_AFTER = 3
 
@@ -195,6 +202,16 @@ export const FOCUS_REPLAY: Partial<Record<IntroStep, { target: FocusTarget; hint
 }
 
 export const ATTEMPT_CHOICE = { id: 'attempt_menu', prompt: 'ソラに……' } as const
+/** 毎朝の風船（1周目も、繰り返しの朝も最初に選ぶ） */
+export const BALLOON_CHOICE = { id: 'balloon_choice', prompt: '子どもの風船が、街灯に引っかかっている……' } as const
+export const BALLOON_LABELS = {
+  take: '風船を取ってあげる',
+  go: 'ソラのところへ行く',
+  /** 試みの朝（行き先がソラとは限らない） */
+  hurry: '先を急ぐ',
+} as const
+/** 風船を取ってあげると選んだ後の目標（ソラへ行く・試みの目標より先に出す） */
+export const BALLOON_OBJECTIVE: Objective = { title: '子どもの風船を取ってあげよう', sub: '↑↓←→ で街灯の風船を見上げて、照準が合ったら J：引き寄せる' }
 export const CHOICE_LABELS = {
   escape: 'いっしょに町の外へ逃げよう',
   confront: '夜になったら、空のあれに立ち向かう',
@@ -203,9 +220,12 @@ export const CHOICE_LABELS = {
 } as const
 
 const MORNING_STEPS: readonly IntroStep[] = ['go_booth', 'talk_sora', 'fetch_lens', 'deliver_lens', 'climb_hook', 'swing_gap', 'fix_antenna', 'return_booth', 'loop_cues', 'attempts', 'escape_walk']
+/** 朝の始まりの後、風船を取ってあげる目標を先に出す段階 */
+const BALLOON_STEPS: readonly IntroStep[] = ['go_booth', 'loop_cues', 'attempts']
 
 export const INTRO_OBJECTIVES: Record<IntroStep, Objective> = {
   opening: { title: '', sub: '' },
+  morning: { title: '時代博覧祭の朝', sub: '' },
   go_booth: { title: 'ソラの展示ブースへ行こう', sub: 'WASD：移動　↑↓←→：カメラ　Space：ジャンプ' },
   talk_sora: { title: 'ソラに話しかけよう', sub: 'ソラの近くで F：話す' },
   fetch_lens: { title: '開場までに展示を安定させよう', sub: '箱の山のいちばん上のケースを狙って J：引き寄せる' },
@@ -235,6 +255,7 @@ export const INTRO_OBJECTIVES: Record<IntroStep, Objective> = {
 
 export const INTRO_HINTS: Record<IntroStep, KeyHint[]> = {
   opening: [],
+  morning: [],
   go_booth: [
     { key: 'WASD', label: '移動' },
     { key: '↑↓←→', label: 'カメラ' },
@@ -345,15 +366,19 @@ export class Intro2086Story {
   evadeTime = 0
   debrisHits = 0
   idleTime = 0
-  /** 朝が始まってからの秒（-1 = 朝の時計なし） */
-  morningT = -1
+  /** 朝の始まり（街頭ビジョン → 風船 → 選択）の後に進む段階 */
+  morningNext: IntroStep = 'go_booth'
+  /** この朝、風船を取ってあげると選んだ（まだ返していない） */
+  balloonTask = false
   onEffect: ((e: IntroEffect) => void) | null = null
   onRequestTravel: ((era: '2026', spawn: 'present_start') => void) | null = null
   private readonly table: Readonly<Record<string, unknown>>
   private pendingDialogue: string | null = null
   private choiceOpen = false
-  private announced = false
-  private ballooned = false
+  /** 途中から再開した朝：街頭ビジョンを映すまでの残り秒（-1 = 待っていない） */
+  private newsT = -1
+  /** 風船をクローで引き寄せている（手もとに届いたら子どもに返す） */
+  private balloonPulled = false
   private hitBark = 0
   private walkT = -1
   private confrontT = 0
@@ -386,6 +411,7 @@ export class Intro2086Story {
   }
 
   objective(): Objective {
+    if (this.balloonShown()) return BALLOON_OBJECTIVE
     if (this.step === 'attempts') {
       if (this.cancelAsked) return { title: 'ソラにも中止を頼もう', sub: '展示ブースのソラに F：話す' }
       if (this.despaired) return { title: 'ソラに打ち明けよう', sub: 'まだ試していない方法もある（右の一覧）' }
@@ -394,7 +420,22 @@ export class Intro2086Story {
   }
 
   hints(): KeyHint[] {
+    if (this.balloonShown())
+      return [
+        { key: 'J', label: '引き寄せる' },
+        { key: '↑↓←→', label: '見上げる' },
+      ]
     return INTRO_HINTS[this.step]
+  }
+
+  /** 風船を取ってあげる目標を出しているか（ソラへ行く・試みの目標より先） */
+  private balloonShown(): boolean {
+    return this.balloonTask && BALLOON_STEPS.includes(this.step) && !this.current && !this.cancelAsked
+  }
+
+  /** 街灯の風船（J で引き寄せる）を狙えるか */
+  balloonCatchable(): boolean {
+    return this.balloonShown() && !this.balloonPulled
   }
 
   /** 右上の試みの一覧（4章〜5章の前。出さないときは null） */
@@ -417,6 +458,7 @@ export class Intro2086Story {
       this.qrBusy ||
       this.whiteoutBusy ||
       this.step === 'opening' ||
+      this.step === 'morning' ||
       this.step === 'night' ||
       this.step === 'swallow' ||
       this.step === 'loop' ||
@@ -482,7 +524,11 @@ export class Intro2086Story {
       return
     }
     if (this.step === 'climb_hook' || this.step === 'swing_gap' || this.step === 'fix_antenna' || this.step === 'return_booth') this.emit({ kind: 'install_lens' })
-    if (MORNING_STEPS.includes(this.step)) this.startMorning()
+    // 繰り返しの朝から再開：朝の始まり（街頭ビジョン・風船・選択）からやり直す。時代カードが出てから映す
+    if (this.step === 'loop_cues' || this.step === 'attempts') {
+      this.startMorningNews(this.step, MORNING_DELAY)
+      return
+    }
     this.emitAttemptsUi()
   }
 
@@ -552,40 +598,55 @@ export class Intro2086Story {
     return this.lines('morning_greet')
   }
 
-  private startMorning(): void {
-    this.morningT = 0
-    this.announced = false
-    this.ballooned = false
+  /**
+   * 朝の始まり（毎朝同じ）：街頭ビジョンの日付 → 子どもの風船が同じ街灯に引っかかる → 選ぶ。選んだら next へ進んで操作を戻す。
+   * delay > 0 なら、その秒だけ待ってから街頭ビジョンを映す（途中から再開したとき）
+   */
+  private startMorningNews(next: IntroStep, delay = 0): void {
+    this.morningNext = next
+    this.balloonTask = false
+    this.balloonPulled = false
+    this.greeted = false
+    this.go('morning')
+    this.emit({ kind: 'lock', on: true })
+    this.newsT = delay > 0 ? delay : -1
+    if (delay <= 0) this.morningNews()
+  }
+
+  /** 街頭ビジョンを映して、朝のニュース（ループの朝は日付に気づく） */
+  private morningNews(): void {
+    this.newsT = -1
+    this.emit({ kind: 'announce' })
+    this.emit({ kind: 'focus', target: 'street', short: this.loopCount >= 2 })
+    const react = this.loopCount === 1 ? this.lines('cue_date') : this.loopCount >= 2 ? this.lines('cue_date_again') : []
+    this.say('announce', [], react)
+  }
+
+  /** 風船が手を離れて、同じ街灯に引っかかる（ループの朝は気づく） */
+  private morningBalloon(): void {
+    this.emit({ kind: 'balloon' })
+    this.emit({ kind: 'focus', target: 'balloon', short: this.loopCount >= 2 })
+    this.say('balloon_cry', [], this.loopCount === 1 ? this.lines('cue_balloon') : [])
+  }
+
+  private openBalloonChoice(): void {
+    this.choiceOpen = true
+    const go = this.morningNext === 'attempts' ? BALLOON_LABELS.hurry : BALLOON_LABELS.go
+    this.emit({
+      kind: 'choice',
+      id: BALLOON_CHOICE.id,
+      prompt: BALLOON_CHOICE.prompt,
+      options: [
+        { id: 'take', label: BALLOON_LABELS.take },
+        { id: 'go', label: go },
+      ],
+    })
   }
 
   private tick(dt: number): boolean {
-    // 毎朝の出来事（同じ時刻・同じ言葉）
-    if (this.morningT >= 0 && MORNING_STEPS.includes(this.step)) {
-      this.morningT += dt
-      if (!this.announced && this.morningT >= MORNING_EVENTS.announce && !this.pendingDialogue) {
-        this.announced = true
-        this.emit({ kind: 'announce' })
-        this.bark('announce', 6.5)
-        if (this.step === 'loop_cues') this.delayed.push({ t: 6.8, run: () => !this.pendingDialogue && this.bark('cue_date', 3.2) })
-      }
-      if (!this.ballooned && this.morningT >= MORNING_EVENTS.balloon) {
-        this.ballooned = true
-        this.emit({ kind: 'balloon' })
-        this.delayed.push({ t: 2.2, run: () => !this.pendingDialogue && this.bark('balloon_cry', 2.6) })
-        if (this.step === 'loop_cues' && !this.pendingDialogue) {
-          this.emit({ kind: 'focus', target: 'balloon', short: true })
-          this.delayed.push({ t: 5.2, run: () => !this.pendingDialogue && this.bark('cue_balloon', 3.2) })
-        }
-      }
-    }
-    for (let i = this.delayed.length - 1; i >= 0; i--) {
-      const d = this.delayed[i]
-      d.t -= dt
-      if (d.t <= 0) {
-        this.delayed.splice(i, 1)
-        // 朝の間だけ（夜へ移ったら言わない）
-        if (MORNING_STEPS.includes(this.step)) d.run()
-      }
+    if (this.step === 'morning' && this.newsT > 0) {
+      this.newsT -= dt
+      if (this.newsT <= 0) this.morningNews()
     }
     // 見せ直し
     const replay = FOCUS_REPLAY[this.step]
@@ -613,9 +674,9 @@ export class Intro2086Story {
     return false
   }
 
-  private readonly delayed: Array<{ t: number; run: () => unknown }> = []
-
   private onZone(zone: IntroZone): boolean {
+    // 風船を取らずにソラのブースへ来た：取ってあげる目標は下ろす
+    if (zone === 'booth') this.balloonTask = false
     switch (this.step) {
       case 'go_booth':
         if (zone === 'booth') {
@@ -690,6 +751,7 @@ export class Intro2086Story {
         return true
       }
       case 'sora':
+        this.balloonTask = false
         return this.talkSora(item)
       default:
         return false
@@ -771,6 +833,17 @@ export class Intro2086Story {
   }
 
   private onChoice(id: string, option: string): boolean {
+    if (id === BALLOON_CHOICE.id && this.choiceOpen && this.step === 'morning') {
+      this.choiceOpen = false
+      const take = option === 'take'
+      const next = this.morningNext
+      this.go(next)
+      this.balloonTask = take
+      this.emit({ kind: 'lock', on: false })
+      if (next === 'attempts') this.emit({ kind: 'save' })
+      this.say(take ? 'balloon_take' : next === 'attempts' ? 'balloon_leave_hurry' : 'balloon_leave')
+      return true
+    }
     if (id !== ATTEMPT_CHOICE.id || !this.choiceOpen) return false
     this.choiceOpen = false
     switch (option) {
@@ -795,6 +868,7 @@ export class Intro2086Story {
   }
 
   private onClaw(event: ClawEventKind, targetId: string): boolean {
+    if (targetId === INTRO_IDS.balloon) return this.onBalloonClaw(event)
     if (this.step === 'fetch_lens' && targetId === INTRO_IDS.lens && (event === 'object_arrived' || event === 'connected')) {
       this.go('deliver_lens')
       this.bark('lens_got', 2.6)
@@ -807,6 +881,25 @@ export class Intro2086Story {
       this.emitAttemptsUi()
       this.emit({ kind: 'evacuate', on: true })
       this.say('try_alarm')
+      return true
+    }
+    return false
+  }
+
+  /** 街灯の風船：引っかけたら引き寄せ、手もとに届いたら子どもに返してお礼 */
+  private onBalloonClaw(event: ClawEventKind): boolean {
+    if (event === 'connected' && this.balloonCatchable()) {
+      this.balloonPulled = true
+      return true
+    }
+    if (this.balloonPulled && (event === 'object_arrived' || event === 'dropped' || event === 'retracted' || event === 'released')) {
+      this.balloonPulled = false
+      this.balloonTask = false
+      this.emit({ kind: 'balloon_return' })
+      const key = this.loopCount > 0 ? 'balloon_thanks_loop' : 'balloon_thanks'
+      // 別の会話の途中なら、お礼の一言だけ
+      if (this.pendingDialogue) this.bark(key, 2.6)
+      else this.say(key)
       return true
     }
     return false
@@ -862,8 +955,9 @@ export class Intro2086Story {
 
   private onFx(fx: IntroFx): boolean {
     if (fx === 'flashback' && this.step === 'opening') {
-      this.go('go_booth')
-      this.emit({ kind: 'lock', on: false })
+      // 15年後の独白のあと、朝の始まり（街頭ビジョン・風船・選択）→ ブースへ
+      this.morningNext = 'go_booth'
+      this.go('morning')
       this.say('opening_mono')
       return true
     }
@@ -964,7 +1058,13 @@ export class Intro2086Story {
         }
         return true
       case 'opening_mono':
-        if (this.step === 'go_booth' || this.step === 'talk_sora') this.startMorning()
+        if (this.step === 'morning') this.morningNews()
+        return true
+      case 'announce':
+        if (this.step === 'morning') this.morningBalloon()
+        return true
+      case 'balloon_cry':
+        if (this.step === 'morning') this.openBalloonChoice()
         return true
       case 'night_walk':
         return true
@@ -997,17 +1097,10 @@ export class Intro2086Story {
         }
         return true
       case 'loop_wake':
-        if (this.step === 'wake') {
-          this.go('loop_cues')
-          this.startMorning()
-        }
+        if (this.step === 'wake') this.startMorningNews('loop_cues')
         return true
       case 'wake_again':
-        if (this.step === 'wake') {
-          this.go('attempts')
-          this.startMorning()
-          this.emit({ kind: 'save' })
-        }
+        if (this.step === 'wake') this.startMorningNews('attempts')
         return true
       case 'loop_help':
         if (this.step === 'loop_cues') {

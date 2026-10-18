@@ -20,6 +20,8 @@ declare module 'n8ao' {
       transparencyAware: boolean
       accumulate: boolean
     }
+    /** シーンに半透明の物があれば transparencyAware を自動で入れる（既定 true） */
+    autoDetectTransparency: boolean
     setQualityMode(mode: 'Performance' | 'Low' | 'Medium' | 'High' | 'Ultra' | 'Neural-Low' | 'Neural-Medium' | 'Neural-High'): void
     setSize(width: number, height: number): void
   }

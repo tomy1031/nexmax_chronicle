@@ -1,17 +1,17 @@
 // 導入編（intro2086Story）の演出をシーンで実行するところ。アダプタ（game/future2086Adapter.ts）が begin で作り、
 // 物語の演出（IntroEffect）のうち新しいもの・ソラの動き・小物・画面の重ね物をここで受け持つ。
-// ・回想（1-0）・街頭ビジョン・風船・レンズをリングへ・アンテナと大画面・紙吹雪・試みの一覧・避難（広場が空に）
+// ・回想（1-0）・街頭ビジョン・風船（J で引き寄せて子どもに返す）・レンズをリングへ・アンテナと大画面・紙吹雪・試みの一覧・避難（広場が空に）
 //   ・町の外（白くかすんで広場へ）・立ち向かう（ワイヤーが本体をすり抜ける）・逃げた先から消える街・石標の QR → リングに記録
 // ・ソラ：決まった立ち位置／プレイヤーの横を歩いてついてくる（follow）／その場で止まる（stop）／南のゲートへ逃げる（escape）
 import * as THREE from 'three'
-import type { StageRuntime, CineShot } from '../../game/stage'
+import type { StageRuntime, CineShot, ObjectiveMark } from '../../game/stage'
 import type { ActionFrame } from '../../player/inputActions'
 import type { Character } from '../../world/characters'
 import { MobTalk, type MobSpeakerDef } from '../../world/mobTalk'
 import type { MobTable } from '../../world/mobTalkLogic'
 import { INTRO_CROWD } from './crowd'
 import type { FutureScene, SoraSpotId } from './scene'
-import { F } from './layout'
+import { F, HOOK, SWING } from './layout'
 import type { IntroEffect, IntroStep, Intro2086Story, RecordId } from './intro2086Story'
 import { introSpawn, introStartStep } from './intro2086Story'
 import type { IntroProps, StoneId } from './introProps2086'
@@ -208,9 +208,8 @@ export class IntroDirector {
         this.setSoraMode(e.spot)
         return true
       case 'flashback': {
-        const l = this.story.lines('flashback')[0]
         this.flashback?.dispose()
-        this.flashback = new Flashback(l?.speaker ?? 'ソラ（8歳）', l?.text ?? '')
+        this.flashback = new Flashback(this.story.lines('flashback'))
         this.flashback.onDone = () => {
           this.flashback = null
           rt.hud.showEraCard('2086年', 'ナンバタウン', '時代博覧祭', 3.4, '#bfa8ff')
@@ -243,6 +242,15 @@ export class IntroDirector {
       case 'balloon':
         this.props.balloon.play()
         return true
+      case 'balloon_return': {
+        // クローが運んできた風船を外して、子どもの手へふわっと戻す
+        const b = this.props.balloon
+        const from = b.markPos.clone()
+        rt.claw.sendHomeById(b.def.id)
+        b.def.enabled = false
+        b.giveBack(from)
+        return true
+      }
       case 'attempts_ui':
         this.panel.set(e.items)
         return true
@@ -337,6 +345,9 @@ export class IntroDirector {
 
   /** ループの朝へ戻した（setTime('morning') の後） */
   resetMorning(rt: StageRuntime | null): void {
+    // 風船：クローが持っていれば外して（物理の箱ごと街灯の上へ）、子どもの手に戻す
+    if (rt) rt.claw.sendHomeById(this.props.balloon.def.id)
+    this.props.balloon.def.enabled = false
     this.props.resetMorning(false)
     this.lensIn = false
     this.lens.set(false)
@@ -379,6 +390,8 @@ export class IntroDirector {
       alarm.setOn(true)
     }
     alarm.def.enabled = this.story.alarmEnabled()
+    // 街灯の風船：取ってあげると選んだ朝だけ狙える
+    this.props.balloon.def.enabled = this.story.balloonCatchable()
     // 石標の足元の光（読めるとき・近いとき）
     for (const id of Object.keys(this.props.stones) as StoneId[]) {
       const st = this.props.stones[id]
@@ -399,6 +412,7 @@ export class IntroDirector {
   /** NMClaw の出来事（アダプタの onClawEvent から、物語へ送った後） */
   onClaw(kind: string, targetId: string | null): void {
     if (targetId === this.props.alarm.def.id && kind === 'connected') this.alarmReset = true
+    if (targetId === this.props.balloon.def.id && kind === 'connected') this.props.balloon.grab()
   }
 
   private updateQr(dt: number, rt: StageRuntime): void {
@@ -503,6 +517,7 @@ export class IntroDirector {
 
   /** 目標の位置（HUD の方位磁針） */
   objectiveTarget(step: IntroStep, lens: THREE.Vector3, hook: THREE.Vector3, swing: THREE.Vector3): THREE.Vector3 | null {
+    if (this.story.balloonCatchable()) return this.props.balloon.markPos
     switch (step) {
       case 'go_booth':
       case 'talk_sora':
@@ -528,6 +543,81 @@ export class IntroDirector {
         return INTRO_LAYOUT.stones.stone_2026
     }
     return null
+  }
+
+  private readonly markAt = [v(0, 0, 0), v(0, 0, 0), v(0, 0, 0), v(0, 0, 0)]
+  private readonly marks: ObjectiveMark[] = []
+
+  /** 目標の目印（頭の上の「！」と名前）。会話・演出の間は出さない。試みの一覧の候補は画面に映っているときだけ（edge: false） */
+  objectiveMarkers(step: IntroStep, lens: THREE.Vector3): readonly ObjectiveMark[] {
+    const out = this.marks
+    out.length = 0
+    if (this.story.busy) return out
+    const add = (x: number, y: number, z: number, label: string, edge = true) => {
+      if (out.length < this.markAt.length) out.push({ pos: this.markAt[out.length].set(x, y, z), label, edge })
+    }
+    const s = this.sora.root.position
+    const sora = (edge = true) => add(s.x, s.y + this.sora.height + 0.3, s.z, 'ソラ', edge)
+    if (this.story.balloonCatchable()) {
+      const b = this.props.balloon.markPos
+      add(b.x, b.y + 0.5, b.z, '風船')
+      return out
+    }
+    switch (step) {
+      case 'go_booth':
+      case 'talk_sora':
+      case 'deliver_lens':
+      case 'return_booth':
+      case 'loop_cues':
+      case 'returned':
+        sora()
+        break
+      case 'fetch_lens':
+        add(lens.x, lens.y + 0.75, lens.z, '共鳴レンズのケース')
+        break
+      case 'climb_hook':
+        add(HOOK.point.x, HOOK.point.y + 0.45, HOOK.point.z, '回廊の金具')
+        break
+      case 'swing_gap':
+        add(SWING.anchor.x, SWING.anchor.y + 0.5, SWING.anchor.z, '光る輪')
+        break
+      case 'fix_antenna': {
+        const A = INTRO_LAYOUT.antenna
+        add(A.x, A.y + 3.0, A.z, '中継アンテナ')
+        break
+      }
+      case 'evade':
+      case 'escape_walk': {
+        const g = this.fs.markers.south_gate
+        add(g.x, 2.6, g.z, '南のゲート')
+        break
+      }
+      case 'records': {
+        const st = INTRO_LAYOUT.stones.stone_2026
+        add(st.x, st.y + 2.05, st.z, '2026年・なんば')
+        break
+      }
+      case 'attempts': {
+        // 中止を頼んだあと・打ち明けるときはソラ。ほかは、まだ試していない方法の相手（運営本部・非常警報の柱・ソラ）を並べる
+        const a = this.story.attempts
+        if (this.story.cancelAsked) {
+          sora()
+          break
+        }
+        if (this.story.despaired) sora()
+        if (!a.has('cancel')) {
+          const H = INTRO_LAYOUT.hq
+          add(H.x, 2.2, H.z + 0.7, '運営本部', false)
+        }
+        if (!a.has('alarm')) {
+          const P = INTRO_LAYOUT.alarm
+          add(P.x, P.y + 2.35, P.z, '非常警報の柱', false)
+        }
+        if (!this.story.despaired && (!a.has('escape') || !a.has('confront'))) sora(false)
+        break
+      }
+    }
+    return out
   }
 
   get flashbackPlaying(): boolean {

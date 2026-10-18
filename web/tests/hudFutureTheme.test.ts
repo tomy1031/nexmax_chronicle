@@ -138,8 +138,9 @@ describe('左腕・キー案内・一時停止のタブ', () => {
   it('一時停止は「装備・記録」から開き、← → で切り替える', () => {
     expect(PAUSE_DEFAULT_TAB).toBe('equip')
     expect(nextPauseTab('equip', 'ArrowRight')).toBe('controls')
-    expect(nextPauseTab('controls', 'ArrowRight')).toBe('equip')
-    expect(nextPauseTab('equip', 'ArrowLeft')).toBe('controls')
+    expect(nextPauseTab('controls', 'ArrowRight')).toBe('settings')
+    expect(nextPauseTab('settings', 'ArrowRight')).toBe('equip')
+    expect(nextPauseTab('equip', 'ArrowLeft')).toBe('settings')
     expect(nextPauseTab('controls', 'ArrowLeft')).toBe('equip')
     expect(nextPauseTab('controls', 'KeyA')).toBe('controls')
   })

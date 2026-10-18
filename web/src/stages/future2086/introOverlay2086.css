@@ -23,11 +23,18 @@
 .intro-flashback .ifb-place b { display: block; font-size: 1.7em; letter-spacing: 0.3em; margin-bottom: 0.3em; color: #ffffff; }
 .intro-flashback .ifb-quote {
   position: absolute; left: 50%; bottom: 12vh; transform: translateX(-50%); width: min(1000px, 86vw); text-align: center;
-  color: #fff; font-family: var(--ui-font); opacity: 0; transition: opacity 1.4s;
+  color: #fff; font-family: var(--ui-font); opacity: 0; transition: opacity 0.3s;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9);
 }
-.intro-flashback .ifb-quote .who { display: block; font-weight: 800; font-size: clamp(14px, 1.2vw, 20px); letter-spacing: 0.2em; color: #dcc8ff; margin-bottom: 0.5em; }
+.intro-flashback .ifb-quote.on { transition: opacity 0.7s; }
+/* 話し手の色：ソラ（8歳）は薄紫、小さなロボット（ネクマックス）は水色 */
+.intro-flashback .ifb-quote .who { display: block; font-weight: 800; font-size: clamp(14px, 1.2vw, 20px); letter-spacing: 0.2em; color: #a8e4ff; margin-bottom: 0.5em; }
+.intro-flashback .ifb-quote.sora .who { color: #dcc8ff; }
 .intro-flashback .ifb-quote .line { font-weight: 800; font-size: clamp(18px, 2vw, 34px); letter-spacing: 0.06em; }
+/* 最後の一言（「昨日のことが分からなくても、今日はここにいるよ。」）は大きく、あたたかい光で */
+.intro-flashback .ifb-quote.last .line { font-size: clamp(20px, 2.4vw, 40px); color: #fff4dc; text-shadow: 0 0 22px rgba(255, 214, 150, 0.55), 0 2px 14px rgba(0, 0, 0, 0.9); }
+.intro-flashback .ifb-tint { transition: background 2.4s; }
+.intro-flashback.warm .ifb-tint { background: rgba(255, 196, 130, 0.2); }
 .intro-flashback .on { opacity: 1; }
 .intro-flashback .ifb-white { position: absolute; inset: 0; background: #ffffff; opacity: 0; }
 .intro-flashback .ifb-skip { position: absolute; right: 3vw; bottom: 4vh; color: rgba(255, 255, 255, 0.55); font-family: var(--ui-font); font-weight: 800; font-size: 12px; letter-spacing: 0.15em; }

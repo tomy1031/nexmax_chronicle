@@ -25,6 +25,7 @@ three.js 版は **シェル（ずっと残るもの）＋ステージ（時代�
 - `dialogueQueue.ts` … 複数行の会話を順に出す（文字数で自動送り、F で早送り）
 - `cinematic.ts` … カメラの演出（`rt.cinematic(shot)`）の時間の進み・加減速・自動のカメラ位置・ディレクター（純粋な計算＋THREE の数学。`tests/cinematic.test.ts`）
 - `cineMarker.ts` … 演出中の目印（脈打つ光る輪・光の柱・名前の札）。シェルが 1 組だけ持って使い回す
+- `objectiveMarker.ts` … 目標の目印（いまやることの相手の頭の上に弾む金色の「！」と名前の札。画面の外なら縁に寄せて矢印）。DOM だけ。ステージの `objectiveMarkers(rt)` を毎フレーム映す。置き場所の計算 `placeMarker` は `tests/objectiveMarker.test.ts`
 - `params.ts` … URL パラメータ
 - `future2086Adapter.ts` … 2086 年ステージ（別担当）をつなぐところ
 - `game.css` … 時空移動・時代カード・IDO パネル・話者の色
@@ -48,6 +49,7 @@ interface Stage {
   hints(rt): Hint[] | null         // キー案内（null ならシェルの既定）
   objective(rt): { title, sub }    // 左上の目標
   objectiveTarget?(rt): Vector3 | null   // 目標の位置（HUD の方位磁針用）
+  objectiveMarkers?(rt): ObjectiveMark[] | null   // 頭の上の目印 { pos, label?, edge? }（最大 4。会話・演出・操作停止中はシェルが隠す）
   onClawEvent?(e, rt): void        // NMClaw のお知らせ（connected / released など）
   onRespawn?(rt): void
   shots?: StageShots               // ?shot= の固定カメラ（P キーで切替）
@@ -120,8 +122,28 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 ## URL パラメータ（開発・検証用）
 
 `?stage=1726|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
-`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low`・`?stats`・`?debug`・`?slowmo=0.3`。
-開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`。
+`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
+（どちらも保存した設定より優先）・`?fixed`（解像度を固定）・`?stats`（F3 と同じ計測表示）・`?debug`・`?slowmo=0.3`。
+開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`・
+`window.__game.graphics({ quality: 'low', fps: 30 })`（画質・フレームレートをその場で変える）。
+
+## 画質とフレームレート（`render/quality.ts`）
+
+一時停止の「設定」タブで選び、この端末（localStorage の `nexmax.graphics.v1`）に保存する。スマホ・タブレット（タッチ操作）は「標準・30」、PC は「高画質・60」から始まる。
+変えるとその場で効く（後処理のパスの組み直し・影の解像度・点光源の数・解像度の上限。花びらの数だけは次の時代から）。
+
+| | 省電力 | 標準 | 高画質 |
+|---|---|---|---|
+| 環境遮蔽（N8AO） | なし | なし | あり（半分の解像度） |
+| ブルーム | なし（パスから外す） | あり | あり |
+| アンチエイリアス（SMAA） | なし | MEDIUM | HIGH |
+| 影の解像度・ぼかし | 1024・1 | 1024・2 | 2048・3 |
+| 解像度の上限（CSS の画素あたり） | 0.85 | 1.0 | 1.25 |
+| 点光源（提灯など） | 2 | 4 | 6 |
+| 左上の顔の更新 | 8 回／秒 | 12 回／秒 | 20 回／秒 |
+
+フレームレートは requestAnimationFrame を間引いて上限（30・60）に合わせる（120Hz の画面でも 60 を超えない）。一時停止中・メニュー中は 12 まで下げる。
+適応解像度（`render/renderer.ts` の `AdaptiveResolution`）は上限のフレームレートを目標に、毎フレームの実時間で測って解像度を下げ、余裕が続けば戻す。
 
 ## 2086 年ステージのつなぎ方（`future2086Adapter.ts`）
 

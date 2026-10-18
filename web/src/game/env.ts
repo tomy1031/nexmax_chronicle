@@ -103,7 +103,8 @@ export async function applyEnvironment(renderer: THREE.WebGLRenderer, scene: THR
   post.grade.set('gSaturation', g.saturation)
   post.grade.set('gContrast', g.contrast)
   post.grade.set('gVignette', g.vignette)
-  if (q.bloom) post.bloom.intensity = env.bloom?.intensity ?? 1.2
+  // ブルームは画質によっては後処理に入っていない（そのときも値だけ入れておく）
+  post.bloom.intensity = env.bloom?.intensity ?? 1.2
   post.bloom.luminanceMaterial.threshold = env.bloom?.threshold ?? 0.95
   applyHaze(post, env.haze)
   return {

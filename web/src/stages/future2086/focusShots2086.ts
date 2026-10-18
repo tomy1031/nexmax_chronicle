@@ -4,6 +4,7 @@
 // ・hook：西の回廊の縁の街灯の金具
 // ・ring：西の回廊 → 途切れた北の回廊 → アーチから下がる光る輪へパン（振り子の軌道を点線で見せる）
 // ・sky ：夜の広場から空へ見上げる（空が裂けて正体不明の存在が出てくる演出 emergence2086.ts が使う）
+// ・street：南の入口の街頭ビジョン（毎朝の日付とニュース）　・balloon：子どもの風船が同じ街灯に引っかかる
 // short（2 回目以降・時間が経ったときの見せ直し）は、パンを省いて短く、飛ばせるショットにする。
 import * as THREE from 'three'
 import type { CineShot } from '../../game/cinematic'
@@ -12,9 +13,9 @@ import { uTime } from '../../render/materials'
 import { F, HOOK, SWING } from './layout'
 import { INTRO_LAYOUT } from './introProps2086'
 
-export type FocusId = 'lens' | 'hook' | 'ring' | 'sky' | 'antenna' | 'screen' | 'balloon' | 'exhibit' | 'install'
+export type FocusId = 'lens' | 'hook' | 'ring' | 'sky' | 'antenna' | 'screen' | 'street' | 'balloon' | 'exhibit' | 'install'
 
-export const FOCUS_IDS: readonly FocusId[] = ['lens', 'hook', 'ring', 'sky', 'antenna', 'screen', 'balloon', 'exhibit', 'install']
+export const FOCUS_IDS: readonly FocusId[] = ['lens', 'hook', 'ring', 'sky', 'antenna', 'screen', 'street', 'balloon', 'exhibit', 'install']
 
 export type FocusContext = {
   /** プレイヤーの足元 */
@@ -42,6 +43,7 @@ export const FOCUS_LABELS: Record<FocusId, string | null> = {
   sky: null,
   antenna: '中継アンテナ',
   screen: null,
+  street: null,
   balloon: null,
   exhibit: null,
   install: null,
@@ -154,12 +156,29 @@ export const FOCUS_SHOTS: Record<FocusId, (c: FocusContext) => CineShot> = {
       fov: 46,
     }
   },
-  // 子どもの風船が同じ街灯に引っかかる（3章、短く）
+  // 毎朝の街頭ビジョン：正面の少し下から、日付の文字が読める近さへゆっくり寄る
+  street: (c: FocusContext): CineShot => {
+    const S = INTRO_LAYOUT.street
+    const n = v(Math.sin(INTRO_LAYOUT.streetYaw), 0, Math.cos(INTRO_LAYOUT.streetYaw))
+    const center = v(S.x, 3.3, S.z)
+    const from = center.clone().addScaledVector(n, 5.2).setY(1.7)
+    return {
+      inSec: c.short ? 1.0 : 1.6,
+      hold: c.short ? 2.0 : 3.0,
+      outSec: 1.2,
+      from,
+      look: center.clone().setY(3.1),
+      fromTo: center.clone().addScaledVector(n, 4.1).setY(1.95),
+      lookTo: center.clone().setY(3.2),
+      panSec: 4.0,
+      fov: 46,
+    }
+  },
+  // 子どもの風船が同じ街灯に引っかかる（毎朝。手を離れて昇り、同じ腕に引っかかるまで）
   balloon: (c: FocusContext): CineShot => {
     const L = INTRO_LAYOUT.lamp
-    void c
     // 街灯の南東 4m ほどから見上げる：手を離れた風船が昇って、同じ腕に引っかかる
-    return { inSec: 1.0, hold: 3.6, outSec: 1.0, skippable: true, from: v(L.x + 2.4, 1.7, L.z + 3.6), look: v(L.x + 0.1, 2.2, L.z + 1.6), lookTo: v(L.x + 0.55, 4.2, L.z), panSec: 3.0, fov: 52 }
+    return { inSec: c.short ? 0.8 : 1.0, hold: 3.6, outSec: 1.0, from: v(L.x + 2.4, 1.7, L.z + 3.6), look: v(L.x + 0.1, 2.2, L.z + 1.6), lookTo: v(L.x + 0.55, 4.2, L.z), panSec: 3.0, fov: 52 }
   },
   // 共鳴レンズをリングにはめる：リングの正面から、上のレンズと澄んでいく映像
   install: (c: FocusContext): CineShot => {

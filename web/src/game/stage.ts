@@ -25,8 +25,9 @@ import type { DialogueLine } from './dialogueQueue'
 import type { StageKey, TravelRequest, TravelVerdict } from './travel'
 import type { RiftFx } from './riftFx'
 import type { CineShot } from './cinematic'
+import type { ObjectiveMark } from './objectiveMarker'
 
-export type { StageKey, TravelRequest, CineShot }
+export type { StageKey, TravelRequest, CineShot, ObjectiveMark }
 
 /** 到着地点（足元の位置・向き・カメラ） */
 export type SpawnPoint = { pos: THREE.Vector3; facing: number; camYaw: number; camPitch: number }
@@ -171,6 +172,8 @@ export interface Stage {
   objective(rt: StageRuntime): { title: string; sub: string }
   /** 目標のワールド位置（HUD の方位磁針・目標マーカー用。無ければ null） */
   objectiveTarget?(rt: StageRuntime): THREE.Vector3 | null
+  /** いまやることの相手の頭の上に出す目印（objectiveMarker.ts。最大 4 つ。無ければ null・空） */
+  objectiveMarkers?(rt: StageRuntime): readonly ObjectiveMark[] | null
   onClawEvent?(e: WireEvent, rt: StageRuntime): void
   /** 水などに落ちて戻されたとき */
   onRespawn?(rt: StageRuntime): void

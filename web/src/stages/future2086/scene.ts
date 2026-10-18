@@ -19,6 +19,8 @@ import type { Ctx, LightSpot } from '../../world/edo/kit'
 import { Foliage, createPetals } from '../../world/edo/nature'
 import { buildBooth, type BoothParts } from './booth'
 import { buildCentralTower, buildDistrict, buildExpoGlobe, buildFarCity, buildSky, buildTraffic, type Traffic } from './buildings2086'
+import { buildSkyTrain } from './skyTrain2086'
+import { buildHoloAds } from './holoAds2086'
 import { buildClawTargets2086, type FutureClawWorld } from './clawTargets2086'
 import { FUTURE_ENVIRONMENTS, type FutureEnvironment } from './environment'
 import { buildFestival, buildFountain, holoSign } from './festival'
@@ -107,6 +109,8 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
   buildCentralTower(c, root)
   buildExpoGlobe(c, root)
   buildSky(c, root, farFoliage)
+  buildSkyTrain(c, root)
+  buildHoloAds(c, root)
   const traffic: Traffic = buildTraffic(root)
   const booth = buildBooth(c, root)
   const claw = buildClawTargets2086(c)

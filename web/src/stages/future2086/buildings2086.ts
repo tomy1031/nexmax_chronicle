@@ -11,6 +11,7 @@ import { createFallMaterial, fallSheet } from '../../world/edo/water'
 import { ColliderList } from '../../world/colliders'
 import { F } from './layout'
 import { NEON, fbox, neon, vine, type FCtx } from './kit2086'
+import { terraceBuilding, terraceCascade, terraceSign } from './terraces2086'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -150,29 +151,36 @@ export function farTree(c: FCtx, x: number, y: number, z: number, r: number, rng
 
 export function buildDistrict(c: FCtx): void {
   const P = F.PLAZA
-  // 西（空中回廊が 2 階に取り付く。1 階は回廊の陰の店先）
-  building(c, { x0: -28, x1: P.x0 - 0.2, z0: -12, z1: 21, h: 15.2, front: 'e', accent: NEON.cyan, seed: 11 })
-  building(c, { x0: -28, x1: P.x0 - 0.2, z0: -27, z1: -12.4, h: 18.8, front: 'e', accent: NEON.pink, seed: 12 })
-  // 北西・北東（低い：奥の大阪城・中央タワー・浮島・夜のオルムが見えるように）
-  building(c, { x0: -28, x1: F.STREET.x0, z0: -32, z1: P.z0 - 0.2, h: 8.2, front: 's', accent: NEON.warm, seed: 13 })
-  building(c, { x0: F.STREET.x1, x1: 28, z0: -32, z1: P.z0 - 0.2, h: 8.0, front: 's', accent: NEON.blue, seed: 14 })
-  // 東（屋台の奥）
-  building(c, { x0: P.x1 + 0.2, x1: 28, z0: -19.5, z1: 4, h: 16.4, front: 'w', accent: NEON.pink, seed: 15 })
-  building(c, { x0: P.x1 + 0.2, x1: 28, z0: 4.4, z1: 21, h: 12.6, front: 'w', accent: NEON.warm, seed: 16 })
+  // 広場を囲むのは白い段々の曲面建築（terraces2086.ts）。空中回廊（高さ 4.5）の前は張り出さない
+  const walk = F.WALK_Y + 1.5
+  // 西（IDO 展示ブースの奥。2 階が空中回廊に取り付く）
+  const west = terraceBuilding(c, { x0: -31, x1: P.x0 - 0.2, z0: -11.6, z1: 21, h: 21.2, front: 'e', accent: NEON.cyan, over: 2.4, amp: 1.1, waves: 2, noOverBelow: walk, seed: 11 })
+  // 西の棟の 2 段目に、縁に沿って曲がる大きな看板（コンセプト案A の左）
+  terraceSign(c, west, 1, -12.0, 6.0, 3.0)
+  const westN = terraceBuilding(c, { x0: -31, x1: P.x0 - 0.2, z0: -30, z1: -12, h: 25.4, front: 'e', accent: NEON.pink, over: 1.8, amp: 0.8, waves: 1, noOverBelow: walk, seed: 12 })
+  terraceCascade(c, westN, 2.5, 3.0, westN.levels.length - 1, 3)
+  // 北西・北東（段々に後ろへ下がる：奥の中央タワー・浮島・大阪城・夜のオルムが見えるように）
+  terraceBuilding(c, { x0: -31, x1: F.STREET.x0, z0: -36, z1: P.z0 - 0.2, h: 17.2, front: 's', accent: NEON.warm, over: 1.4, amp: 0.9, waves: 2, recess: 2.4, noOverBelow: walk, seed: 13 })
+  const ne = terraceBuilding(c, { x0: F.STREET.x1, x1: 31, z0: -36, z1: P.z0 - 0.2, h: 17.2, front: 's', accent: NEON.blue, over: 1.4, amp: 0.9, waves: 2, recess: 2.4, noOverBelow: walk, seed: 14 })
+  terraceCascade(c, ne, -3.5, 3.4, ne.levels.length - 1, 2)
+  // 東（屋台の奥。高く、上の階ほど張り出す）
+  const east = terraceBuilding(c, { x0: P.x1 + 0.2, x1: 32, z0: -20, z1: 4, h: 25.4, front: 'w', accent: NEON.pink, over: 2.6, amp: 1.2, waves: 2, seed: 15 })
+  terraceCascade(c, east, 9.0, 3.2, east.levels.length - 1, 2)
+  terraceBuilding(c, { x0: P.x1 + 0.2, x1: 32, z0: 4.4, z1: 21, h: 17.2, front: 'w', accent: NEON.warm, over: 2.2, amp: 1.0, waves: 1, seed: 16 })
   // 南（入口の両側）
-  building(c, { x0: -28, x1: F.SOUTH_GATE.x0 - 0.5, z0: P.z1 + 0.2, z1: 31, h: 13, front: 'n', accent: NEON.blue, seed: 17 })
-  building(c, { x0: F.SOUTH_GATE.x1 + 0.5, x1: 28, z0: P.z1 + 0.2, z1: 31, h: 14.5, front: 'n', accent: NEON.cyan, seed: 18 })
-  // 北へ延びる通りの両側（手前は低く、奥ほど高い）
+  terraceBuilding(c, { x0: -31, x1: F.SOUTH_GATE.x0 - 0.5, z0: P.z1 + 0.2, z1: 33, h: 17.2, front: 'n', accent: NEON.blue, over: 1.8, amp: 0.8, waves: 2, seed: 17, green: 'light' })
+  terraceBuilding(c, { x0: F.SOUTH_GATE.x1 + 0.5, x1: 31, z0: P.z1 + 0.2, z1: 33, h: 21.2, front: 'n', accent: NEON.cyan, over: 2.0, amp: 0.9, waves: 2, seed: 18, green: 'light' })
+  // 北へ延びる通りの両側（手前は低く、奥ほど高い。遠くは軽い形）
   const S = F.STREET
-  let z = -32.5
+  let z = -36.5
   let i = 0
   while (z > S.z0) {
-    const len = 9 + (i % 3) * 2.5
-    const h = 9 + Math.min(26, (-z - 32) * 0.55) + (i % 2) * 3
-    // 西側は低い町家風の商店（奥の大阪城の丘が見えるように）、東側は高いビル
-    const hl = 7.6 + (i % 2) * 1.8 + Math.min(4, (-z - 32) * 0.08)
-    building(c, { x0: -20, x1: S.x0 - 0.3, z0: z - len, z1: z, h: hl, front: 'e', seed: 30 + i, far: z < -50, garden: true })
-    building(c, { x0: S.x1 + 0.3, x1: 20, z0: z - len - 1.5, z1: z - 1.5, h: h + 2, front: 'w', seed: 50 + i, far: z < -50, garden: true })
+    const len = 10 + (i % 3) * 3
+    const farB = z < -50
+    const hl = 12.6 + (i % 2) * 4.2 + (farB ? 4.2 : 0)
+    const hr = 16.8 + (i % 2) * 4.2 + Math.min(16.8, (-z - 36) * 0.5)
+    terraceBuilding(c, { x0: -24, x1: S.x0 - 0.3, z0: z - len, z1: z, h: hl, front: 'e', seed: 30 + i, far: farB, green: 'light', over: 1.6, amp: 0.7, waves: 1, accent: i % 2 ? NEON.cyan : NEON.pink })
+    terraceBuilding(c, { x0: S.x1 + 0.3, x1: 24, z0: z - len - 1.5, z1: z - 1.5, h: hr, front: 'w', seed: 50 + i, far: farB, green: 'light', over: 1.6, amp: 0.7, waves: 1, accent: i % 2 ? NEON.blue : NEON.cyan })
     z -= len + 0.6
     i++
   }
@@ -475,6 +483,9 @@ function floatIsland(c: FCtx, root: THREE.Group, x: number, y: number, z: number
 }
 
 export function buildSky(c: FCtx, root: THREE.Group, f: Foliage): void {
+  // 広場から大きく見える近めの浮島（コンセプト案A）
+  floatIsland(c, root, -26, 44, -78, 6.5, 13, f)
+  floatIsland(c, root, 30, 52, -96, 7.5, 15, f)
   floatIsland(c, root, -70, 58, -165, 11, 3, f)
   floatIsland(c, root, 64, 74, -190, 13, 5, f)
   floatIsland(c, root, -150, 82, -110, 9, 7, f)

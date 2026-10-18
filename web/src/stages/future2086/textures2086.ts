@@ -94,7 +94,7 @@ function font(weight: number | string, px: number, family = ROUNDED): string {
 }
 
 /** 横幅に収まるよう文字の大きさを縮めて中央に描く */
-function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, px: number, weight: number | string = 800, family = ROUNDED, spacing = 0): void {
+export function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, px: number, weight: number | string = 800, family = ROUNDED, spacing = 0): void {
   let size = px
   ctx.font = font(weight, size, family)
   const measure = () => ctx.measureText(text).width + spacing * (text.length - 1)

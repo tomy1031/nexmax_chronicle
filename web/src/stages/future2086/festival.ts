@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { M, rbox } from '../../render/batch'
 import { mulberry32, range } from '../../render/noise'
 import { F, HOOK, SWING } from './layout'
+import { createFloorKit } from './floor2086'
 import { NEON, bulbString, chochin, column, fbox, flightCase, glowRailing, lanternString, neon, planter, vine, type FCtx } from './kit2086'
 import { atlasPlane } from './textures2086'
 import { paintWaterNormal } from '../../render/textures'
@@ -59,9 +60,10 @@ function plazaFloor(c: FCtx): void {
   const P = F.PLAZA
   const W = P.x1 - P.x0 + 1.2
   const D = P.z1 - P.z0 + 1.2
-  c.b.add(new THREE.PlaneGeometry(W, D), c.fm.paving, M(0, 0, 0, -Math.PI / 2, 0, 0), { uv: 'scale', uvScale: [W / 2, D / 2] })
+  // パールがかった大判タイル（テクスチャ 1 枚 ≒ 6m 四方）と、流れるように曲がる光の道（コンセプト案A）
+  const fk = createFloorKit(c, c.root)
+  c.b.add(new THREE.PlaneGeometry(W, D), fk.tile, M(0, 0, 0, -Math.PI / 2, 0, 0), { uv: 'scale', uvScale: [W / 6, D / 6], tint: '#d9d8d4' })
   c.col.floor(-120, 120, -120, 120, 0, 1)
-  // 光るライン：中央の円と、ブース・屋台・ステージ・ゲートへ延びる線
   const y = 0.006
   const ring = (cx: number, cz: number, r: number, col: THREE.Color, n = 64) => {
     for (let i = 0; i < n; i++) {
@@ -71,17 +73,23 @@ function plazaFloor(c: FCtx): void {
     }
   }
   ring(1.5, 1.5, 7.2, NEON.cyan)
-  ring(1.5, 1.5, 7.55, new THREE.Color(0.2, 0.7, 1.2), 72)
   // 中央の明るい石の円盤
-  c.b.add(new THREE.CircleGeometry(7.1, 64), c.fm.paving, M(1.5, 0.003, 1.5, -Math.PI / 2, 0, 0), { uv: 'scale', uvScale: [7, 7], tint: '#fff6ea' })
-  const line = (a: THREE.Vector3, b: THREE.Vector3, col = NEON.cyan) => neon(c, a, b, 0.06, col)
-  line(v(-5.7, y, 0.2), v(-4.4, y, 0.6))
-  line(v(1.5, y, 8.7), v(1.5, y, 16.5))
-  line(v(8.7, y, 1.5), v(12.4, y, 1.5), NEON.warm)
-  line(v(6.6, y, -3.6), v(9.6, y, -7.6), NEON.pink)
-  // 床の格子の継ぎ目（白い細い線）
-  for (let x = -18; x <= 18; x += 6) c.b.add(new THREE.BoxGeometry(0.05, 0.012, 38), c.fm.plastic, M(x, 0.004, 0), { tint: '#ece6da', cast: false })
-  for (let z = -18; z <= 18; z += 6) c.b.add(new THREE.BoxGeometry(38, 0.012, 0.05), c.fm.plastic, M(0, 0.004, z), { tint: '#ece6da', cast: false })
+  c.b.add(new THREE.CircleGeometry(7.1, 64), fk.tile, M(1.5, 0.003, 1.5, -Math.PI / 2, 0, 0), { uv: 'scale', uvScale: [2.4, 2.4], tint: '#e8e4dc' })
+  // 光の道：南の入口から噴水を回り込んで、IDO 展示・屋台・ステージ・北のアーチへ
+  fk.path([[0.6, 21], [-0.4, 15.5], [-3.2, 11.4], [-6.4, 7.6], [-7.6, 3.6], [-6.6, 1.2]], NEON.cyan)
+  fk.path([[2.6, 21], [3.8, 15.6], [7.4, 11.2], [11.4, 7.6], [12.8, 3.4], [12.6, 0.4]], NEON.warm, { halo: 0.7 })
+  fk.path([[-1.0, 21], [-3.6, 17.2], [-9.0, 13.6], [-14.2, 12.4], [-17.8, 12.6]], new THREE.Color(1.6, 0.9, 2.4), { core: 0.07, halo: 0.6 })
+  fk.path([[7.6, -3.2], [9.6, -5.4], [11.4, -7.2], [12.4, -8.2]], NEON.pink, { halo: 0.7 })
+  fk.path([[2.4, -5.6], [2.0, -9.6], [0.6, -13.2], [0.2, -19.6]], NEON.cyan)
+  // 噴水のまわりの細い 2 本目の輪（少しずれた楕円）
+  {
+    const pts: Array<[number, number]> = []
+    for (let i = 0; i <= 72; i++) {
+      const a = (i / 72) * Math.PI * 2
+      pts.push([1.5 + Math.cos(a) * 8.3, 1.5 + Math.sin(a) * 7.8])
+    }
+    fk.path(pts, new THREE.Color(0.25, 0.8, 1.4), { core: 0.05, halo: 0.5 })
+  }
 }
 
 // ------------------------------------------------------------------ 空中回廊

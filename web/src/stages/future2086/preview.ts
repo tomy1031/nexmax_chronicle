@@ -9,6 +9,7 @@
 //   debris=1                   夜に破片を落とす（撮影用）
 //   play=1                     実際に操作して遊ぶ（物理・NMClaw・物語の状態機械）。step=ステップ ID で途中から
 //   nohud / stats / quality=low / t=秒（シェーダの時刻を固定）
+//   campos=x,y,z&look=x,y,z&fov=度   好きな位置から撮る
 import * as THREE from 'three'
 import { readParams } from '../../render/quality'
 import { createRenderer, createSunRig } from '../../render/renderer'
@@ -163,8 +164,17 @@ async function main(): Promise<void> {
   if (time === 'night') {
     fs.setOrum({ show: Number(urlp.get('orum') ?? 1), tomorrow: Number(urlp.get('tomorrow') ?? 0.6), dissolve: Number(urlp.get('dissolve') ?? 0.45) })
   }
+  // campos=x,y,z&look=x,y,z で好きな位置から撮る（検証用）
+  const vec = (k: string) => {
+    const a = (urlp.get(k) ?? '').split(',').map(Number)
+    return a.length === 3 && a.every(Number.isFinite) ? new THREE.Vector3(a[0], a[1], a[2]) : null
+  }
+  const cpos = vec('campos')
+  const clook = vec('look')
+  if (cpos) preset.pos.copy(cpos)
+  if (clook) preset.look.copy(clook)
   camera.position.copy(preset.pos)
-  camera.fov = preset.fov
+  camera.fov = Number(urlp.get('fov') ?? preset.fov)
   camera.updateProjectionMatrix()
   camera.lookAt(preset.look)
   if (preset.nexmax) {

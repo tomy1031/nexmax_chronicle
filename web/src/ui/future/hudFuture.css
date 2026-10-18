@@ -740,6 +740,44 @@
 .nx-ld-row { display: flex; justify-content: space-between; margin-top: calc(10 * var(--u)); font: 500 calc(13 * var(--u)) / 1.3 var(--nx-jp); color: var(--nx-ink-dim); }
 .nx-ld-pct { font: 500 calc(13 * var(--u)) / 1.3 var(--nx-num); color: var(--nx-line-hi); }
 
+/* ---------------------------------------------------------------- スマホ（タッチ操作。setTouchMode で .nx-touch） */
+/* キーの形は出さない。右腕の輪はつかむボタン（中に「つかむ」「離す」など）。左腕の輪は左上（一時停止・メニューの右）に小さく */
+.nx-touch .nx-arm-ringbox > .nx-key { display: none; }
+.nx-arm-prompt {
+  position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%); padding: calc(5 * var(--u)) calc(14 * var(--u));
+  font: 800 calc(19 * var(--u)) / 1 var(--nx-jp); letter-spacing: 0.04em; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 18, 48, 0.9);
+  background: linear-gradient(180deg, rgba(10, 30, 70, 0.92), rgba(4, 14, 40, 0.95)); box-shadow: inset 0 0 0 1px var(--nx-line), 0 0 calc(8 * var(--u)) rgba(80, 220, 255, 0.55);
+  clip-path: polygon(calc(8 * var(--u)) 0, calc(100% - 8 * var(--u)) 0, 100% 50%, calc(100% - 8 * var(--u)) 100%, calc(8 * var(--u)) 100%, 0 50%);
+}
+.nx-arm-prompt.long { font-size: calc(15 * var(--u)); }
+.nx-touch .nx-arm-right { z-index: 7; }
+/* 名札は輪の幅まで（名札が広いと輪ごと左へずれて、会話ウィンドウ・ジャンプと重なるため） */
+.nx-touch .nx-arm-right .nx-arm-plate { box-sizing: border-box; max-width: calc(190 * var(--u)); padding: 0 calc(18 * var(--u)); }
+.nx-touch .nx-arm-right .nx-arm-name { overflow: hidden; text-overflow: ellipsis; }
+.nx-touch .nx-arm-ringbox { pointer-events: auto; touch-action: none; transition: transform 0.06s, filter 0.06s; }
+.nx-touch .nx-arm-ringbox.down { transform: scale(0.93); filter: brightness(1.35); }
+/* 照準が対象に合っている：輪を黄色に */
+.nx-touch .nx-arm-right.ready:not(.active) { --nx-line: var(--nx-yellow); --nx-line-hi: #fff1a6; }
+.nx-touch .nx-arm-right.ready:not(.active) .nx-arm-icon { color: #fff1a6; filter: drop-shadow(0 0 calc(8 * var(--u)) rgba(255, 210, 63, 0.9)); }
+.nx-touch .nx-arm-right.ready:not(.active) .nx-arm-prompt { box-shadow: inset 0 0 0 1.5px var(--nx-yellow), 0 0 calc(10 * var(--u)) rgba(255, 210, 63, 0.85); }
+.nx-touch .nx-arm-left { left: calc(133 * var(--u)); top: calc(226 * var(--u)); bottom: auto; z-index: 7; }
+.nx-touch .nx-arm-left .nx-arm-ringbox { width: calc(106 * var(--u)); height: calc(106 * var(--u)); }
+.nx-touch .nx-arm-left .nx-arm-plate { display: none; }
+/* 一時停止・メニューの間は輪を暗幕の下へ（押せないように） */
+.nx-touch.nx-panel-open .nx-arm { z-index: auto; }
+.nx-touch.nx-panel-open .nx-arm-ringbox { pointer-events: none; }
+/* 会話ウィンドウとキー案内は、左端から右腕の輪の手前までの帯に収める（layoutTouch が --nx-dlg-* を決める） */
+.nx-touch .nx-dialog { left: var(--nx-dlg-cx, 50%); transform: translateX(-50%) scale(var(--nx-dlg-k, 1)); transform-origin: 50% 100%; }
+.nx-touch .nx-dialog.out { transform: translate(-50%, calc(10 * var(--u))) scale(var(--nx-dlg-k, 1)); }
+.nx-touch .nx-hints { left: var(--nx-dlg-cx, 50%); max-width: var(--nx-band-w, 90vw); flex-wrap: wrap; justify-content: center; row-gap: calc(6 * var(--u)); }
+.nx-touch.nx-talking .nx-hints { display: none; }
+/* コンパスは PC と同じ位置（HUD 全体が画面に比例して縮むので、スマホでも重ならない） */
+/* 指の動き・ボタンの名前の札（キーの形と同じ色で、文字は小さめ） */
+.nx-key.nx-tkey { font-size: calc(12.5 * var(--u)); padding: 0 calc(8 * var(--u)); letter-spacing: 0.02em; }
+.nx-touch .nx-ctl-keys { min-width: calc(150 * var(--u)); }
+/* スマホ：一時停止のタブはタップで切り替えるので、← → のキーの形は出さない */
+.nx-touch .nx-tabs > .nx-key { display: none; }
+
 /* ---------------------------------------------------------------- 共通のアニメーション */
 @keyframes nx-spin { to { transform: rotate(360deg); } }
 @keyframes nx-fade-in { from { opacity: 0; } }

@@ -1,6 +1,7 @@
 // ゲームのシェル：ずっと残るもの（レンダラ・後処理・HUD・入力・ネクマックス・カメラ・NMClaw・フラグとセーブ・
 // 時空移動）を持ち、ステージ（時代）を 1 つだけ読み込んで動かす。移動のときは古いステージの GPU 資源と物理を解放してから
 // 新しいステージを組み立て、シェーダを事前コンパイルしてから見せる。毎フレームの流れは 1726年の縦切り試作（slice.ts）と同じ。
+// スマホのときだけタッチ操作（player/touchInput.ts）を足す。PC の操作・表示は変えない。
 import * as THREE from 'three'
 import { readParams, type QualitySettings } from '../render/quality'
 import { createRenderer, AdaptiveResolution } from '../render/renderer'
@@ -10,7 +11,9 @@ import { createPhysics, type Physics } from '../player/physics'
 import { PlayerController } from '../player/controller'
 import { CameraRig } from '../player/cameraRig'
 import { createInput, type InputState } from '../player/input'
-import { resolveActions, type ActionFrame } from '../player/inputActions'
+import { KEYBOARD_BINDINGS, TOUCH_BINDINGS, resolveActions, type ActionFrame, type Binding } from '../player/inputActions'
+import { shouldUseTouch } from '../player/touchLogic'
+import { TouchControls } from '../player/touchInput'
 import { ClawSystem } from '../player/clawSystem'
 import { TARGET_CATEGORY, type ClawTargetType } from '../player/clawLogic'
 import { PART_NAMES, canOpenHub, clawArm, initialEquipment, selectArm, type Equipment } from '../player/equipment'
@@ -98,6 +101,12 @@ export class Game {
   private readonly post: PostChain
   private readonly hud: Hud
   private readonly input: InputState & { endFrame(): void }
+  /** 入力の割り当て（スマホではキーボードにタッチを足す） */
+  private readonly bindings: readonly Binding[]
+  /** スマホのタッチ操作（PC では null） */
+  private readonly touch: TouchControls | null
+  /** タッチ：右腕の輪（つかむボタン）に出す言葉 */
+  private clawLabel = 'つかむ'
   private readonly loading: LoadingOverlay
   private readonly travelFx: TravelFx
   private readonly rift = new RiftFx()
@@ -143,6 +152,23 @@ export class Game {
     this.hud = new Hud(ui)
     if (this.gp.nohud) ui.style.display = 'none'
     this.input = createInput(this.renderer.domElement)
+    // スマホ（指が主な入力の端末）だけタッチ操作。つないだキーボードも使えるよう割り当てを足す
+    const useTouch = shouldUseTouch({
+      param: this.urlp.get('touch'),
+      coarse: matchMedia('(pointer: coarse)').matches,
+      hoverNone: matchMedia('(hover: none)').matches,
+      touchPoints: navigator.maxTouchPoints ?? 0,
+    })
+    this.bindings = useTouch ? [...KEYBOARD_BINDINGS, ...TOUCH_BINDINGS] : KEYBOARD_BINDINGS
+    this.touch = useTouch ? new TouchControls(ui, this.input) : null
+    if (this.touch) {
+      this.hud.setTouchMode(true)
+      const t = this.hud.touchTargets
+      this.touch.bindButton(t.rightArm, 'touch:claw')
+      this.touch.bindButton(t.leftArm, 'touch:armL')
+      this.touch.overlayTap = (x, y) => this.hud.tapPauseAt(x, y)
+      document.documentElement.classList.add('touch-ui')
+    }
     this.travelFx = new TravelFx(ui)
     this.scene.add(this.rift.group)
     // 提灯などの点光源（数は固定：近い候補へ毎回移す。ステージをまたいで使い回す）
@@ -547,7 +573,7 @@ export class Game {
     uTime.value += dt
     this.renderer.info.reset()
     const input = this.input
-    const frame = resolveActions(input)
+    const frame = resolveActions(input, this.bindings)
     this.lastFrame = frame
     if (input.pressed.has('F3')) this.hud.toggleStats()
     // 時空移動
@@ -593,6 +619,9 @@ export class Game {
       this.focus.copy(player.position)
     }
     const frozen = this.shotIndex === -1 && (this.paused || this.menuOpen)
+    this.touch?.setPlaying(this.shotIndex === -1 && !frozen && !this.travel.busy)
+    this.touch?.setLocked(this.controlLocked)
+    this.touch?.setOverlay(this.shotIndex === -1 && !this.travel.busy ? (this.paused ? 'pause' : this.menuOpen ? 'menu' : null) : null)
     const ndt = frozen ? 0 : dt
     this.nexmax.update(ndt, this.shotIndex === -1 || !shots ? player.speed : shots.nexmaxSpeed(this.shotIndex))
     stage.animate(ndt, uTime.value, rt)
@@ -620,6 +649,7 @@ export class Game {
           left: { name: this.equipment.left ? PART_NAMES[this.equipment.left] : null, selected: this.equipment.selected === 'left' },
         })
       }
+      if (this.touch) this.hud.setClawPrompt(this.clawLabel, u.selected !== null && !active)
       if (frozen || this.travel.busy) this.hud.setHints([])
     }
     this.rift.update(ndt, this.camera)
@@ -737,7 +767,13 @@ export class Game {
     // HUD（左上の顔は本物のモデル：ポーズで表情、鉱石の光で縁が光る）
     hud.setPlayerPose(pose)
     hud.setOreGlow(this.oreGlow)
-    hud.setHints(this.computeHints(a))
+    const hints = this.computeHints(a)
+    if (this.touch) {
+      // スマホ：J・Space・F・R の言葉はボタンへ、移動・カメラなどは指の動きの案内に
+      const v = this.touch.applyHints(hints, { interact: this.talk ? null : this.interactLabel(a), canSwitch: claw.candidateCount > 1 && claw.wire.phase === 'idle' })
+      hud.setHints(v.hud)
+      this.clawLabel = v.claw
+    } else hud.setHints(hints)
     const o = stage.objective(rt)
     hud.setObjective(o.title, o.sub)
     hud.setCompass(camRig.yaw, stage.objectiveTarget?.(rt) ?? null, player.position)
@@ -763,6 +799,11 @@ export class Game {
         break
     }
     if (p) player.turnToward(p.x - player.position.x, p.z - player.position.z, dt, 14)
+  }
+
+  /** タッチ：その場で F に反応するもの（ステージの「話す」「調べる」など）の言葉。照準の案内が優先されて出ないときもボタンは出す */
+  private interactLabel(a: Active): string | null {
+    return a.stage.hints(a.rt)?.find((h) => h.key === 'F')?.label ?? null
   }
 
   /** キー案内（必要なときだけ）：ワイヤー → 照準 → ステージ（話す・調べる）→ 開始直後の操作案内 */

@@ -6,6 +6,7 @@
 // ・下中央：会話ウィンドウ（話者の顔・名札・2 行・▷）、必要なときだけのキー案内
 // ・お知らせ・大きな文字・画面のふち光り・水門パズル・時代カード・IDO・一時停止（装備・記録／操作一覧）・読み込み
 // 表示はキーボードの表記だけ（マウス・コントローラーの絵や文字は出さない）。
+// スマホ（setTouchMode）ではキー名を出さず、右腕の輪をつかむボタンにして、文言・操作一覧をタッチ用にする。
 // 毎フレーム呼ばれる set* は、値が変わったときだけ DOM を触る（位置は transform で動かす）。
 // ・見た目は時代ごとのテーマ（setTheme：2086 ホログラム／2026 研究室／1726 江戸の和柄）。立体的な傾きは付けない
 // ・大きさは 1600×900 を基準に、画面の幅・高さの小さいほうに合わせて全体を一律に拡大縮小（CSS の --u）。
@@ -36,8 +37,10 @@ import { LivePortrait } from './portrait'
 import { SpeakerIconCache, speakerStyle } from './speakerIcons'
 import { PAUSE_DEFAULT_TAB, filterHintsForArms, nextPauseTab, type PauseTab } from './hudLogic'
 import { DEFAULT_THEME, HUD_THEMES, normalizeTheme, patternDataUri, themeClass, themeFromText, type HudTheme, type PatternName } from './themes'
+import { toTouchText } from '../../player/touchLogic'
 import {
   CONTROL_LIST,
+  TOUCH_CONTROL_LIST,
   type ArmView,
   type GateView,
   type Hint,
@@ -87,6 +90,16 @@ function keycaps(spec: string): string {
     .split('／')
     .map((k) => keycap(k))
     .join('<span class="nx-key-sep">/</span>')
+}
+
+/** 操作一覧の 1 行（キーボード：キーの形、タッチ：指の動き・ボタンの名前の札） */
+function controlRows(list: Array<[string, string]>, touch: boolean): string {
+  return list.map(([k, d]) => `<div class="nx-ctl"><span class="nx-ctl-keys">${touch ? touchTag(k) : keycaps(k)}</span><span class="nx-ctl-desc">${escapeHtml(d)}</span></div>`).join('')
+}
+
+/** タッチの「キー」の代わりの札（指の動き・画面のボタンの名前） */
+function touchTag(name: string): string {
+  return `<span class="nx-key wide nx-tkey">${escapeHtml(name)}</span>`
 }
 
 /**
@@ -304,8 +317,15 @@ export class HudFuture {
   private poseMood: PortraitExpression | null = null
   private armsBusy = false
   private oreGlow = 1
+  // スマホ（タッチ操作）
+  private touch = false
+  private objRaw: [string, string] = ['', '']
+  private clawPromptKey = ''
   private readonly ro: ResizeObserver | null = null
-  private readonly onResize = () => this.applyScale()
+  private readonly onResize = () => {
+    this.applyScale()
+    this.layoutTouch()
+  }
   /** 一時停止パネルが出ているあいだだけ ← → を聞いてタブを切り替える（ゲームはこの間止まっている） */
   private readonly onPauseKey = (e: KeyboardEvent) => {
     if (e.repeat) return
@@ -388,7 +408,7 @@ export class HudFuture {
       </div>
       <div class="nx-arm nx-arm-right">
         <div class="nx-arm-hold" hidden><span class="nx-hold-dot"></span><span class="nx-hold-text"></span></div>
-        <div class="nx-arm-ringbox">${armRingSvg('right')}<div class="nx-arm-spin"></div><div class="nx-arm-icon">${CLAW_SVG}</div>${keycap('J')}</div>
+        <div class="nx-arm-ringbox">${armRingSvg('right')}<div class="nx-arm-spin"></div><div class="nx-arm-icon">${CLAW_SVG}</div>${keycap('J')}<span class="nx-arm-prompt" hidden></span></div>
         <div class="nx-arm-plate"><div class="nx-frame-host" data-frame="armPlate"></div><span class="nx-arm-name">つかむNMClaw</span><span class="nx-arm-code">R-ARM · ACTION</span></div>
       </div>
       <div class="nx-modal nx-pause" hidden>
@@ -426,7 +446,7 @@ export class HudFuture {
             </div>
             <div class="nx-pane" data-pane="controls">
               <div class="nx-panel-sub">操作一覧（キーボード）</div>
-              <div class="nx-controls">${CONTROL_LIST.map(([k, d]) => `<div class="nx-ctl"><span class="nx-ctl-keys">${keycaps(k)}</span><span class="nx-ctl-desc">${escapeHtml(d)}</span></div>`).join('')}</div>
+              <div class="nx-controls">${controlRows(CONTROL_LIST, false)}</div>
               <div class="nx-panel-note">キー設定は今後のバージョンで対応します</div>
             </div>
           </div>
@@ -524,7 +544,7 @@ export class HudFuture {
     this.frames.attachAll(r)
     this.setPauseTab(PAUSE_DEFAULT_TAB)
     if (typeof ResizeObserver !== 'undefined') {
-      this.ro = new ResizeObserver(() => this.applyScale())
+      this.ro = new ResizeObserver(() => this.onResize())
       this.ro.observe(this.root)
     }
     window.addEventListener('resize', this.onResize)
@@ -691,6 +711,8 @@ export class HudFuture {
   // ================================================================ 左上
 
   setObjective(title: string, sub: string): void {
+    this.objRaw = [title, sub]
+    if (this.touch) sub = toTouchText(sub)
     const key = `${title}|${sub}`
     if (key === this.objKey) return
     const first = this.objKey === ''
@@ -826,7 +848,9 @@ export class HudFuture {
     const key = `${label}|${multi ? 1 : 0}|${s.locked ? 1 : 0}`
     if (key !== this.retLabelKey) {
       this.retLabelKey = key
-      this.retLabel.innerHTML = `<span class="nx-ret-name">${escapeHtml(label)}</span>${multi ? `<span class="nx-ret-lock">${s.locked ? '<b>ロック中</b>' : ''}${keycap('R')}切替</span>` : ''}`
+      // スマホでは「切替」ボタンが出るので R の案内は出さない
+      const lock = !multi ? '' : this.touch ? (s.locked ? '<span class="nx-ret-lock"><b>ロック中</b></span>' : '') : `<span class="nx-ret-lock">${s.locked ? '<b>ロック中</b>' : ''}${keycap('R')}切替</span>`
+      this.retLabel.innerHTML = `<span class="nx-ret-name">${escapeHtml(label)}</span>${lock}`
     }
   }
 
@@ -851,6 +875,15 @@ export class HudFuture {
     this.nextHintKey = next ? next.key : null
     this.updateNextMark()
     const rest = shown.filter((h) => h !== next)
+    if (this.touch) {
+      // タッチ：key は指の動きの名前（「スティック」など）。小さな札を 1 列
+      this.hints.classList.add('row')
+      const host = '<span class="nx-frame-host" data-frame="chip"></span>'
+      this.hints.innerHTML = rest.map((h) => `<span class="nx-chip small">${host}${touchTag(h.key)}<span class="nx-chip-label">${escapeHtml(h.label)}</span></span>`).join('')
+      this.frames.prune()
+      this.frames.attachAll(this.hints)
+      return
+    }
     const row = rest.length >= 4
     this.hints.classList.toggle('row', row)
     const host = '<span class="nx-frame-host" data-frame="chip"></span>'
@@ -877,6 +910,7 @@ export class HudFuture {
 
   /** 台詞（話者名＋一言）。新しい台詞をウィンドウに、ひとつ前の台詞は上に小さく残す */
   say(speaker: string, text: string, seconds = 3.8): void {
+    if (this.touch) text = toTouchText(text)
     const now = performance.now() / 1000
     const r = this.board.say(speaker, text, seconds, now)
     if (r === 'new') this.renderDialog()
@@ -1091,6 +1125,7 @@ export class HudFuture {
 
   private syncPausePanel(): void {
     const show = this.pauseOn || this.menuOn
+    this.root.classList.toggle('nx-panel-open', show)
     if (show && this.pause.hidden) {
       this.setPauseTab(PAUSE_DEFAULT_TAB)
       this.pause.hidden = false
@@ -1101,11 +1136,35 @@ export class HudFuture {
     }
     if (!show) return
     const mode = this.pauseOn ? 'pause' : 'menu'
-    if (this.pause.dataset.mode === mode) return
-    this.pause.dataset.mode = mode
+    const key = `${mode}|${this.touch ? 1 : 0}`
+    if (this.pause.dataset.mode === key) return
+    this.pause.dataset.mode = key
     el<HTMLSpanElement>(this.pause, '.nx-panel-tag').textContent = mode === 'pause' ? 'PAUSE' : 'MENU'
     el<HTMLSpanElement>(this.pause, '.nx-panel-title').textContent = mode === 'pause' ? '一時停止' : '装備・記録'
-    el<HTMLSpanElement>(this.pause, '.nx-foot-close').innerHTML = mode === 'pause' ? `${keycap('Esc')}<span>ゲームに戻る</span>` : `${keycap('Tab')}<span>閉じる</span>`
+    // スマホ：タブはタップで切り替え、ほかの所をタップすると戻る（touchInput.ts）
+    el<HTMLSpanElement>(this.pause, '.nx-foot-tabs').innerHTML = this.touch ? '<span>上のタブをタップで切り替え</span>' : `${keycap('←')}${keycap('→')}<span>切り替え</span>`
+    el<HTMLSpanElement>(this.pause, '.nx-foot-close').innerHTML = this.touch
+      ? '<span>ほかの所をタップしてゲームに戻る</span>'
+      : mode === 'pause'
+        ? `${keycap('Esc')}<span>ゲームに戻る</span>`
+        : `${keycap('Tab')}<span>閉じる</span>`
+  }
+
+  /**
+   * スマホ：一時停止パネルのタブの上をタップしたか（画面座標）。当たっていればそのタブに切り替えて true。
+   * HUD は pointer-events を受けないので、タッチの層（touchInput.ts）から座標で聞く
+   */
+  tapPauseAt(x: number, y: number): boolean {
+    if (this.pause.hidden) return false
+    for (const t of this.pause.querySelectorAll<HTMLElement>('.nx-tab')) {
+      const r = t.getBoundingClientRect()
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        const tab = t.dataset.tab as PauseTab
+        if (tab !== this.pauseTab) this.setPauseTab(tab)
+        return true
+      }
+    }
+    return false
   }
 
   private setPauseTab(t: PauseTab): void {
@@ -1116,6 +1175,63 @@ export class HudFuture {
       e.setAttribute('aria-selected', on ? 'true' : 'false')
     })
     this.pause.querySelectorAll<HTMLElement>('.nx-pane').forEach((e) => e.classList.toggle('on', e.dataset.pane === t))
+  }
+
+  // ================================================================ スマホ（タッチ操作）
+
+  /**
+   * タッチ操作に合わせた表示にする：キー名を出さない（目的・台詞・照準・キー案内）、操作一覧をタッチ用に、
+   * 右腕の輪をつかむボタンに（中に「つかむ」「離す」などを出す）、左腕の輪を左上へ小さく、
+   * 会話ウィンドウを右腕の輪と重ならない幅に。
+   */
+  setTouchMode(on: boolean): void {
+    this.touch = on
+    this.root.classList.toggle('nx-touch', on)
+    el(this.pause, '.nx-panel-sub').textContent = on ? '操作一覧（タッチ）' : '操作一覧（キーボード）'
+    el(this.pause, '.nx-controls').innerHTML = controlRows(on ? TOUCH_CONTROL_LIST : CONTROL_LIST, on)
+    el(this.pause, '.nx-panel-note').hidden = on
+    // 一時停止パネルの下の案内（タッチ／キーボード）を作り直す
+    delete this.pause.dataset.mode
+    this.syncPausePanel()
+    this.retLabelKey = ''
+    this.hintKey = '\u0000'
+    this.objKey = ''
+    this.setObjective(this.objRaw[0], this.objRaw[1])
+    this.layoutTouch()
+    this.frames.rescale()
+  }
+
+  /** タッチで押せる HUD の部品（右腕の輪＝つかむ、左腕の輪＝左腕を選ぶ） */
+  get touchTargets(): { rightArm: HTMLElement; leftArm: HTMLElement } {
+    return { rightArm: el(this.armR, '.nx-arm-ringbox'), leftArm: el(this.armL, '.nx-arm-ringbox') }
+  }
+
+  /** タッチ：右腕の輪に出す言葉（照準・ワイヤーの状態で「つかむ」「飛びつく」「離す」など）と、照準が合っているか */
+  setClawPrompt(label: string, ready: boolean): void {
+    const key = `${label}|${ready ? 1 : 0}`
+    if (key === this.clawPromptKey) return
+    this.clawPromptKey = key
+    const p = el<HTMLSpanElement>(this.armR, '.nx-arm-prompt')
+    p.textContent = label
+    p.hidden = false
+    p.classList.toggle('long', [...label].length > 4)
+    this.armR.classList.toggle('ready', ready)
+  }
+
+  /** タッチ：会話ウィンドウとキー案内を、左端から右腕の輪の手前までの帯に収める（収まらなければ縮める） */
+  private layoutTouch(): void {
+    if (!this.touch) return
+    const w = window.innerWidth
+    const h = window.innerHeight
+    // HUD と同じく画面に比例した倍率（スマホでも配置の比率が同じ）
+    const u = Math.min(w / 1600, h / 900)
+    const left = 16 * u
+    const right = 212 * u + 10 * u
+    const band = Math.max(200 * u, w - left - right)
+    const k = Math.min(1, band / (790 * u))
+    this.root.style.setProperty('--nx-dlg-k', k.toFixed(3))
+    this.root.style.setProperty('--nx-dlg-cx', `${((left + w - right) / 2).toFixed(0)}px`)
+    this.root.style.setProperty('--nx-band-w', `${band.toFixed(0)}px`)
   }
 
   // ================================================================ 時空移動（時代カード）・IDO

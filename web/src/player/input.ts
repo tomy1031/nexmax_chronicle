@@ -1,6 +1,7 @@
 // 入力機器の層：キーボードの生の状態（KeyboardEvent.code）を集めるだけ。
 // ゲーム処理は inputActions.ts の resolveActions() を通したアクションだけを見る。
 // マウスは必須ではない（キャンバスをクリックしたときだけ、任意の視点操作としてポインタロックを使える）。
+// スマホでは touchInput.ts が同じ状態に 'touch:…' の control とスティックの値（analog）を書き込む。
 import type { RawInput } from './inputActions'
 
 export type InputState = RawInput & {
@@ -8,7 +9,9 @@ export type InputState = RawInput & {
   down: Set<string>
   /** このフレームで押された control */
   pressed: Set<string>
-  /** 任意：ポインタロック中のマウス移動量（UI では案内しない） */
+  /** スティック等の連続値（-1〜1） */
+  analog: Map<string, number>
+  /** 任意：ポインタロック中のマウス移動量（UI では案内しない）。タッチのカメラ操作もマウス換算でここへ足す */
   mouseDX: number
   mouseDY: number
   locked: boolean
@@ -21,6 +24,7 @@ export function createInput(canvas: HTMLCanvasElement): InputState & { endFrame(
   const s: InputState & { endFrame(): void } = {
     down: new Set(),
     pressed: new Set(),
+    analog: new Map(),
     mouseDX: 0,
     mouseDY: 0,
     locked: false,

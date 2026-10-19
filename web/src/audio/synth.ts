@@ -198,18 +198,21 @@ function buildNote(ctx: BaseAudioContext, out: AudioNode, inst: InstrumentId, t:
     }
     case 'musicbox':
     case 'bell':
-    case 'vibes': {
-      const tc = inst === 'bell' ? 0.7 : inst === 'vibes' ? 0.5 : 0.32
+    case 'vibes':
+    case 'roneat':
+    case 'gong': {
+      // roneat：竹の鍵盤の木琴（すぐ消える）。gong：小さなこぶ付きの銅鑼を円く並べた楽器（コン・ヴォン）
+      const tc = inst === 'bell' ? 0.7 : inst === 'vibes' ? 0.5 : inst === 'gong' ? 0.45 : inst === 'roneat' ? 0.13 : 0.32
       const g = gain(ctx)
-      const end = pluckEnv(g.gain, t, inst === 'vibes' ? dur + 0.3 : 10, (inst === 'musicbox' ? 0.17 : 0.14) * vel, tc, 0.3)
+      const end = pluckEnv(g.gain, t, inst === 'vibes' ? dur + 0.3 : 10, (inst === 'musicbox' ? 0.17 : inst === 'roneat' ? 0.2 : 0.14) * vel, tc, 0.3)
       const car = osc(ctx, 'sine', f, t)
       car.connect(g).connect(out)
-      // 上の倍音（鐘は半端な比で金属っぽく）
-      const ratio = inst === 'bell' ? 3.51 : inst === 'vibes' ? 4 : 3
+      // 上の倍音（鐘・銅鑼は半端な比で金属っぽく、木琴は 4 倍の短い響き）
+      const ratio = inst === 'bell' ? 3.51 : inst === 'gong' ? 2.42 : inst === 'vibes' || inst === 'roneat' ? 4 : 3
       const p = osc(ctx, 'sine', f * ratio, t)
       const pg = gain(ctx)
       pg.gain.setValueAtTime(0, t)
-      pg.gain.linearRampToValueAtTime((inst === 'bell' ? 0.07 : 0.035) * vel, t + 0.003)
+      pg.gain.linearRampToValueAtTime((inst === 'bell' || inst === 'gong' ? 0.07 : inst === 'roneat' ? 0.06 : 0.035) * vel, t + 0.003)
       pg.gain.setTargetAtTime(0, t + 0.003, tc * 0.3)
       p.connect(pg).connect(out)
       car.start(t)
@@ -265,6 +268,20 @@ function buildNote(ctx: BaseAudioContext, out: AudioNode, inst: InstrumentId, t:
       o2.start(t)
       o1.stop(end)
       o2.stop(end)
+      break
+    }
+    case 'sralai': {
+      // スラライ（4 枚リードの笛）：鼻にかかった明るい音。帯域を持ち上げて、大きめのゆれ
+      const g = gain(ctx)
+      const end = sustainEnv(g.gain, t, dur * 0.95, 0.07 * vel, 0.03, 0.08, 0.85)
+      const o = osc(ctx, 'sawtooth', f, t)
+      const pk = filter(ctx, 'peaking', 1500, 1.1)
+      pk.gain.value = 10
+      const lp = filter(ctx, 'lowpass', 3800, 0.6)
+      o.connect(pk).connect(lp).connect(g).connect(out)
+      if (dur > 0.2) vibrato(ctx, [o.frequency], t, end, 5.6, f * 0.012, 0.12)
+      o.start(t)
+      o.stop(end)
       break
     }
     case 'theremin':
@@ -394,6 +411,19 @@ function buildDrum(ctx: BaseAudioContext, out: AudioNode, drum: DrumId, t: numbe
         o.connect(bp)
         o.start(t)
         o.stop(t + 0.26)
+      }
+      break
+    }
+    case 'chhing': {
+      // チン（小さな手のシンバル）：高い 2 音が長めに残る
+      const hp = filter(ctx, 'highpass', 2600, 0.7)
+      const g = decayGain(0.06, 0.42)
+      hp.connect(g).connect(out)
+      for (const f of [3150, 4420]) {
+        const o = osc(ctx, 'square', f, t)
+        o.connect(hp)
+        o.start(t)
+        o.stop(t + 0.44)
       }
       break
     }

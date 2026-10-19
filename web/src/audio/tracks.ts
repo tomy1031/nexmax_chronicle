@@ -2,7 +2,7 @@
 // 曲ごとに 8 小節か 16 小節をくり返す。旋律は調の音か、そのとき鳴っている和音の音だけを使う（tests/music.test.ts で確かめる）。
 import type { Track } from './theory'
 
-export type MusicId = 'title' | 'future2086' | 'night2086' | 'present2026' | 'expo1970' | 'edo1726' | 'battle' | 'boss'
+export type MusicId = 'title' | 'future2086' | 'night2086' | 'present2026' | 'expo1970' | 'edo1726' | 'ruins2028' | 'khmer' | 'battle' | 'boss'
 
 /** bars 小節ごとに 1 回だけ鳴らす打楽器の型（頭に x） */
 function every(bars: number): string {
@@ -165,6 +165,65 @@ export const TRACKS: Readonly<Record<MusicId, Track>> = {
         notes:
           'A5:4 B5:2 A5:2 E5:4 D5:4 | E5:2 G5:2 A5:8 r:4 | B5:4 D6:4 B5:2 A5:2 G5:4 | A5:12 r:4 | D6:4 B5:2 A5:2 B5:4 A5:4 | G5:2 A5:2 B5:4 G5:4 E5:4 | D5:4 E5:4 A5:4 B5:4 | A5:12 r:4 | ' +
           'D6:4 E6:4 D6:2 B5:2 A5:4 | B5:2 A5:2 E5:4 A5:8 | G5:4 E5:4 D5:4 E5:4 | A4:12 r:4 | B5:4 A5:2 B5:2 D6:8 | E6:4 D6:4 B5:4 G5:4 | A5:4 B5:2 A5:2 E5:4 D5:4 | D5:12 r:4',
+      },
+    ],
+  },
+
+  // 15章 2028年 カンボジア「忘れられた遺跡」（docs/物語の背骨 §6）：朝霧の密林に眠る遺跡。銅鑼の旋律と、遠い太鼓。
+  // クメールの宮廷の合奏（ピンペアト）の楽器を借りた書き下ろし。伝統曲の引用はしない
+  ruins2028: {
+    title: '忘れられた遺跡',
+    bpm: 80,
+    key: 'A minpent',
+    chords: ['Am7', 'Am7', 'Dsus2', 'Am7', 'C6', 'G', 'Dsus2', 'E7sus4', 'Am7', 'C6', 'Dsus2', 'Am7', 'Fmaj7', 'G', 'Dsus2', 'E7sus4'],
+    parts: [
+      { kind: 'pad', inst: 'choir', lo: 45, gain: 0.4, rev: 0.6 },
+      { kind: 'bass', inst: 'bass', lo: 40, pattern: 'R-------R-------', gain: 0.5 },
+      { kind: 'arp', inst: 'roneat', lo: 57, pattern: '0.1.2.1.0.1.3.1.', gain: 0.32, pan: -0.25, rev: 0.3, on: '0000111111111111' },
+      { kind: 'drum', drum: 'taiko', pattern: 'x.........x.....', gain: 0.5, rev: 0.4 },
+      { kind: 'drum', drum: 'shaker', pattern: '.x.x.x.x.x.x.x.x', gain: 0.16, pan: 0.4 },
+      { kind: 'drum', drum: 'chhing', pattern: every(2), gain: 0.35, pan: 0.2, rev: 0.5 },
+      {
+        kind: 'melody',
+        inst: 'gong',
+        gain: 0.75,
+        rev: 0.5,
+        dly: 0.25,
+        notes:
+          'E5:4 D5:2 C5:2 A4:8 | r:4 C5:2 D5:2 E5:4 G5:4 | A5:6 G5:2 E5:4 D5:4 | E5:12 r:4 | G5:4 E5:2 G5:2 A5:4 C6:4 | D6:6 C6:2 A5:4 G5:4 | E5:4 D5:2 E5:2 A5:4 G5:4 | E5:12 r:4 | ' +
+          'A5:4 G5:2 E5:2 G5:4 A5:4 | C6:6 A5:2 G5:4 E5:4 | D5:4 E5:4 A5:4 E5:4 | C5:12 r:4 | A5:4 C6:4 E6:8 | D6:4 C6:2 A5:2 G5:8 | A5:4 G5:2 E5:2 D5:4 E5:4 | A4:12 r:4',
+      },
+    ],
+  },
+
+  // 15章 クメール王朝の時代「クメールの都」：IDO の記録を通って行く、遺跡が生きていた頃。木琴が駆け、後半は笛が歌う
+  khmer: {
+    title: 'クメールの都',
+    bpm: 112,
+    key: 'D pentatonic',
+    chords: ['D6', 'D6', 'Bm7', 'Bm7', 'G6', 'A', 'D6', 'A', 'Bm7', 'G6', 'D6', 'A', 'Bm7', 'G6', 'Asus4 A', 'D6'],
+    parts: [
+      { kind: 'arp', inst: 'gong', lo: 62, pattern: '0.1.2.1.3.1.2.1.', gain: 0.3, pan: 0.2, rev: 0.3 },
+      { kind: 'bass', inst: 'bass', lo: 38, pattern: 'R.......F.......', gain: 0.5 },
+      { kind: 'drum', drum: 'taiko', pattern: 'x.....x...x.....', gain: 0.65, rev: 0.2 },
+      { kind: 'drum', drum: 'tom', pattern: '....x.......x.x.', gain: 0.4 },
+      { kind: 'drum', drum: 'chhing', pattern: '..x...x...x...x.', gain: 0.4, pan: 0.3 },
+      {
+        kind: 'melody',
+        inst: 'roneat',
+        gain: 0.85,
+        pan: -0.15,
+        rev: 0.3,
+        notes:
+          'A5:2 B5:2 A5:2 F#5:2 E5:2 D5:2 E5:2 F#5:2 | A5:2 F#5:2 A5:2 B5:2 D6:4 B5:4 | D6:2 B5:2 A5:2 F#5:2 A5:2 B5:2 D6:2 E6:2 | F#6:4 E6:2 D6:2 B5:8 | E6:2 D6:2 B5:2 D6:2 E6:4 D6:4 | E6:2 C#6:2 A5:2 B5:2 C#6:4 E6:4 | F#6:2 E6:2 D6:2 B5:2 A5:2 B5:2 D6:4 | E6:4 A5:4 E5:8 | ' +
+          'B5:2 D6:2 B5:2 A5:2 F#5:4 A5:4 | B5:2 D6:2 E6:2 D6:2 B5:4 G5:4 | A5:2 B5:2 D6:2 E6:2 F#6:4 E6:4 | E6:2 D6:2 C#6:2 B5:2 A5:8 | F#5:2 A5:2 B5:2 D6:2 B5:4 A5:4 | B5:2 A5:2 G5:2 E5:2 D5:4 E5:4 | D6:4 E6:4 C#6:4 E6:4 | D6:8 A5:4 F#5:4',
+      },
+      {
+        kind: 'melody',
+        inst: 'sralai',
+        gain: 0.6,
+        rev: 0.35,
+        notes: 'r:16 | r:16 | r:16 | r:16 | r:16 | r:16 | r:16 | r:16 | F#5:8 A5:8 | B5:8 G5:8 | A5:8 D6:8 | E6:12 r:4 | D6:8 B5:8 | B5:8 E5:8 | D6:8 C#6:8 | D6:12 r:4',
       },
     ],
   },

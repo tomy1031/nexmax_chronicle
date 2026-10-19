@@ -105,6 +105,8 @@ const SCALE_STEPS: Record<string, readonly number[]> = {
   harmonic: [0, 2, 3, 5, 7, 8, 11],
   dorian: [0, 2, 3, 5, 7, 9, 10],
   yo: [0, 2, 5, 7, 9],
+  pentatonic: [0, 2, 4, 7, 9],
+  minpent: [0, 3, 5, 7, 10],
 }
 
 export function scalePcs(key: string): Set<number> {
@@ -129,6 +131,9 @@ export type InstrumentId =
   | 'pluck'
   | 'shamisen'
   | 'koto'
+  | 'roneat'
+  | 'gong'
+  | 'sralai'
   | 'lead'
   | 'theremin'
   | 'flute'
@@ -137,7 +142,7 @@ export type InstrumentId =
   | 'synthbass'
   | 'subbass'
 
-export type DrumId = 'kick' | 'snare' | 'clap' | 'hat' | 'ohat' | 'shaker' | 'taiko' | 'shime' | 'kane' | 'tom' | 'crash' | 'rim'
+export type DrumId = 'kick' | 'snare' | 'clap' | 'hat' | 'ohat' | 'shaker' | 'taiko' | 'shime' | 'kane' | 'chhing' | 'tom' | 'crash' | 'rim'
 
 type PartBase = {
   /** 音量（0〜1） */

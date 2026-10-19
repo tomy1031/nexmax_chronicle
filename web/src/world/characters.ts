@@ -8,6 +8,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { drawGear, makeCanvas } from '../render/textures'
 import { createNexmax } from './nexmax/nexmaxModel'
+import { OUTLINE } from './nexmax/materials'
 
 export type CharacterName = 'nexmax' | 'genbei' | 'oharu' | 'matsui' | 'saeki' | 'sora' | 'michi'
 export type Pose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave' | 'run' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'dash'
@@ -297,13 +298,35 @@ function mergeRig(root: THREE.Object3D): void {
   }
 }
 
-/** 背面法線押し出しの輪郭線 */
+/** 輪郭線の最小の画素数（ネクマックスの輪郭の何倍か。人の細い茶色の線は少し細めに） */
+const NPC_OUTLINE_MIN_PX_SCALE = 0.75
+
+/**
+ * 背面法線押し出しの輪郭線。太さは thickness（メッシュの座標での長さ）だが、遠くや低い解像度で
+ * 1 画素を切ると点線のように途切れるので、描画の画素で最小の太さ（OUTLINE.minPx）になるまで足す
+ */
 function addOutline(root: THREE.Object3D, thickness: number, color: string, recursive = true, self = false): void {
   const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide })
+  const t = thickness.toFixed(5)
   mat.onBeforeCompile = (s) => {
-    s.vertexShader = s.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normalize(normal) * ${thickness.toFixed(4)};`)
+    s.uniforms.uOutlineMinPx = OUTLINE.minPx
+    s.uniforms.uOutlineViewH = OUTLINE.viewportH
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uOutlineMinPx;\nuniform float uOutlineViewH;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normalize(normal) * ${t};`)
+      .replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+ {
+   vec3 nV = normalize(normalMatrix * normal);
+   float sc = length(modelViewMatrix[0].xyz);
+   float need = uOutlineMinPx * ${NPC_OUTLINE_MIN_PX_SCALE.toFixed(2)} * 2.0 * (-mvPosition.z) / (projectionMatrix[1][1] * max(uOutlineViewH, 1.0));
+   mvPosition.xyz += nV * max(0.0, need - ${t} * sc);
+   gl_Position = projectionMatrix * mvPosition;
+ }`,
+      )
   }
-  mat.customProgramCacheKey = () => `outline-${thickness}`
+  mat.customProgramCacheKey = () => `outline-${t}`
   const list: THREE.Mesh[] = []
   const visit = (o: THREE.Object3D) => {
     const m = o as THREE.Mesh

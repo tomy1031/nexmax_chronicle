@@ -27,8 +27,6 @@ three.js 版は **シェル（ずっと残るもの）＋ステージ（時代�
 - `cineMarker.ts` … 演出中の目印（脈打つ光る輪・光の柱・名前の札）。シェルが 1 組だけ持って使い回す
 - `objectiveMarker.ts` … 目標の目印（いまやることの相手の頭の上に弾む金色の「！」と名前の札。画面の外なら縁に寄せて矢印）。DOM だけ。ステージの `objectiveMarkers(rt)` を毎フレーム映す。置き場所の計算 `placeMarker` は `tests/objectiveMarker.test.ts`
 - `params.ts` … URL パラメータ
-- `titleLogic.ts`・`titleScreen.ts`・`title.css` … タイトル画面（はじめから／つづきから。決まりは `tests/title.test.ts`）
-- `titleScene.ts` … タイトル画面の 3D の背景（夜明けの空・時空の輪・光の粒。シェルのネクマックスを使い回す）
 - `future2086Adapter.ts` … 2086 年ステージ（別担当）をつなぐところ
 - `game.css` … 時空移動・時代カード・IDO パネル・話者の色
 
@@ -123,21 +121,23 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 `renderer.info.memory` は移動のたびに新しいステージの分まで下がる（例：1726 年 約 137 geometries / 92 textures →
 2026 年 約 131 / 63 → 2086 年の仮ステージ 約 39 / 42）。
 
+## 起動の流れ（`main.ts`）
+
+1. `Pwa.register()`（`src/pwa/pwa.ts`）：Service Worker を登録。前に開いたときに新しい版の準備ができていれば、ここで切り替えて読み込み直す
+2. タイトル画面（`src/ui/title/`）：`titleLogic.ts`（セーブの要約・案内を出すかの判断。テストあり）・`titleScreen.ts`（画面）・
+   `titleNexmax.ts`（タイトル専用の小さな WebGL の 3D ネクマックス。始めるときに手放す）・`installGuide.ts`（ホーム画面への追加の案内）。
+   タイトルを見ている間に、ゲームのシェル（`game.ts`、物理などを含む大きいファイル）と始める時代のステージ（`registry.ts` の `preloadStage`）を読み込んでおく
+3. `startGame(app, ui, { mode })`：`continue`＝`?continue`、`new`＝`?newgame` と同じ
+
+開発用のパラメータ（`?stage=` `?spawn=` `?flags=` `?continue` `?newgame` `?shot=` `?nohud`）があるときはタイトルを出さない。
+
 ## URL パラメータ（開発・検証用）
 
 `?stage=1726|1970|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
-`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?notitle`（タイトル画面を出さない。stage・spawn・flags・continue・newgame・shot のどれかがあっても出さない）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
+`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
 （どちらも保存した設定より優先）・`?fixed`（解像度を固定）・`?stats`（F3 と同じ計測表示）・`?debug`・`?slowmo=0.3`。
 開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`・
-`window.__game.graphics({ quality: 'low', fps: 30, music: 2 })`（画質・フレームレート・音楽の音量をその場で変える）・`window.__game.music()`（いま鳴らしたい曲）・`window.__game.title()`（タイトル画面の段階）。
-
-## タイトル画面と起動の流れ
-
-URL に開始の指定が無いときは、読み込み画面 → タイトル画面（`PRESS ANY KEY`／画面をタップ）→ メニュー。
-最初のキー・タップで音を出せるようにして（ブラウザの決まり）、タイトルの曲を始める。
-「はじめから」は記録があれば確かめてから消し、2086 年の冒頭へ。「つづきから」は記録の時代とチェックポイント（`rt.save` で保存した到着地点）から再開する。
-記録が無いときの「つづきから」は選べない。選んだら暗転 → 読み込み画面 → ステージ。タイトルの間も毎フレームの流れ（`startLoop`）は回っていて、
-`frame()` はタイトルの背景だけを描く。
+`window.__game.graphics({ quality: 'low', fps: 30, music: 2 })`（画質・フレームレート・音楽の音量をその場で変える）・`window.__game.music()`（いま鳴らしたい曲と、音を出せる状態か）。
 
 ## 音楽（`src/audio/`）
 
@@ -149,7 +149,9 @@ URL に開始の指定が無いときは、読み込み画面 → タイトル�
 - `music.ts` … `MusicPlayer`：少し先（0.3 秒）までを予約していく。曲の切り替えはクロスフェード、一時停止中は小さく、画面が裏に回ったら止める。音量 0 なら AudioContext ごと止める
 - `musicDirector.ts` … どの曲にするか：ステージの `music()`（2086 年は回想＝タイトルの曲・夜＝夜の曲）、敵が襲ってきたら戦闘（離れても 4 秒は続ける）、ボスの体力が出ている間は番人、時空移動の間は無音
 
-音量は一時停止の「設定」タブ（切・小・中・大。既定は中）。iPhone はマナーモードのあいだ Web Audio が鳴らない。
+タイトル画面（`main.ts`）で `MusicPlayer` を作ってタイトルの曲を始め（最初のキー・タップから鳴る）、`startGame(app, ui, { mode, music })` でシェルへ引き継ぐ
+（読み込みの間もタイトルの曲が続き、ステージが動き出したら時代の曲へクロスフェード。2086 年の冒頭はタイトルと同じ曲なので、そのまま続く）。
+タイトルを出さない起動（開発用の URL 指定）ではシェルが作る。音量は一時停止の「設定」タブ（切・小・中・大。既定は中）。iPhone はマナーモードのあいだ Web Audio が鳴らない。
 
 ## 画質とフレームレート（`render/quality.ts`）
 
@@ -160,7 +162,7 @@ URL に開始の指定が無いときは、読み込み画面 → タイトル�
 |---|---|---|---|
 | 環境遮蔽（N8AO） | なし | なし | あり（半分の解像度） |
 | ブルーム | なし（パスから外す） | あり | あり |
-| アンチエイリアス（SMAA） | なし | MEDIUM | HIGH |
+| アンチエイリアス（SMAA） | なし | HIGH | HIGH |
 | 影の解像度・ぼかし | 1024・1 | 1024・2 | 2048・3 |
 | 解像度の上限（CSS の画素あたり） | 0.85 | 1.0 | 1.25 |
 | 点光源（提灯など） | 2 | 4 | 6 |

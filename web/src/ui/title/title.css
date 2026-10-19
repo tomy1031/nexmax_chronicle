@@ -1,0 +1,656 @@
+/* タイトル画面（titleScreen.ts）。
+   主役は「時の輪」：4 つの時代の弧の中にネクマックスが立ち、つづきから再開する時代の弧だけが明るい。
+   ロゴはネクマックスのソフビの質感（輪郭線と同じ紺の、ずらした影）。ほかは静かに。 */
+.nt-root {
+  --t-night: #0a1838;
+  --t-night-2: #17306a;
+  --t-holo: #5ee6ff;
+  --t-gold: #ffd23f;
+  --t-edo: #f4a54e;
+  --t-expo: #ff8a5c;
+  --t-now: #4ee6dc;
+  --t-future: #ff5fdc;
+  --t-ink: #f3fbff;
+  --t-ink-dim: #a9c6ea;
+  --t-outline: #16223a;
+  --t-pad: clamp(16px, 4vmin, 48px);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: 'stage side' 'foot foot';
+  pointer-events: auto;
+  color: var(--t-ink);
+  font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', system-ui, sans-serif;
+  background: var(--t-night);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+}
+.nt-root *,
+.nt-root *::before,
+.nt-root *::after {
+  box-sizing: border-box;
+}
+.nt-root.out {
+  opacity: 0;
+  transition: opacity 0.36s ease;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- 背景（夜の会場の空） */
+.nt-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 70% at 27% 48%, rgba(94, 230, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 90% 60% at 50% 120%, rgba(255, 95, 220, 0.14), transparent 70%),
+    radial-gradient(1px 1px at 12% 18%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1px 1px at 64% 9%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 83% 27%, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(1px 1px at 41% 82%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1px 1px at 92% 71%, rgba(255, 255, 255, 0.45), transparent 60%),
+    linear-gradient(180deg, var(--t-night) 0%, var(--t-night-2) 100%);
+}
+
+/* ---------------------------------------------------------------- 時の輪とネクマックス */
+.nt-stage {
+  grid-area: stage;
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: var(--t-pad) 0 0 var(--t-pad);
+}
+.nt-ring-box {
+  position: relative;
+  width: min(100%, 92vh, 560px);
+  aspect-ratio: 1;
+}
+.nt-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.nt-ring-track {
+  fill: none;
+  stroke: rgba(94, 230, 255, 0.1);
+  stroke-width: 2;
+}
+.nt-ring-inner {
+  fill: rgba(10, 30, 70, 0.35);
+  stroke: rgba(94, 230, 255, 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+.nt-ring-ticks {
+  stroke: rgba(169, 198, 234, 0.35);
+  stroke-width: 1;
+  transform-origin: 200px 200px;
+  animation: nt-spin 140s linear infinite;
+}
+.nt-era {
+  --c: var(--t-holo);
+}
+.nt-era.edo {
+  --c: var(--t-edo);
+}
+.nt-era.expo {
+  --c: var(--t-expo);
+}
+.nt-era.now {
+  --c: var(--t-now);
+}
+.nt-era.future {
+  --c: var(--t-future);
+}
+.nt-arc {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0.42;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.nt-arc-glow {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 20;
+  stroke-linecap: round;
+  opacity: 0;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.nt-era.on .nt-arc {
+  stroke-width: 8;
+  opacity: 1;
+}
+.nt-era.on .nt-arc-glow {
+  opacity: 0.18;
+}
+.nt-arc-label {
+  fill: var(--c);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  opacity: 0;
+}
+.nt-arc-year {
+  font-weight: 800;
+}
+.nt-era.on .nt-arc-label {
+  font-size: 14px;
+}
+.nt-nexmax {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 12%;
+  bottom: 9%;
+  opacity: 0;
+  transform: translateY(14px);
+}
+.nt-nexmax canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 起動の演出（1 回だけ）：弧が順に描かれ、ネクマックスが立ち、文字が出る */
+.nt-root.in .nt-arc,
+.nt-root.in .nt-arc-glow {
+  transition: stroke-dashoffset 1.1s cubic-bezier(0.3, 0.6, 0.2, 1);
+  stroke-dashoffset: 0;
+}
+.nt-root.in .nt-era:nth-of-type(2) :is(.nt-arc, .nt-arc-glow) {
+  transition-delay: 0.12s;
+}
+.nt-root.in .nt-era:nth-of-type(3) :is(.nt-arc, .nt-arc-glow) {
+  transition-delay: 0.24s;
+}
+.nt-root.in .nt-era:nth-of-type(4) :is(.nt-arc, .nt-arc-glow) {
+  transition-delay: 0.36s;
+}
+.nt-root.in .nt-arc-label {
+  transition: opacity 0.6s ease 0.9s;
+  opacity: 0.75;
+}
+.nt-root.in .nt-era.on .nt-arc-label {
+  opacity: 1;
+}
+.nt-root.in .nt-nexmax {
+  transition:
+    opacity 0.7s ease 0.35s,
+    transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s;
+  opacity: 1;
+  transform: none;
+}
+.nt-side > * {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.nt-root.in .nt-side > * {
+  transition:
+    opacity 0.5s ease 0.55s,
+    transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.55s;
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes nt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- ロゴとメニュー */
+.nt-side {
+  grid-area: side;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(10px, 3.2vmin, 32px);
+  min-height: 0;
+  padding: var(--t-pad) var(--t-pad) 0 clamp(8px, 2vw, 32px);
+}
+.nt-logo {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.nt-logo-main {
+  font-weight: 800;
+  font-size: clamp(40px, min(10.5vw, 15vh), 112px);
+  letter-spacing: 0.035em;
+  color: #fff;
+  background: linear-gradient(180deg, #ffffff 30%, #bfeeff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* ソフビの厚み：輪郭線と同じ紺を少しずつずらして重ねる */
+  filter: drop-shadow(0.035em 0.045em 0 var(--t-outline)) drop-shadow(0 0 0.25em rgba(94, 230, 255, 0.35));
+}
+.nt-logo-sub {
+  margin-top: 0.42em;
+  font-weight: 500;
+  font-size: clamp(13px, min(2.6vw, 3.8vh), 28px);
+  letter-spacing: 0.48em;
+  color: var(--t-holo);
+  padding-left: 0.12em;
+}
+.nt-logo-tag {
+  margin-top: 0.8em;
+  font-weight: 800;
+  font-size: clamp(12px, min(2vw, 3.2vh), 20px);
+  letter-spacing: 0.12em;
+  color: var(--t-gold);
+}
+.nt-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(8px, 1.8vmin, 16px);
+  width: min(100%, 360px);
+}
+
+/* 六角の札（HUD の「話す」と同じ形） */
+.nt-btn {
+  --edge: rgba(94, 230, 255, 0.55);
+  --fill-a: rgba(26, 64, 132, 0.82);
+  --fill-b: rgba(8, 22, 58, 0.9);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.2em;
+  min-height: clamp(44px, 10vmin, 64px);
+  padding: 0.5em 1.6em 0.55em 1.5em;
+  border: 0;
+  background: none;
+  color: var(--t-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 0.18s ease;
+}
+.nt-btn::before,
+.nt-btn::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  clip-path: polygon(0.9em 0, calc(100% - 0.9em) 0, 100% 50%, calc(100% - 0.9em) 100%, 0.9em 100%, 0 50%);
+}
+.nt-btn::before {
+  inset: 0;
+  background: var(--edge);
+}
+.nt-btn::after {
+  inset: 2px;
+  background: linear-gradient(180deg, var(--fill-a), var(--fill-b));
+}
+.nt-btn.primary {
+  --edge: var(--t-gold);
+  --fill-a: rgba(36, 74, 150, 0.92);
+  --fill-b: rgba(10, 26, 70, 0.95);
+}
+.nt-btn.danger {
+  --edge: #ff7a96;
+}
+.nt-btn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  font-weight: 800;
+  font-size: clamp(16px, min(2.6vw, 4.6vh), 24px);
+  letter-spacing: 0.08em;
+}
+.nt-btn-label svg {
+  width: 1.15em;
+  height: 1.15em;
+}
+.nt-btn-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1em;
+  font-size: clamp(11px, min(1.5vw, 2.8vh), 14px);
+  font-weight: 500;
+  color: var(--t-ink-dim);
+}
+.nt-btn:hover,
+.nt-btn:focus-visible {
+  outline: none;
+  transform: translateX(6px);
+}
+.nt-btn:hover::before,
+.nt-btn:focus-visible::before {
+  background: #fff;
+}
+.nt-btn.primary:hover::before,
+.nt-btn.primary:focus-visible::before {
+  background: #fff3b0;
+  filter: drop-shadow(0 0 6px rgba(255, 210, 63, 0.8));
+}
+.nt-btn:active {
+  transform: translateX(6px) scale(0.98);
+}
+
+.nt-install,
+.nt-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 40px;
+  padding: 0.4em 0.2em;
+  border: 0;
+  background: none;
+  color: var(--t-holo);
+  font: inherit;
+  font-weight: 800;
+  font-size: clamp(13px, min(1.8vw, 3.2vh), 16px);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.nt-install svg {
+  width: 1.3em;
+  height: 1.3em;
+}
+.nt-install span,
+.nt-link {
+  text-decoration: underline;
+  text-decoration-color: rgba(94, 230, 255, 0.45);
+  text-underline-offset: 0.25em;
+}
+.nt-install:hover,
+.nt-link:hover {
+  color: #fff;
+}
+.nt-install:focus-visible,
+.nt-link:focus-visible {
+  outline: 2px solid var(--t-holo);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- 下の帯：版と更新の知らせ */
+.nt-foot {
+  grid-area: foot;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 0 var(--t-pad) clamp(6px, 2vmin, 18px);
+  font-size: 12px;
+  color: rgba(169, 198, 234, 0.6);
+}
+.nt-update {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  color: var(--t-ink);
+  font-size: clamp(12px, 1.6vmin, 14px);
+  background: rgba(8, 22, 58, 0.8);
+  border: 1px solid rgba(94, 230, 255, 0.35);
+  border-radius: 999px;
+  padding: 0.25em 0.9em 0.25em 1.1em;
+}
+.nt-update .nt-link {
+  min-height: 32px;
+  font-size: inherit;
+}
+.nt-update-bar {
+  display: block;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.nt-update-bar b {
+  display: block;
+  height: 100%;
+  background: var(--t-holo);
+  transition: width 0.3s;
+}
+
+/* ---------------------------------------------------------------- 確認・案内 */
+.nt-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgba(4, 10, 30, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: nt-fade 0.25s ease;
+}
+.nt-modal[hidden] {
+  display: none;
+}
+@keyframes nt-fade {
+  from {
+    opacity: 0;
+  }
+}
+.nt-sheet {
+  width: min(100%, 460px);
+  max-height: 100%;
+  overflow: auto;
+  padding: clamp(16px, 3.5vmin, 30px) clamp(18px, 4vmin, 34px);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(23, 52, 112, 0.97), rgba(8, 20, 52, 0.98));
+  border: 1px solid rgba(94, 230, 255, 0.4);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.nt-sheet-wide {
+  width: min(100%, 720px);
+}
+.nt-guide-title {
+  margin: 0 0 0.7em;
+  font-size: clamp(17px, min(2.6vw, 4.6vh), 24px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.nt-guide-lead {
+  margin: 0 0 0.8em;
+  font-size: clamp(13px, min(1.9vw, 3.4vh), 16px);
+  line-height: 1.7;
+  color: var(--t-ink);
+}
+.nt-guide-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(14px, 3vmin, 30px);
+  align-items: start;
+}
+.nt-perks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+  font-size: clamp(12px, min(1.7vw, 3vh), 15px);
+  line-height: 1.5;
+  color: var(--t-ink-dim);
+}
+.nt-perks li {
+  display: flex;
+  gap: 0.6em;
+  align-items: flex-start;
+}
+.nt-perks svg {
+  flex: none;
+  width: 1.5em;
+  height: 1.5em;
+  color: var(--t-holo);
+}
+.nt-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: nt-step;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+}
+.nt-steps li {
+  counter-increment: nt-step;
+  display: grid;
+  grid-template-columns: 1.8em 2em minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5em;
+  font-size: clamp(13px, min(1.9vw, 3.4vh), 16px);
+  line-height: 1.5;
+}
+.nt-steps li::before {
+  content: counter(nt-step);
+  display: grid;
+  place-items: center;
+  width: 1.8em;
+  height: 1.8em;
+  border-radius: 50%;
+  background: var(--t-gold);
+  color: var(--t-outline);
+  font-weight: 800;
+  font-size: 0.9em;
+}
+.nt-step-ico {
+  display: grid;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.nt-step-ico:empty {
+  background: none;
+}
+.nt-step-ico svg {
+  width: 1.3em;
+  height: 1.3em;
+}
+.nt-step-text b {
+  color: var(--t-gold);
+  font-weight: 800;
+}
+.nt-step-text small {
+  display: block;
+  font-size: 0.82em;
+  color: var(--t-ink-dim);
+}
+.nt-note {
+  margin: 1em 0 0;
+  padding: 0.7em 0.9em;
+  border-radius: 10px;
+  background: rgba(255, 210, 63, 0.1);
+  border: 1px solid rgba(255, 210, 63, 0.35);
+  font-size: clamp(12px, min(1.6vw, 2.9vh), 14px);
+  line-height: 1.6;
+  color: #ffeeb0;
+}
+.nt-guide-one {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.8em;
+}
+.nt-guide-actions,
+.nt-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.6em 1em;
+  margin-top: 1em;
+}
+.nt-confirm-actions .nt-btn {
+  min-height: 44px;
+}
+
+/* ---------------------------------------------------------------- 縦向き・低い画面 */
+@media (max-aspect-ratio: 4/5) {
+  .nt-root {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: 'stage' 'side' 'foot';
+    align-content: center;
+  }
+  .nt-stage {
+    padding: max(var(--t-pad), 6vh) var(--t-pad) 0;
+  }
+  .nt-ring-box {
+    width: min(100%, 46vh);
+  }
+  .nt-foot {
+    align-items: flex-end;
+  }
+  .nt-side {
+    align-items: center;
+    padding: 0 var(--t-pad) var(--t-pad);
+  }
+  .nt-logo {
+    align-items: center;
+  }
+  .nt-logo-main {
+    font-size: clamp(40px, 15vw, 96px);
+  }
+  .nt-guide-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-height: 440px) and (min-aspect-ratio: 4/5) {
+  .nt-stage {
+    padding-top: 6px;
+  }
+  .nt-side {
+    gap: 10px;
+    padding-top: 10px;
+  }
+  .nt-foot {
+    min-height: 28px;
+  }
+  .nt-logo-sub {
+    margin-top: 0.3em;
+  }
+  .nt-logo-tag {
+    margin-top: 0.5em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-ring-ticks {
+    animation: none;
+  }
+  .nt-root.in .nt-arc,
+  .nt-root.in .nt-arc-glow,
+  .nt-root.in .nt-nexmax,
+  .nt-root.in .nt-side > *,
+  .nt-root.in .nt-arc-label {
+    transition: none;
+  }
+  .nt-btn,
+  .nt-btn:hover,
+  .nt-btn:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}

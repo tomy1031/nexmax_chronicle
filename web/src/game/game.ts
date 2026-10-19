@@ -7,7 +7,6 @@ import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs
 import { createRenderer, AdaptiveResolution } from '../render/renderer'
 import { createPost, type PostChain } from '../render/post'
 import { uTime } from '../render/materials'
-import { setOutlineResolution } from '../world/nexmax/materials'
 import { createPhysics, type Physics } from '../player/physics'
 import { PlayerController } from '../player/controller'
 import { CameraRig } from '../player/cameraRig'
@@ -21,6 +20,7 @@ import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, sele
 import { CombatSystem } from '../combat/combatSystem'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
+import { setOutlineViewport } from '../world/nexmax/materials'
 import { Hud, LoadingOverlay, type Hint } from '../ui/hud'
 import { TimelineState } from '../core/timelineState'
 import { StoryState } from '../core/storyFlags'
@@ -41,10 +41,6 @@ import type { Stage, StageLoadContext, StageRuntime, StageWorld } from './stage'
 import { MusicPlayer } from '../audio/music'
 import { MusicDirector } from '../audio/musicDirector'
 import { STAGE_MUSIC } from '../audio/tracks'
-import { TITLE_ENVIRONMENT, TitleScene } from './titleScene'
-import { TitleScreen, type TitleSaveInfo } from './titleScreen'
-import { formatSavedAt, type TitleChoice } from './titleLogic'
-import { version as APP_VERSION } from '../../package.json'
 
 /** 読み込み表示を更新するために 1 フレーム譲る（非表示タブで rAF が止まっても進むよう setTimeout も併用） */
 export const nextFrame = () =>
@@ -130,18 +126,15 @@ export class Game {
   private readonly touch: TouchControls | null
   /** タッチ：右腕の輪（つかむボタン）に出す言葉 */
   private clawLabel = 'つかむ'
-  /** 読み込み画面（タイトル画面の後に作り直す） */
-  private loading: LoadingOverlay
+  private readonly loading: LoadingOverlay
   private readonly travelFx: TravelFx
   private readonly rift = new RiftFx()
   private readonly travel = new TravelMachine()
   readonly story = new StoryState(new TimelineState())
   private readonly saver = new GameSave()
-  /** 音楽（タイトル・時代ごとの曲・戦闘）。どの曲にするかは musicDir が決める */
+  /** 音楽（時代ごとの曲・戦闘）。どの曲にするかは musicDir が決める。タイトル画面で使っていたものを引き継ぐ */
   private readonly music: MusicPlayer
   private readonly musicDir = new MusicDirector()
-  /** タイトル画面の間だけ（3D の背景・環境・メニュー） */
-  private title: { scene: TitleScene; env: AppliedEnvironment; screen: TitleScreen | null } | null = null
   private readonly equipment: Equipment = initialEquipment()
   private readonly lanternLights: THREE.PointLight[] = []
   private nexmax!: Character
@@ -177,12 +170,15 @@ export class Game {
   /** HUD などの重ね物の親（#ui） */
   private readonly uiEl: HTMLDivElement
 
-  constructor(app: HTMLDivElement, ui: HTMLDivElement) {
+  constructor(app: HTMLDivElement, ui: HTMLDivElement, start: StartOptions = {}) {
     this.app = app
     this.uiEl = ui
     const params = readParams()
     this.fixedRatio = params.fixedRatio
     this.gp = parseGameParams(location.search)
+    // タイトル画面で選んだこと（URL の ?continue / ?newgame と同じ扱い）
+    if (start.mode === 'continue') this.gp.continue = true
+    if (start.mode === 'new') this.gp.newGame = true
     this.urlp = new URLSearchParams(location.search)
     // スマホ（指が主な入力の端末）だけタッチ操作。画質の初期値もこれで決める（スマホは「標準・30」）
     const useTouch = shouldUseTouch({
@@ -194,9 +190,14 @@ export class Game {
     this.prefs = resolvePrefs(useTouch, loadSavedPrefs(), this.urlp)
     this.q = qualitySettings(this.prefs.quality)
     this.limiter = new FrameLimiter(this.prefs.fps)
-    this.music = new MusicPlayer(this.prefs.music)
-    // ブラウザは触るまで音を出せない：最初のキー・タップで鳴らせるようにする
-    this.music.installUnlock()
+    if (start.music) {
+      this.music = start.music
+      this.music.setLevel(this.prefs.music)
+    } else {
+      this.music = new MusicPlayer(this.prefs.music)
+      // ブラウザは触るまで音を出せない：キー・タップのたびに、止まっていれば鳴らせるようにする
+      this.music.installUnlock()
+    }
     this.loading = new LoadingOverlay(ui)
     this.renderer = createRenderer(app, this.q)
     const { w, h } = this.size()
@@ -256,8 +257,23 @@ export class Game {
   async boot(): Promise<void> {
     this.step(0.05, 'レンダラを準備中…')
     await nextFrame()
-    // ?newgame でセーブを消す
+    // フラグ：?newgame でセーブを消す、?continue で再開、?flags= で上書き
     if (this.gp.newGame) this.saver.clear()
+    let stageKey: StageKey = this.gp.stage ?? DEFAULT_STAGE
+    let spawn: string | null = this.gp.spawn
+    if (this.gp.continue) {
+      const loaded = this.saver.load(this.story)
+      if (loaded) {
+        stageKey = this.gp.stage ?? eraStage(loaded.era) ?? DEFAULT_STAGE
+        spawn = this.gp.spawn ?? loaded.checkpoint
+      }
+    }
+    const unknown = this.story.applyFlagList(this.gp.flags)
+    if (unknown.length) console.warn('[game] 未知のフラグ', unknown)
+    this.loading.setEra(STAGE_INFO[stageKey].label)
+    this.loading.setTheme(stageKey)
+    this.hud.setEra(STAGE_INFO[stageKey].label)
+    this.hud.setTheme(stageKey)
     // ネクマックス（主人公）はシェルが持ち、ステージをまたいで使い回す
     const nexP = loadCharacter('nexmax', 1.05)
     this.adaptive = new AdaptiveResolution(
@@ -272,31 +288,6 @@ export class Game {
     window.addEventListener('resize', () => this.resize())
     this.nexmax = await nexP
     this.scene.add(this.nexmax.root)
-    this.exposeDebug()
-    this.startLoop()
-    // タイトル画面（はじめから／つづきから）。開発用の開始の指定があるときは出さない
-    const choice = this.gp.title ? await this.runTitle() : null
-    if (choice) {
-      this.loading = new LoadingOverlay(this.uiEl)
-      this.step(0.06, '記録を読み込み中…')
-      if (choice === 'new') this.saver.clear()
-    }
-    // ?continue・「つづきから」でセーブから再開、?flags= で上書き
-    let stageKey: StageKey = this.gp.stage ?? DEFAULT_STAGE
-    let spawn: string | null = this.gp.spawn
-    if (this.gp.continue || choice === 'continue') {
-      const loaded = this.saver.load(this.story)
-      if (loaded) {
-        stageKey = this.gp.stage ?? eraStage(loaded.era) ?? DEFAULT_STAGE
-        spawn = this.gp.spawn ?? loaded.checkpoint
-      }
-    }
-    const unknown = this.story.applyFlagList(this.gp.flags)
-    if (unknown.length) console.warn('[game] 未知のフラグ', unknown)
-    this.loading.setEra(STAGE_INFO[stageKey].label)
-    this.loading.setTheme(stageKey)
-    this.hud.setEra(STAGE_INFO[stageKey].label)
-    this.hud.setTheme(stageKey)
     this.travel.start(null, { to: stageKey, cause: 'load', spawn: spawn ?? undefined }, (n) => this.story.get(n), true)
     this.travel.tick(0)
     await this.loadStage(stageKey, spawn, null, (p, msg) => this.step(0.1 + p * 0.9, msg), true)
@@ -309,12 +300,7 @@ export class Game {
       // 読み込み画面が消えてから（0.7 秒）時代カードと到着の演出
       this.bootReveal = 0.7
     }
-    if (this.gp.stats) this.hud.toggleStats(true)
-    window.__sliceReady = true
-  }
-
-  /** 毎フレームの流れを始める（タイトル画面の間も回す） */
-  private startLoop(): void {
+    this.exposeDebug()
     const timer = new THREE.Timer()
     timer.connect(document)
     const timeScale = Math.min(1, Math.max(0.05, Number(this.urlp.get('slowmo') ?? 1) || 1))
@@ -343,58 +329,8 @@ export class Game {
         this.hud.updateStats({ fps, ms: 1000 / Math.max(1, fps), calls: r.info.render.calls, tris: r.info.render.triangles, ratio: r.getPixelRatio(), quality: this.q.level, textures: r.info.memory.textures, programs: r.info.programs?.length ?? 0 })
       }
     })
-  }
-
-  // ================================================================ タイトル画面
-
-  /** タイトル画面を出して、はじめから／つづきからを選んでもらう。選んだら背景を片付けて暗転したまま返す */
-  private async runTitle(): Promise<TitleChoice> {
-    this.step(0.3, 'タイトルを準備中…')
-    const env = await applyEnvironment(this.renderer, this.scene, this.post, this.q, TITLE_ENVIRONMENT)
-    const ts = new TitleScene(this.nexmax)
-    ts.place()
-    this.scene.add(ts.root)
-    this.resize()
-    ts.update(0, this.camera)
-    this.step(0.7, 'シェーダを準備中…')
-    await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 5000))])
-    this.title = { scene: ts, env, screen: null }
-    this.step(1, '完了')
-    this.loading.hide()
-    const screen = new TitleScreen(this.uiEl, this.saveInfo(), { touch: this.touch !== null, version: APP_VERSION })
-    this.title.screen = screen
-    // 最初のキー・タップで音を出せるようにして、タイトルの曲を始める
-    screen.onPress = () => {
-      this.music.unlock()
-      this.music.play('title', 0.4)
-    }
-    const choice = await screen.done
-    this.music.play(null, 1.2)
-    await screen.fadeOut(0.8)
-    this.title = null
-    this.scene.remove(ts.root)
-    disposeObject3D(ts.root)
-    env.dispose()
-    screen.dispose()
-    return choice
-  }
-
-  /** つづきからの表示（時代と保存した日時）。記録が無ければ null */
-  private saveInfo(): TitleSaveInfo {
-    const d = this.saver.read()
-    if (!d) return null
-    const key = eraStage(Number((d.timeline as { current_era?: unknown }).current_era))
-    return { place: key ? STAGE_INFO[key].label : '記録があります', savedAt: formatSavedAt(d.saved_at) }
-  }
-
-  private titleFrame(dt: number): void {
-    const t = this.title!
-    t.scene.update(dt, this.camera)
-    t.env.sky.position.copy(this.camera.position)
-    t.env.sun.follow(t.scene.focus)
-    setOutlineResolution(this.renderer.domElement.height)
-    this.post.render(dt)
-    this.input.endFrame()
+    if (this.gp.stats) this.hud.toggleStats(true)
+    window.__sliceReady = true
   }
 
   /** 画質・フレームレートの設定を変える（一時停止の「設定」タブから。その場で効き、この端末に保存する） */
@@ -421,7 +357,11 @@ export class Game {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h)
     this.post.setSize(w, h)
+    // 輪郭線の最小の太さ（画素）を描画の解像度で換算する（スマホで解像度が下がっても途切れない）
+    setOutlineViewport(this.renderer.getDrawingBufferSize(this.bufSize).y)
   }
+
+  private readonly bufSize = new THREE.Vector2()
 
   // ================================================================ ステージの読み込み・解放
 
@@ -754,10 +694,6 @@ export class Game {
   private frame(dt: number): void {
     uTime.value += dt
     this.renderer.info.reset()
-    if (this.title) {
-      this.titleFrame(dt)
-      return
-    }
     const input = this.input
     const frame = resolveActions(input, this.bindings)
     this.lastFrame = frame
@@ -862,8 +798,6 @@ export class Game {
       this.lightTimer = 0.4
     }
     a.env.sky.position.copy(this.camera.position)
-    // 描画解像度が下がっても、ネクマックスの輪郭線がつぶれないように
-    setOutlineResolution(this.renderer.domElement.height)
     this.post.render(dt)
     input.endFrame()
   }
@@ -1202,7 +1136,7 @@ export class Game {
         return g.equipment
       },
       story: g.story,
-      /** 開発用：画質・フレームレートを変える（例 graphics({ quality: 'low', fps: 30 })）。いまの設定を返す */
+      /** 開発用：画質・フレームレート・音楽の音量を変える（例 graphics({ quality: 'low', fps: 30, music: 2 })）。いまの設定を返す */
       graphics: (p?: Partial<GraphicsPrefs>) => {
         if (p) g.setGraphics({ ...g.prefs, ...p })
         return { ...g.prefs, pixelRatio: g.renderer.getPixelRatio() }
@@ -1221,8 +1155,6 @@ export class Game {
       endCine: (fast?: boolean) => g.cine.release(fast),
       /** 開発用：いま鳴らしたい曲と、音が出せる状態か */
       music: () => ({ current: g.music.current, running: g.music.running }),
-      /** 開発用：タイトル画面の段階（出ていなければ null） */
-      title: () => g.title?.screen?.mode ?? null,
       cineState: () => ({ active: g.cine.active, phase: g.cine.phase, w: +g.cine.weight.toFixed(3) }),
       debug: () => {
         const a = g.active
@@ -1255,7 +1187,13 @@ export class Game {
   }
 }
 
-export async function startGame(app: HTMLDivElement, ui: HTMLDivElement): Promise<void> {
-  const g = new Game(app, ui)
+/**
+ * タイトル画面から始めるとき：continue＝セーブから再開、new＝セーブを消して最初から。
+ * music：タイトル画面で鳴らしていた音楽（音を出せる状態のまま引き継ぐ。無ければシェルが作る）
+ */
+export type StartOptions = { mode?: 'continue' | 'new'; music?: MusicPlayer }
+
+export async function startGame(app: HTMLDivElement, ui: HTMLDivElement, start: StartOptions = {}): Promise<void> {
+  const g = new Game(app, ui, start)
   await g.boot()
 }

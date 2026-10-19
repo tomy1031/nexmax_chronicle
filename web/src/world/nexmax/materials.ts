@@ -22,25 +22,34 @@ export const NX_COLORS = {
 /**
  * 輪郭線の太さと色。全マテリアルで共有。
  * width: 画面の高さに対する割合（解像度・画角によらず同じ見た目）。minWorld: 近寄ったときの最小の太さ（m）
+ * minPx: 描画の画素での最小の太さ。スマホで描画解像度が下がると width だけでは 1 画素を切り、
+ *   輪郭が点線のように途切れて「ギザギザ」に見えるため、どの解像度でも途切れない太さを保つ。
+ * viewportH: 描画の高さ（画素）。シェル（game.ts）が resize のたびに入れる
  */
 export const OUTLINE = {
   width: { value: 0.0021 },
   minWorld: { value: 0.0026 },
+  minPx: { value: 1.6 },
+  viewportH: { value: 720 },
   color: { value: new THREE.Color(NX_COLORS.outline) },
 }
 
-/** 輪郭線の太さの基準（画面の高さに対する割合）と、描画解像度でつぶれない最小の太さ（画素） */
-export const OUTLINE_BASE_WIDTH = 0.0021
-export const OUTLINE_MIN_PX = 1.5
+/** 描画の高さ（画素）を輪郭線のシェーダへ渡す（renderer.getDrawingBufferSize の y） */
+export function setOutlineViewport(heightPx: number): void {
+  OUTLINE.viewportH.value = Math.max(1, heightPx)
+}
 
 /**
- * 描画解像度に合わせて輪郭線の太さを決める（毎フレーム、描く前に呼ぶ）。
- * スマホの省電力・適応解像度では描画の高さが 250〜350 画素まで下がり、基準の太さだと 1 画素に満たず、
- * 線が途切れてギザギザに見える。そのときは最小 1.5 画素まで太くする。
+ * 輪郭線の押し出し量（ビュー空間の長さ）を計算する GLSL。
+ * 画面の高さに対する割合 uOutlineWidth と、最小の画素数 uOutlineMinPx の大きい方。
+ * 使う側で uOutlineWidth・uOutlineMinPx・uOutlineViewH・uOutlineMin を宣言する
  */
-export function setOutlineResolution(drawingHeightPx: number): void {
-  OUTLINE.width.value = Math.max(OUTLINE_BASE_WIDTH, OUTLINE_MIN_PX / Math.max(1, drawingHeightPx))
+export const OUTLINE_WIDTH_GLSL = /* glsl */ `
+float nxOutlineWidth(float viewZ, float minWorld) {
+  float frac = max(uOutlineWidth, uOutlineMinPx / max(uOutlineViewH, 1.0));
+  return max(minWorld, frac * 2.0 * viewZ / projectionMatrix[1][1]);
 }
+`
 
 /** ソフビらしい「やわらかい自己照明」：影でも本体色（彩度）を保つ。拡散色 × この値を発光に足す */
 export const SELF_LIGHT = { value: 0.2 }
@@ -50,18 +59,23 @@ export function withOutlineShader<T extends THREE.Material>(mat: T, key: string)
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uOutlineWidth = OUTLINE.width
     shader.uniforms.uOutlineMin = OUTLINE.minWorld
+    shader.uniforms.uOutlineMinPx = OUTLINE.minPx
+    shader.uniforms.uOutlineViewH = OUTLINE.viewportH
     shader.uniforms.uOutlineColor = OUTLINE.color
     shader.uniforms.uSelfLight = SELF_LIGHT
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aOutline;\nvarying float vOutline;\nuniform float uOutlineWidth;\nuniform float uOutlineMin;')
+      .replace(
+        '#include <common>',
+        '#include <common>\nattribute float aOutline;\nvarying float vOutline;\nuniform float uOutlineWidth;\nuniform float uOutlineMin;\nuniform float uOutlineMinPx;\nuniform float uOutlineViewH;\n' + OUTLINE_WIDTH_GLSL,
+      )
       .replace(
         '#include <project_vertex>',
         `#include <project_vertex>
   vOutline = aOutline;
   if (aOutline > 0.5) {
     vec3 nV = normalize(normalMatrix * objectNormal);
-    // 画面上でほぼ一定の太さ（距離 × 画角で換算）。近いときは最小の太さを保つ
-    float wv = max(uOutlineMin, uOutlineWidth * 2.0 * (-mvPosition.z) / projectionMatrix[1][1]);
+    // 画面上でほぼ一定の太さ（距離 × 画角で換算）。近いときは最小の太さ、低い解像度でも最小の画素数を保つ
+    float wv = nxOutlineWidth(-mvPosition.z, uOutlineMin);
     mvPosition.xyz += nV * wv;
     gl_Position = projectionMatrix * mvPosition;
   }`,

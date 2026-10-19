@@ -21,14 +21,6 @@ describe("parseGameParams", () => {
     expect(parseGameParams("").flags).toEqual([]);
     expect(parseGameParams("?shot=05").shot).toBe("05");
   });
-
-  it("タイトル画面は、開始の指定が無いときだけ", () => {
-    expect(parseGameParams("").title).toBe(true);
-    expect(parseGameParams("?quality=low&fps=30").title).toBe(true);
-    expect(parseGameParams("?stage=1970").title).toBe(false);
-    expect(parseGameParams("?continue").title).toBe(false);
-    expect(parseGameParams("?notitle").title).toBe(false);
-  });
 });
 
 describe("DialogueQueue", () => {

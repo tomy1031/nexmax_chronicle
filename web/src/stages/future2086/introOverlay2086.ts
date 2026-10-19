@@ -1,7 +1,7 @@
 // 導入編の画面の重ね物（DOM）：1-0 の回想・4章③の白いかすみ・4章の試みの一覧。見た目は introOverlay2086.css。
 // 回想の絵は public/textures/story/flashback_2071.webp（リードが用意。読めるまで・無いときはキャンバスで描いた仮の絵）。
 // 回想は台詞（intro_2086.json の flashback）を 1 行ずつ出す：ソラが名前しか覚えていないロボットを見つけ、
-// 「昨日のことが分からなくても、今日はここにいるよ。」で手を引くまで。F で次の行へ。
+// 「昨日のこと、思い出せなくても大丈夫。今日から、いっしょに思い出をつくろう！」で手を引くまで。F で次の行へ。
 import './introOverlay2086.css'
 import { mulberry32 } from '../../render/noise'
 import type { AttemptItem } from './intro2086Story'

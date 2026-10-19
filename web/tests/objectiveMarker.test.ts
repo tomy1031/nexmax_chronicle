@@ -58,12 +58,12 @@ describe("目標の目印の置き場所", () => {
 });
 
 describe("回想（15年前）", () => {
-  it("名前しか覚えていないロボットとの会話を 1 行ずつ出し、最後が「昨日のことが分からなくても、今日はここにいるよ。」", () => {
+  it("名前しか覚えていないロボットとの会話を 1 行ずつ出し、最後が「今日から、いっしょに思い出をつくろう」", () => {
     const lines = table.flashback;
     expect(lines.length).toBeGreaterThanOrEqual(4);
     expect(lines.some((l) => l.text.includes("ネク"))).toBe(true);
     expect(lines.some((l) => l.text.includes("何も分からない"))).toBe(true);
-    expect(lines[lines.length - 1].text).toBe("昨日のことが分からなくても、今日はここにいるよ。");
+    expect(lines[lines.length - 1].text).toBe("昨日のこと、思い出せなくても大丈夫。今日から、いっしょに思い出をつくろう！");
     const plan = flashbackSchedule(lines);
     expect(plan.starts[0]).toBe(FLASHBACK_TIMING.firstLine);
     for (let i = 1; i < plan.starts.length; i++) expect(plan.starts[i] - plan.starts[i - 1]).toBeCloseTo(flashbackLineSec(lines[i - 1].text));

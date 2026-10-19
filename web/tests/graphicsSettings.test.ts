@@ -12,6 +12,8 @@ describe('画質の段階', () => {
     expect([low.ao, medium.ao, high.ao]).toEqual([false, false, true])
     expect([low.bloom, medium.bloom, high.bloom]).toEqual([false, true, true])
     expect([low.smaa, medium.smaa, high.smaa]).toEqual([null, 'medium', 'high'])
+    // 省電力は SMAA の代わりに軽い FXAA
+    expect([low.fxaa, medium.fxaa, high.fxaa]).toEqual([true, false, false])
     expect(low.maxPixelRatio).toBeLessThan(medium.maxPixelRatio)
     expect(medium.maxPixelRatio).toBeLessThan(high.maxPixelRatio)
     expect(medium.shadowMapSize).toBeLessThan(high.shadowMapSize)

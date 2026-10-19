@@ -7,6 +7,7 @@ import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs
 import { createRenderer, AdaptiveResolution } from '../render/renderer'
 import { createPost, type PostChain } from '../render/post'
 import { uTime } from '../render/materials'
+import { setOutlineResolution } from '../world/nexmax/materials'
 import { createPhysics, type Physics } from '../player/physics'
 import { PlayerController } from '../player/controller'
 import { CameraRig } from '../player/cameraRig'
@@ -774,6 +775,8 @@ export class Game {
       this.lightTimer = 0.4
     }
     a.env.sky.position.copy(this.camera.position)
+    // 描画解像度が下がっても、ネクマックスの輪郭線がつぶれないように
+    setOutlineResolution(this.renderer.domElement.height)
     this.post.render(dt)
     input.endFrame()
   }

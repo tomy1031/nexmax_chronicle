@@ -20,6 +20,8 @@ export type QualitySettings = {
   bloom: boolean
   /** 後段のアンチエイリアス（SMAA、全画面 3 回）。null なら無し */
   smaa: 'high' | 'medium' | null
+  /** SMAA を使わないときの軽いアンチエイリアス（FXAA、全画面 1 回）。輪郭のギザギザを和らげる */
+  fxaa: boolean
   petals: number
   /** 提灯などの点光源の数（近い順に割り当てる。少ないほど 1 画素あたりの光の計算が軽い） */
   pointLights: number
@@ -29,11 +31,11 @@ export type QualitySettings = {
 
 export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = {
   // Retina でも描画解像度は 1.25 倍まで・AO は半分の解像度（M1 実機で 25fps 前後しか出なかったため）
-  high: { level: 'high', shadowMapSize: 2048, shadowRadius: 3, maxPixelRatio: 1.25, minPixelRatio: 0.7, ao: true, aoHalfRes: true, bloom: true, smaa: 'high', petals: 600, pointLights: 6, portraitFps: 20 },
+  high: { level: 'high', shadowMapSize: 2048, shadowRadius: 3, maxPixelRatio: 1.25, minPixelRatio: 0.7, ao: true, aoHalfRes: true, bloom: true, smaa: 'high', fxaa: false, petals: 600, pointLights: 6, portraitFps: 20 },
   // AO を切り、影と解像度を 1 段下げる（見た目の差は小さく、重さは半分ほど）
-  medium: { level: 'medium', shadowMapSize: 1024, shadowRadius: 2, maxPixelRatio: 1.0, minPixelRatio: 0.65, ao: false, aoHalfRes: true, bloom: true, smaa: 'medium', petals: 250, pointLights: 4, portraitFps: 12 },
-  // 後処理はかすみと色調だけ（ブルーム・アンチエイリアスなし）。解像度も少し下げる
-  low: { level: 'low', shadowMapSize: 1024, shadowRadius: 1, maxPixelRatio: 0.85, minPixelRatio: 0.6, ao: false, aoHalfRes: true, bloom: false, smaa: null, petals: 120, pointLights: 2, portraitFps: 8 },
+  medium: { level: 'medium', shadowMapSize: 1024, shadowRadius: 2, maxPixelRatio: 1.0, minPixelRatio: 0.65, ao: false, aoHalfRes: true, bloom: true, smaa: 'medium', fxaa: false, petals: 250, pointLights: 4, portraitFps: 12 },
+  // 後処理はかすみと色調と軽いアンチエイリアス（FXAA）だけ（ブルームなし）。解像度も少し下げる
+  low: { level: 'low', shadowMapSize: 1024, shadowRadius: 1, maxPixelRatio: 0.85, minPixelRatio: 0.6, ao: false, aoHalfRes: true, bloom: false, smaa: null, fxaa: true, petals: 120, pointLights: 2, portraitFps: 8 },
 }
 
 export const QUALITY_LABELS: Readonly<Record<QualityLevel, string>> = { low: '省電力', medium: '標準', high: '高画質' }

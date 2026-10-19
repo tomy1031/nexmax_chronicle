@@ -29,6 +29,19 @@ export const OUTLINE = {
   color: { value: new THREE.Color(NX_COLORS.outline) },
 }
 
+/** 輪郭線の太さの基準（画面の高さに対する割合）と、描画解像度でつぶれない最小の太さ（画素） */
+export const OUTLINE_BASE_WIDTH = 0.0021
+export const OUTLINE_MIN_PX = 1.5
+
+/**
+ * 描画解像度に合わせて輪郭線の太さを決める（毎フレーム、描く前に呼ぶ）。
+ * スマホの省電力・適応解像度では描画の高さが 250〜350 画素まで下がり、基準の太さだと 1 画素に満たず、
+ * 線が途切れてギザギザに見える。そのときは最小 1.5 画素まで太くする。
+ */
+export function setOutlineResolution(drawingHeightPx: number): void {
+  OUTLINE.width.value = Math.max(OUTLINE_BASE_WIDTH, OUTLINE_MIN_PX / Math.max(1, drawingHeightPx))
+}
+
 /** ソフビらしい「やわらかい自己照明」：影でも本体色（彩度）を保つ。拡散色 × この値を発光に足す */
 export const SELF_LIGHT = { value: 0.2 }
 

@@ -1,7 +1,7 @@
 // 後処理：N8AO（環境遮蔽）→ 層状のかすみ（距離と高さ）→ ブルーム＋色調（露出・ACES・彩度・コントラスト・暖色・周辺減光）→ SMAA。
 // 画質（render/quality.ts）で AO・ブルーム・SMAA を外せる（setQuality でその場で組み直す）。
 import * as THREE from 'three'
-import { BloomEffect, BlendFunction, Effect, EffectAttribute, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing'
+import { BloomEffect, BlendFunction, Effect, EffectAttribute, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import type { QualitySettings } from './quality'
 
@@ -155,7 +155,7 @@ export type PostChain = {
  * 後処理の組み立て。画質で次のように変える（重い順）：
  * ・AO（N8AO）：高画質だけ。半透明の物をもう一度描く処理（transparencyAware）は使わない
  * ・ブルーム：省電力では入れない（強さ 0 にしても縮小・拡大の 17 回は描いてしまうので、パスから外す）
- * ・SMAA：高画質は HIGH、標準は MEDIUM、省電力は無し
+ * ・アンチエイリアス：高画質は SMAA HIGH、標準は SMAA MEDIUM、省電力は FXAA（全画面 1 回）
  * かすみと色調はいつも 1 回の全画面処理にまとめる
  */
 export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, q: QualitySettings): PostChain {
@@ -193,7 +193,7 @@ export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
       composer.render(dt)
     },
     setQuality(q: QualitySettings) {
-      const k = `${q.ao ? 1 : 0}${q.aoHalfRes ? 1 : 0}|${q.level}|${q.bloom ? 1 : 0}|${q.smaa ?? '-'}`
+      const k = `${q.ao ? 1 : 0}${q.aoHalfRes ? 1 : 0}|${q.level}|${q.bloom ? 1 : 0}|${q.smaa ?? '-'}|${q.fxaa ? 1 : 0}`
       if (k === key) return
       key = k
       composer.removeAllPasses()
@@ -223,6 +223,10 @@ export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
       aa = null
       if (q.smaa) {
         aa = new EffectPass(camera, new SMAAEffect({ preset: q.smaa === 'high' ? SMAAPreset.HIGH : SMAAPreset.MEDIUM }))
+        composer.addPass(aa)
+      } else if (q.fxaa) {
+        // 省電力：全画面 1 回の軽いアンチエイリアス（低い解像度で描いて拡大するので、輪郭のギザギザが目立つ）
+        aa = new EffectPass(camera, new FXAAEffect())
         composer.addPass(aa)
       }
     },

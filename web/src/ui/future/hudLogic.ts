@@ -1,6 +1,6 @@
 // HUD の小さな決まり（DOM なし・テストあり：tests/hudFutureTheme.test.ts）。
 import type { Hint } from './types'
-import { FPS_CAPS, QUALITY_LEVELS, type GraphicsPrefs } from '../../render/quality'
+import { FPS_CAPS, MUSIC_LEVELS, QUALITY_LEVELS, type GraphicsPrefs } from '../../render/quality'
 
 /** 左腕に装備が無いあいだは、左腕でしか意味のない Q の案内を出さない */
 export function filterHintsForArms(list: readonly Hint[], leftEquipped: boolean): Hint[] {
@@ -23,8 +23,8 @@ export function nextPauseTab(current: PauseTab, key: string): PauseTab {
 }
 
 /** 設定タブの項目（W/S・↑↓ で選び、A/D で変える。Enter・Space・F は次の値へ回す） */
-export type SettingRow = 'quality' | 'fps'
-export const SETTING_ROWS: readonly SettingRow[] = ['quality', 'fps']
+export type SettingRow = 'quality' | 'fps' | 'music'
+export const SETTING_ROWS: readonly SettingRow[] = ['quality', 'fps', 'music']
 
 /** 設定タブのキー操作：選んでいる項目と、変えた後の設定（変わらなければ同じ値） */
 export function settingsKey(row: SettingRow, prefs: GraphicsPrefs, code: string): { row: SettingRow; prefs: GraphicsPrefs } {
@@ -39,5 +39,6 @@ export function settingsKey(row: SettingRow, prefs: GraphicsPrefs, code: string)
     return dir === 0 ? list[(i + 1) % list.length] : list[Math.min(list.length - 1, Math.max(0, i + dir))]
   }
   if (row === 'quality') return { row, prefs: { ...prefs, quality: step(QUALITY_LEVELS, prefs.quality) } }
+  if (row === 'music') return { row, prefs: { ...prefs, music: step(MUSIC_LEVELS, prefs.music) } }
   return { row, prefs: { ...prefs, fps: step(FPS_CAPS, prefs.fps) } }
 }

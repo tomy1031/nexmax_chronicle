@@ -1,11 +1,14 @@
 // NEXMAX CHRONICLE ― three.js 版のエントリ。
 // 1. ホーム画面のアプリ（PWA）の準備：Service Worker の登録。前に開いたときに新しい版の準備ができていれば、ここで切り替えて読み込み直す
-// 2. タイトル画面（つづきから／はじめから・ホーム画面への追加の案内・更新の知らせ）
+// 2. タイトル画面（つづきから／はじめから・ホーム画面への追加の案内・更新の知らせ）。タイトルの曲（audio/）は最初のキー・タップで鳴り始め、
+//    ゲームへそのまま引き継ぐ（読み込みの間も鳴っていて、時代の曲へ切り替わる）
 // 3. ゲームのシェル（game/game.ts）を起動し、時代ごとのステージ（stages/*）を読み込む
 // ?stage=1726|2026|2086 などの開発用のパラメータがあるときは、いままでどおりタイトルを出さずに始める（game/README.md）。
 import './game/game.css'
 import { defaultStorage } from './core/saveManager'
 import { Pwa, isStandalone } from './pwa/pwa'
+import { MusicPlayer } from './audio/music'
+import { loadSavedPrefs, parsePrefs } from './render/quality'
 import { INSTALL_DISMISSED_KEY, detectInstallPlatform, shouldAutoShowInstall, shouldOfferInstall, shouldShowTitle, summarizeSave, type TitleChoice } from './ui/title/titleLogic'
 
 const app = document.getElementById('app') as HTMLDivElement
@@ -53,6 +56,11 @@ async function main(): Promise<void> {
   // 新しい版の準備ができていれば、タイトルを出す前に切り替える（遊んでいる途中では切り替えない）
   if ((await pwa.register(true)) === 'reloading') return
 
+  // タイトルの曲（ブラウザの決まりで、最初のキー・タップまでは鳴らない）
+  const music = new MusicPlayer(parsePrefs(loadSavedPrefs()).music ?? 2)
+  music.installUnlock()
+  music.play('title')
+
   const storage = defaultStorage()
   const save = summarizeSave(storage)
   const standalone = isStandalone()
@@ -86,7 +94,7 @@ async function main(): Promise<void> {
   const gameP = loadGame()
   await title.close()
   const { startGame } = await gameP
-  await startGame(app, ui, { mode: choice })
+  await startGame(app, ui, { mode: choice, music })
 }
 
 void main()

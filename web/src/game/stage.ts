@@ -18,6 +18,7 @@ import type { ActionFrame } from '../player/inputActions'
 import type { WireEvent } from '../player/clawLogic'
 import type { Equipment } from '../player/equipment'
 import type { Character, CharacterName } from '../world/characters'
+import type { MusicId } from '../audio/tracks'
 import type { Hud, Hint } from '../ui/hud'
 import type { StoryState } from '../core/storyFlags'
 import type { EraId } from '../core/eras'
@@ -171,6 +172,8 @@ export interface Stage {
   interact(rt: StageRuntime): boolean
   /** キー案内。null ならシェルの既定（クロー・開始直後の操作案内） */
   hints(rt: StageRuntime): Hint[] | null
+  /** 鳴らす曲（省略すると時代の曲。null で鳴らさない）。戦闘・ボスの曲はシェルが上からかぶせる */
+  music?(rt: StageRuntime): MusicId | null
   /** 左上の目標 */
   objective(rt: StageRuntime): { title: string; sub: string }
   /** 目標のワールド位置（HUD の方位磁針・目標マーカー用。無ければ null） */

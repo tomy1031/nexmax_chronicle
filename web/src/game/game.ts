@@ -38,6 +38,9 @@ import { CineDirector, autoFramePosition, type CineShot } from './cinematic'
 import { CineMarkerFx } from './cineMarker'
 import { ObjectiveMarkerFx } from './objectiveMarker'
 import type { Stage, StageLoadContext, StageRuntime, StageWorld } from './stage'
+import { MusicPlayer } from '../audio/music'
+import { MusicDirector } from '../audio/musicDirector'
+import { STAGE_MUSIC } from '../audio/tracks'
 
 /** 読み込み表示を更新するために 1 フレーム譲る（非表示タブで rAF が止まっても進むよう setTimeout も併用） */
 export const nextFrame = () =>
@@ -129,6 +132,9 @@ export class Game {
   private readonly travel = new TravelMachine()
   readonly story = new StoryState(new TimelineState())
   private readonly saver = new GameSave()
+  /** 音楽（時代ごとの曲・戦闘）。どの曲にするかは musicDir が決める。タイトル画面で使っていたものを引き継ぐ */
+  private readonly music: MusicPlayer
+  private readonly musicDir = new MusicDirector()
   private readonly equipment: Equipment = initialEquipment()
   private readonly lanternLights: THREE.PointLight[] = []
   private nexmax!: Character
@@ -184,6 +190,14 @@ export class Game {
     this.prefs = resolvePrefs(useTouch, loadSavedPrefs(), this.urlp)
     this.q = qualitySettings(this.prefs.quality)
     this.limiter = new FrameLimiter(this.prefs.fps)
+    if (start.music) {
+      this.music = start.music
+      this.music.setLevel(this.prefs.music)
+    } else {
+      this.music = new MusicPlayer(this.prefs.music)
+      // ブラウザは触るまで音を出せない：キー・タップのたびに、止まっていれば鳴らせるようにする
+      this.music.installUnlock()
+    }
     this.loading = new LoadingOverlay(ui)
     this.renderer = createRenderer(app, this.q)
     const { w, h } = this.size()
@@ -323,6 +337,7 @@ export class Game {
   setGraphics(p: GraphicsPrefs): void {
     this.prefs = { ...p }
     savePrefs(this.prefs)
+    this.music.setLevel(p.music)
     this.q = qualitySettings(p.quality)
     this.post.setQuality(this.q)
     this.active?.env.sun.setQuality(this.q)
@@ -698,6 +713,7 @@ export class Game {
       input.endFrame()
       return
     }
+    this.updateMusic(a, dt)
     if (this.bootReveal > 0) {
       this.bootReveal -= dt
       if (this.bootReveal <= 0) {
@@ -784,6 +800,18 @@ export class Game {
     a.env.sky.position.copy(this.camera.position)
     this.post.render(dt)
     input.endFrame()
+  }
+
+  /** 場所・戦い・時空移動から曲を選ぶ。一時停止中は小さく */
+  private updateMusic(a: Active, dt: number): void {
+    const want = this.musicDir.pick(dt, {
+      place: a.stage.music ? a.stage.music(a.rt) : STAGE_MUSIC[a.stage.key],
+      boss: a.combat.bossActive,
+      inCombat: a.combat.inCombat,
+      travelling: this.travel.inputLocked,
+    })
+    if (want !== this.music.current) this.music.play(want, MusicDirector.fadeFor(this.music.current, want))
+    this.music.setDuck(this.paused || this.menuOpen)
   }
 
   private setMode(a: Active, idx: number): void {
@@ -1108,7 +1136,7 @@ export class Game {
         return g.equipment
       },
       story: g.story,
-      /** 開発用：画質・フレームレートを変える（例 graphics({ quality: 'low', fps: 30 })）。いまの設定を返す */
+      /** 開発用：画質・フレームレート・音楽の音量を変える（例 graphics({ quality: 'low', fps: 30, music: 2 })）。いまの設定を返す */
       graphics: (p?: Partial<GraphicsPrefs>) => {
         if (p) g.setGraphics({ ...g.prefs, ...p })
         return { ...g.prefs, pixelRatio: g.renderer.getPixelRatio() }
@@ -1125,6 +1153,8 @@ export class Game {
         return a.rt.cinematic(shot)
       },
       endCine: (fast?: boolean) => g.cine.release(fast),
+      /** 開発用：いま鳴らしたい曲と、音が出せる状態か */
+      music: () => ({ current: g.music.current, running: g.music.running }),
       cineState: () => ({ active: g.cine.active, phase: g.cine.phase, w: +g.cine.weight.toFixed(3) }),
       debug: () => {
         const a = g.active
@@ -1157,8 +1187,11 @@ export class Game {
   }
 }
 
-/** タイトル画面から始めるとき：continue＝セーブから再開、new＝セーブを消して最初から */
-export type StartOptions = { mode?: 'continue' | 'new' }
+/**
+ * タイトル画面から始めるとき：continue＝セーブから再開、new＝セーブを消して最初から。
+ * music：タイトル画面で鳴らしていた音楽（音を出せる状態のまま引き継ぐ。無ければシェルが作る）
+ */
+export type StartOptions = { mode?: 'continue' | 'new'; music?: MusicPlayer }
 
 export async function startGame(app: HTMLDivElement, ui: HTMLDivElement, start: StartOptions = {}): Promise<void> {
   const g = new Game(app, ui, start)

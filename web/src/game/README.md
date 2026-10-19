@@ -48,6 +48,7 @@ interface Stage {
   interact(rt): boolean            // F（会話中はシェルが早送りに使うので呼ばれない）
   hints(rt): Hint[] | null         // キー案内（null ならシェルの既定）
   objective(rt): { title, sub }    // 左上の目標
+  music?(rt): MusicId | null       // 鳴らす曲（省略で時代の曲・null で無音。戦闘・ボスの曲はシェルがかぶせる）
   objectiveTarget?(rt): Vector3 | null   // 目標の位置（HUD の方位磁針用）
   objectiveMarkers?(rt): ObjectiveMark[] | null   // 頭の上の目印 { pos, label?, edge? }（最大 4。会話・演出・操作停止中はシェルが隠す）
   onClawEvent?(e, rt): void        // NMClaw のお知らせ（connected / released など）
@@ -136,7 +137,21 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 `?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
 （どちらも保存した設定より優先）・`?fixed`（解像度を固定）・`?stats`（F3 と同じ計測表示）・`?debug`・`?slowmo=0.3`。
 開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`・
-`window.__game.graphics({ quality: 'low', fps: 30 })`（画質・フレームレートをその場で変える）。
+`window.__game.graphics({ quality: 'low', fps: 30, music: 2 })`（画質・フレームレート・音楽の音量をその場で変える）・`window.__game.music()`（いま鳴らしたい曲と、音を出せる状態か）。
+
+## 音楽（`src/audio/`）
+
+音源ファイルは使わず、Web Audio で楽器の音を合成して曲のデータを演奏する（すべて書き下ろし）。
+- `tracks.ts` … 曲のデータ（タイトル・2086 年の朝と夜・2026・1970・1726・戦闘・番人。15章用に 2028 年の遺跡・クメール王朝の都も先に用意）。旋律・和音・低音・分散・刻み・打楽器の型を文字で書く
+- `theory.ts` … 曲のデータを音の並びにする純粋な計算（音名・和音・小節の長さの確かめ。`tests/music.test.ts` で、旋律が調の音かそのときの和音の音だけかも確かめる）
+- `synth.ts` … 楽器（パッド・電気ピアノ・オルゴール・ヴィブラフォン・三味線・琴・笛・テルミン・金管・低音・木琴ロニアット・銅鑼の輪コン・ヴォン・笛スラライ）と打楽器（太鼓・締め太鼓・鉦・小さなシンバルのチンも）。
+  1 音ごとに発振器 1〜3 個。鳴り終わった音は出口を外す（つないだままだとフィルタが処理され続けて重くなる）
+- `music.ts` … `MusicPlayer`：少し先（0.3 秒）までを予約していく。曲の切り替えはクロスフェード、一時停止中は小さく、画面が裏に回ったら止める。音量 0 なら AudioContext ごと止める
+- `musicDirector.ts` … どの曲にするか：ステージの `music()`（2086 年は回想＝タイトルの曲・夜＝夜の曲）、敵が襲ってきたら戦闘（離れても 4 秒は続ける）、ボスの体力が出ている間は番人、時空移動の間は無音
+
+タイトル画面（`main.ts`）で `MusicPlayer` を作ってタイトルの曲を始め（最初のキー・タップから鳴る）、`startGame(app, ui, { mode, music })` でシェルへ引き継ぐ
+（読み込みの間もタイトルの曲が続き、ステージが動き出したら時代の曲へクロスフェード。2086 年の冒頭はタイトルと同じ曲なので、そのまま続く）。
+タイトルを出さない起動（開発用の URL 指定）ではシェルが作る。音量は一時停止の「設定」タブ（切・小・中・大。既定は中）。iPhone はマナーモードのあいだ Web Audio が鳴らない。
 
 ## 画質とフレームレート（`render/quality.ts`）
 

@@ -30,6 +30,7 @@ import type { MobTalk2086 } from '../stages/future2086/mobTalk2086'
 import type { SwingArcPreview as SwingArcT } from '../stages/future2086/focusShots2086'
 import type { SkyTear as SkyTearT } from '../stages/future2086/skyTear2086'
 import type { CueLine, EmergenceSequence as EmergenceT } from '../stages/future2086/emergence2086'
+import type { MusicId } from '../audio/tracks'
 
 export async function createFutureStage(): Promise<Stage> {
   try {
@@ -502,6 +503,13 @@ class Future2086Stage implements Stage {
 
   objective(): { title: string; sub: string } {
     return this.story.objective()
+  }
+
+  /** 回想と冒頭はタイトルと同じ約束の曲、夜は空が裂ける夜の曲、ほかは祭りの朝の曲 */
+  music(): MusicId | null {
+    const step = this.story.step
+    if (step === 'opening' || this.intro?.flashbackPlaying) return 'title'
+    return this.m.storyM.isNightStep(step) ? 'night2086' : 'future2086'
   }
 
   objectiveTarget(): THREE.Vector3 | null {

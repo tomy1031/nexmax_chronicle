@@ -13,6 +13,8 @@ describe('画質の段階', () => {
     expect([low.bloom, medium.bloom, high.bloom]).toEqual([false, true, true])
     // 標準（スマホの既定）は描画解像度が低くギザギザが目立つので、SMAA は高画質と同じ HIGH
     expect([low.smaa, medium.smaa, high.smaa]).toEqual([null, 'high', 'high'])
+    // 省電力は SMAA の代わりに軽い FXAA
+    expect([low.fxaa, medium.fxaa, high.fxaa]).toEqual([true, false, false])
     expect(low.maxPixelRatio).toBeLessThan(medium.maxPixelRatio)
     expect(medium.maxPixelRatio).toBeLessThan(high.maxPixelRatio)
     expect(medium.shadowMapSize).toBeLessThan(high.shadowMapSize)
@@ -23,16 +25,16 @@ describe('画質の段階', () => {
   })
 
   it('スマホ・タブレットは「標準・30」、PC は「高画質・60」から始まる', () => {
-    expect(defaultPrefs(true)).toEqual({ quality: 'medium', fps: 30 })
-    expect(defaultPrefs(false)).toEqual({ quality: 'high', fps: 60 })
+    expect(defaultPrefs(true)).toEqual({ quality: 'medium', fps: 30, music: 2 })
+    expect(defaultPrefs(false)).toEqual({ quality: 'high', fps: 60, music: 2 })
   })
 
   it('保存した設定が既定より優先、URL はさらに優先。壊れた値は使わない', () => {
-    expect(resolvePrefs(true, JSON.stringify({ quality: 'low', fps: 60 }), P(''))).toEqual({ quality: 'low', fps: 60 })
-    expect(resolvePrefs(false, JSON.stringify({ quality: 'low' }), P('?quality=medium&fps=30'))).toEqual({ quality: 'medium', fps: 30 })
-    expect(resolvePrefs(true, '{not json', P(''))).toEqual({ quality: 'medium', fps: 30 })
-    expect(parsePrefs(JSON.stringify({ quality: 'ultra', fps: 144 }))).toEqual({})
-    expect(resolvePrefs(false, null, P('?quality=ultra&fps=144'))).toEqual({ quality: 'high', fps: 60 })
+    expect(resolvePrefs(true, JSON.stringify({ quality: 'low', fps: 60 }), P(''))).toEqual({ quality: 'low', fps: 60, music: 2 })
+    expect(resolvePrefs(false, JSON.stringify({ quality: 'low', music: 0 }), P('?quality=medium&fps=30'))).toEqual({ quality: 'medium', fps: 30, music: 0 })
+    expect(resolvePrefs(true, '{not json', P(''))).toEqual({ quality: 'medium', fps: 30, music: 2 })
+    expect(parsePrefs(JSON.stringify({ quality: 'ultra', fps: 144, music: 9 }))).toEqual({})
+    expect(resolvePrefs(false, null, P('?quality=ultra&fps=144'))).toEqual({ quality: 'high', fps: 60, music: 2 })
   })
 })
 
@@ -105,11 +107,14 @@ describe('適応解像度', () => {
 })
 
 describe('設定タブのキー', () => {
-  const base = { quality: 'medium' as const, fps: 30 as const }
+  const base = { quality: 'medium' as const, fps: 30 as const, music: 2 as const }
 
   it('W/S で項目、A/D で値（端で止まる）、Enter で次の値へ回す', () => {
     expect(settingsKey('quality', base, 'KeyS').row).toBe('fps')
-    expect(settingsKey('fps', base, 'KeyS').row).toBe('fps')
+    expect(settingsKey('fps', base, 'KeyS').row).toBe('music')
+    expect(settingsKey('music', base, 'KeyS').row).toBe('music')
+    expect(settingsKey('music', base, 'KeyA').prefs.music).toBe(1)
+    expect(settingsKey('music', { ...base, music: 3 }, 'Enter').prefs.music).toBe(0)
     expect(settingsKey('fps', base, 'ArrowUp').row).toBe('quality')
     expect(settingsKey('quality', base, 'KeyA').prefs.quality).toBe('low')
     expect(settingsKey('quality', { ...base, quality: 'low' }, 'KeyA').prefs.quality).toBe('low')

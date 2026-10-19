@@ -1,0 +1,130 @@
+/* タイトル画面（game/titleScreen.ts）。寸法は HUD と同じ --u（1600×900 基準のデザイン px × 画面に比例した倍率）。
+   出ている間は #ui のほかの子（HUD・タッチ操作）を隠す。縦持ちの案内（.touch-rotate）だけは残す。 */
+
+#ui.nx-title-on > :not(.nx-title):not(.touch-rotate) { visibility: hidden !important; }
+
+.nx-title {
+  --u: min(100vw / 1600, 100dvh / 900);
+  --tt-gold: #ffd27a;
+  --tt-line: #7fe6ff;
+  --tt-ink: #f6fbff;
+  --tt-fade: 0.7s;
+  position: absolute; inset: 0; z-index: 20; pointer-events: auto; overflow: hidden; user-select: none; -webkit-user-select: none;
+  font-family: 'M PLUS 1p', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', system-ui, sans-serif;
+  color: var(--tt-ink); -webkit-font-smoothing: antialiased; touch-action: manipulation; cursor: default;
+}
+
+/* 文字が読みやすいよう、左（ロゴとメニュー）と下を少し暗く */
+.tt-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(8, 10, 40, 0.62) 0%, rgba(8, 10, 40, 0.3) 38%, rgba(8, 10, 40, 0) 58%),
+    linear-gradient(0deg, rgba(10, 8, 30, 0.55) 0%, rgba(10, 8, 30, 0) 30%);
+}
+
+/* ---------------------------------------------------------------- ロゴ */
+.tt-logo {
+  position: absolute; left: calc(110 * var(--u) + env(safe-area-inset-left)); top: calc(92 * var(--u) + env(safe-area-inset-top)); text-align: left;
+  opacity: 0; transform: translateY(calc(-14 * var(--u))); transition: opacity 1.4s ease, transform 1.4s ease;
+}
+.nx-title.in .tt-logo { opacity: 1; transform: none; }
+.tt-kicker {
+  font: 600 calc(17 * var(--u)) / 1 'Orbitron', system-ui, sans-serif; letter-spacing: 0.6em; color: var(--tt-line);
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(80, 220, 255, 0.7); padding-left: 0.3em;
+}
+.tt-name { margin-top: calc(14 * var(--u)); display: flex; flex-direction: column; align-items: flex-start; gap: calc(6 * var(--u)); }
+.tt-nex,
+.tt-chr {
+  font-family: 'Orbitron', system-ui, sans-serif; font-weight: 700; line-height: 1; padding-left: 0.18em;
+  background: linear-gradient(180deg, #ffffff 0%, #fff3d0 42%, var(--tt-gold) 58%, #ff9e5a 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 calc(14 * var(--u)) rgba(255, 190, 110, 0.55)) drop-shadow(0 calc(3 * var(--u)) calc(2 * var(--u)) rgba(30, 12, 50, 0.6));
+}
+.tt-nex { font-size: calc(118 * var(--u)); letter-spacing: 0.14em; padding-left: 0; }
+.tt-chr { font-size: calc(44 * var(--u)); letter-spacing: 0.6em; padding-left: 0.08em; }
+.tt-sub {
+  margin-top: calc(18 * var(--u)); font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: 0.3em;
+  color: #fff6e6; text-shadow: 0 0 calc(10 * var(--u)) rgba(255, 170, 120, 0.8), 0 1px 2px rgba(20, 10, 40, 0.8);
+}
+
+/* ---------------------------------------------------------------- PRESS ANY KEY */
+.tt-press {
+  position: absolute; left: calc(110 * var(--u) + env(safe-area-inset-left)); bottom: calc(150 * var(--u) + env(safe-area-inset-bottom)); text-align: left;
+  font: 700 calc(30 * var(--u)) / 1.2 'Orbitron', 'M PLUS 1p', system-ui, sans-serif; letter-spacing: 0.32em; padding-left: 0.32em;
+  color: #ffffff; text-shadow: 0 0 calc(12 * var(--u)) rgba(110, 225, 255, 0.9);
+  animation: tt-blink 2.2s ease-in-out infinite; opacity: 0; transition: opacity 0.6s;
+}
+.nx-title.touch .tt-press { font-family: 'M PLUS 1p', system-ui, sans-serif; letter-spacing: 0.16em; }
+.tt-press small { display: block; margin-top: calc(12 * var(--u)); font: 500 calc(17 * var(--u)) / 1 'M PLUS 1p', system-ui, sans-serif; letter-spacing: 0.2em; color: #d8eaff; }
+.nx-title.in[data-mode='press'] .tt-press { opacity: 1; }
+@keyframes tt-blink { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(0.55); } }
+
+/* ---------------------------------------------------------------- メニュー */
+.tt-menu {
+  position: absolute; left: calc(110 * var(--u) + env(safe-area-inset-left)); bottom: calc(96 * var(--u) + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: calc(14 * var(--u)); width: calc(520 * var(--u));
+  opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
+}
+.nx-title[data-mode='menu'] .tt-menu,
+.nx-title[data-mode='confirm'] .tt-menu,
+.nx-title[data-mode='done'] .tt-menu { opacity: 1; pointer-events: auto; }
+.nx-title[data-mode='confirm'] .tt-menu { opacity: 0.35; pointer-events: none; }
+.tt-item {
+  position: relative; display: grid; grid-template-columns: calc(30 * var(--u)) 1fr; grid-template-rows: auto auto; align-items: center;
+  padding: calc(14 * var(--u)) calc(26 * var(--u)) calc(14 * var(--u)) calc(18 * var(--u));
+  background: linear-gradient(90deg, rgba(14, 30, 80, 0.72), rgba(14, 30, 80, 0.32));
+  border: 1px solid rgba(127, 230, 255, 0.28); border-radius: calc(6 * var(--u));
+  clip-path: polygon(0 0, calc(100% - 18 * var(--u)) 0, 100% calc(18 * var(--u)), 100% 100%, calc(18 * var(--u)) 100%, 0 calc(100% - 18 * var(--u)));
+  transition: background 0.18s, border-color 0.18s, transform 0.18s; cursor: pointer;
+}
+.tt-mark { grid-row: 1 / span 2; width: calc(12 * var(--u)); height: calc(12 * var(--u)); transform: rotate(45deg); border: 2px solid rgba(127, 230, 255, 0.45); }
+.tt-label { font-size: calc(32 * var(--u)); font-weight: 700; letter-spacing: 0.24em; }
+.tt-desc { grid-column: 2; margin-top: calc(4 * var(--u)); font-size: calc(17 * var(--u)); color: #b9d3ef; letter-spacing: 0.06em; }
+.tt-item.sel {
+  background: linear-gradient(90deg, rgba(255, 196, 96, 0.34), rgba(40, 70, 150, 0.4));
+  border-color: rgba(255, 214, 130, 0.85); transform: translateX(calc(8 * var(--u)));
+  box-shadow: 0 0 calc(18 * var(--u)) rgba(255, 190, 100, 0.35);
+}
+.tt-item.sel .tt-mark { background: var(--tt-gold); border-color: #fff4d6; box-shadow: 0 0 calc(10 * var(--u)) var(--tt-gold); }
+.tt-item.sel .tt-label { color: #fff8e8; text-shadow: 0 0 calc(10 * var(--u)) rgba(255, 200, 120, 0.8); }
+.tt-item.off { opacity: 0.42; cursor: default; }
+.tt-item.chosen { animation: tt-chosen 0.5s ease-out; }
+@keyframes tt-chosen { 0% { filter: brightness(1.8); } 100% { filter: brightness(1); } }
+
+/* ---------------------------------------------------------------- 確かめ */
+.tt-confirm { position: absolute; inset: 0; display: none; place-items: center; background: rgba(4, 6, 24, 0.45); }
+.nx-title[data-mode='confirm'] .tt-confirm { display: grid; }
+.tt-box {
+  min-width: calc(560 * var(--u)); padding: calc(30 * var(--u)) calc(40 * var(--u)); text-align: center;
+  background: linear-gradient(180deg, rgba(18, 36, 92, 0.94), rgba(6, 14, 44, 0.96));
+  border: 1px solid rgba(127, 230, 255, 0.5); border-radius: calc(8 * var(--u)); box-shadow: 0 0 calc(30 * var(--u)) rgba(60, 180, 255, 0.3);
+}
+.tt-q { font-size: calc(26 * var(--u)); font-weight: 700; letter-spacing: 0.08em; line-height: 1.6; }
+.tt-btns { margin-top: calc(24 * var(--u)); display: flex; justify-content: center; gap: calc(28 * var(--u)); }
+.tt-btn {
+  min-width: calc(150 * var(--u)); padding: calc(12 * var(--u)) calc(20 * var(--u)); font-size: calc(24 * var(--u)); font-weight: 700; letter-spacing: 0.2em;
+  border: 1px solid rgba(127, 230, 255, 0.4); border-radius: calc(6 * var(--u)); background: rgba(20, 50, 110, 0.6); cursor: pointer;
+}
+.tt-btn.sel { border-color: #ffe2a0; background: rgba(255, 196, 96, 0.32); box-shadow: 0 0 calc(14 * var(--u)) rgba(255, 190, 100, 0.45); }
+
+/* ---------------------------------------------------------------- 下の行・暗転 */
+.tt-foot {
+  position: absolute; left: calc(36 * var(--u) + env(safe-area-inset-left)); right: calc(36 * var(--u) + env(safe-area-inset-right));
+  bottom: calc(26 * var(--u) + env(safe-area-inset-bottom)); display: flex; justify-content: space-between;
+  font-size: calc(15 * var(--u)); letter-spacing: 0.14em; color: rgba(220, 235, 255, 0.72);
+}
+.nx-title[data-mode='press'] .tt-keys { visibility: hidden; }
+.tt-fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity var(--tt-fade) ease; }
+.nx-title.leaving .tt-fade { opacity: 1; }
+.nx-title.leaving { pointer-events: none; }
+
+/* スマホ（横持ち）は文字を少し大きく、メニューを押しやすく */
+.nx-title.touch .tt-item { padding-top: calc(18 * var(--u)); padding-bottom: calc(18 * var(--u)); }
+.nx-title.touch .tt-menu { width: calc(600 * var(--u)); }
+
+/* 縦長の画面（PC のせまい窓など）は真ん中にそろえる */
+@media (max-aspect-ratio: 1/1) {
+  .tt-logo, .tt-press { left: 0; right: 0; text-align: center; }
+  .tt-name { align-items: center; }
+  .tt-menu { left: 50%; transform: translateX(-50%); }
+}

@@ -337,6 +337,11 @@ export class CombatSystem {
     return this.enemies.some((e) => e.alive && !e.hidden && e.brain.engaged && e.pos.distanceToSquared(p) < 15 * 15)
   }
 
+  /** ボスの体力が出ていて、ボスがまだ倒れていない（番人の曲） */
+  get bossActive(): boolean {
+    return this.bossBar !== null && this.bossBar.e.alive
+  }
+
   /** 体力 0 から戻る途中（操作を止める） */
   get downed(): boolean {
     return this.downT >= 0

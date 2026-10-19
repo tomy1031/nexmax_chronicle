@@ -27,6 +27,8 @@ three.js 版は **シェル（ずっと残るもの）＋ステージ（時代�
 - `cineMarker.ts` … 演出中の目印（脈打つ光る輪・光の柱・名前の札）。シェルが 1 組だけ持って使い回す
 - `objectiveMarker.ts` … 目標の目印（いまやることの相手の頭の上に弾む金色の「！」と名前の札。画面の外なら縁に寄せて矢印）。DOM だけ。ステージの `objectiveMarkers(rt)` を毎フレーム映す。置き場所の計算 `placeMarker` は `tests/objectiveMarker.test.ts`
 - `params.ts` … URL パラメータ
+- `titleLogic.ts`・`titleScreen.ts`・`title.css` … タイトル画面（はじめから／つづきから。決まりは `tests/title.test.ts`）
+- `titleScene.ts` … タイトル画面の 3D の背景（夜明けの空・時空の輪・光の粒。シェルのネクマックスを使い回す）
 - `future2086Adapter.ts` … 2086 年ステージ（別担当）をつなぐところ
 - `game.css` … 時空移動・時代カード・IDO パネル・話者の色
 
@@ -48,6 +50,7 @@ interface Stage {
   interact(rt): boolean            // F（会話中はシェルが早送りに使うので呼ばれない）
   hints(rt): Hint[] | null         // キー案内（null ならシェルの既定）
   objective(rt): { title, sub }    // 左上の目標
+  music?(rt): MusicId | null       // 鳴らす曲（省略で時代の曲・null で無音。戦闘・ボスの曲はシェルがかぶせる）
   objectiveTarget?(rt): Vector3 | null   // 目標の位置（HUD の方位磁針用）
   objectiveMarkers?(rt): ObjectiveMark[] | null   // 頭の上の目印 { pos, label?, edge? }（最大 4。会話・演出・操作停止中はシェルが隠す）
   onClawEvent?(e, rt): void        // NMClaw のお知らせ（connected / released など）
@@ -123,10 +126,30 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 ## URL パラメータ（開発・検証用）
 
 `?stage=1726|1970|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
-`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
+`?continue`（セーブから再開）・`?newgame`（セーブを消す）・`?notitle`（タイトル画面を出さない。stage・spawn・flags・continue・newgame・shot のどれかがあっても出さない）・`?shot=ID`（ステージの固定カメラ）・`?nohud`・`?quality=low|medium|high`・`?fps=30|60`
 （どちらも保存した設定より優先）・`?fixed`（解像度を固定）・`?stats`（F3 と同じ計測表示）・`?debug`・`?slowmo=0.3`。
 開発用の操作：`window.__game.travel('2026')`・`window.__game.debug()`・`window.__game.memory()`・`window.__game.story`・
-`window.__game.graphics({ quality: 'low', fps: 30 })`（画質・フレームレートをその場で変える）。
+`window.__game.graphics({ quality: 'low', fps: 30, music: 2 })`（画質・フレームレート・音楽の音量をその場で変える）・`window.__game.music()`（いま鳴らしたい曲）・`window.__game.title()`（タイトル画面の段階）。
+
+## タイトル画面と起動の流れ
+
+URL に開始の指定が無いときは、読み込み画面 → タイトル画面（`PRESS ANY KEY`／画面をタップ）→ メニュー。
+最初のキー・タップで音を出せるようにして（ブラウザの決まり）、タイトルの曲を始める。
+「はじめから」は記録があれば確かめてから消し、2086 年の冒頭へ。「つづきから」は記録の時代とチェックポイント（`rt.save` で保存した到着地点）から再開する。
+記録が無いときの「つづきから」は選べない。選んだら暗転 → 読み込み画面 → ステージ。タイトルの間も毎フレームの流れ（`startLoop`）は回っていて、
+`frame()` はタイトルの背景だけを描く。
+
+## 音楽（`src/audio/`）
+
+音源ファイルは使わず、Web Audio で楽器の音を合成して曲のデータを演奏する（すべて書き下ろし）。
+- `tracks.ts` … 曲のデータ（タイトル・2086 年の朝と夜・2026・1970・1726・戦闘・番人）。旋律・和音・低音・分散・刻み・打楽器の型を文字で書く
+- `theory.ts` … 曲のデータを音の並びにする純粋な計算（音名・和音・小節の長さの確かめ。`tests/music.test.ts` で、旋律が調の音かそのときの和音の音だけかも確かめる）
+- `synth.ts` … 楽器（パッド・電気ピアノ・オルゴール・ヴィブラフォン・三味線・琴・笛・テルミン・金管・低音）と打楽器（太鼓・締め太鼓・鉦も）。
+  1 音ごとに発振器 1〜3 個。鳴り終わった音は出口を外す（つないだままだとフィルタが処理され続けて重くなる）
+- `music.ts` … `MusicPlayer`：少し先（0.3 秒）までを予約していく。曲の切り替えはクロスフェード、一時停止中は小さく、画面が裏に回ったら止める。音量 0 なら AudioContext ごと止める
+- `musicDirector.ts` … どの曲にするか：ステージの `music()`（2086 年は回想＝タイトルの曲・夜＝夜の曲）、敵が襲ってきたら戦闘（離れても 4 秒は続ける）、ボスの体力が出ている間は番人、時空移動の間は無音
+
+音量は一時停止の「設定」タブ（切・小・中・大。既定は中）。iPhone はマナーモードのあいだ Web Audio が鳴らない。
 
 ## 画質とフレームレート（`render/quality.ts`）
 

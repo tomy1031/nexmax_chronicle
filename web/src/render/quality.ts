@@ -42,14 +42,18 @@ export const QUALITY_LABELS: Readonly<Record<QualityLevel, string>> = { low: '�
 export const QUALITY_LEVELS: readonly QualityLevel[] = ['low', 'medium', 'high']
 export const FPS_CAPS: readonly FpsCap[] = [30, 60]
 
-/** 遊ぶ人が選ぶ設定（この端末に保存する） */
-export type GraphicsPrefs = { quality: QualityLevel; fps: FpsCap }
+/** 音楽の音量（0 = 切・1 = 小・2 = 中・3 = 大。audio/music.ts） */
+export type MusicLevel = 0 | 1 | 2 | 3
+export const MUSIC_LEVELS: readonly MusicLevel[] = [0, 1, 2, 3]
+
+/** 遊ぶ人が選ぶ設定（画面と音。この端末に保存する） */
+export type GraphicsPrefs = { quality: QualityLevel; fps: FpsCap; music: MusicLevel }
 
 export const PREFS_KEY = 'nexmax.graphics.v1'
 
 /** 最初の設定：スマホ・タブレットは熱くなりにくい「標準・30」、PC は「高画質・60」 */
 export function defaultPrefs(touch: boolean): GraphicsPrefs {
-  return touch ? { quality: 'medium', fps: 30 } : { quality: 'high', fps: 60 }
+  return touch ? { quality: 'medium', fps: 30, music: 2 } : { quality: 'high', fps: 60, music: 2 }
 }
 
 function isLevel(x: unknown): x is QualityLevel {
@@ -61,6 +65,10 @@ function asFps(x: unknown): FpsCap | null {
   return n === 30 || n === 60 ? n : null
 }
 
+function asMusic(x: unknown): MusicLevel | null {
+  return x === 0 || x === 1 || x === 2 || x === 3 ? x : null
+}
+
 /** 保存した文字列から（壊れていれば読めた分だけ） */
 export function parsePrefs(raw: string | null): Partial<GraphicsPrefs> {
   if (!raw) return {}
@@ -70,6 +78,8 @@ export function parsePrefs(raw: string | null): Partial<GraphicsPrefs> {
     if (isLevel(o.quality)) out.quality = o.quality
     const f = asFps(o.fps)
     if (f) out.fps = f
+    const m = asMusic(o.music)
+    if (m !== null) out.music = m
     return out
   } catch {
     return {}

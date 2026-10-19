@@ -36,7 +36,7 @@ import { MiniRenderer } from './miniRenderer'
 import { LivePortrait } from './portrait'
 import { SpeakerIconCache, speakerStyle } from './speakerIcons'
 import { PAUSE_DEFAULT_TAB, SETTING_ROWS, filterHintsForArms, nextPauseTab, settingsKey, type PauseTab, type SettingRow } from './hudLogic'
-import { FPS_CAPS, QUALITY_LABELS, QUALITY_LEVELS, type FpsCap, type GraphicsPrefs, type QualityLevel } from '../../render/quality'
+import { FPS_CAPS, MUSIC_LEVELS, QUALITY_LABELS, QUALITY_LEVELS, type FpsCap, type GraphicsPrefs, type MusicLevel, type QualityLevel } from '../../render/quality'
 import { DEFAULT_THEME, HUD_THEMES, normalizeTheme, patternDataUri, themeClass, themeFromText, type HudTheme, type PatternName } from './themes'
 import { toTouchText } from '../../player/touchLogic'
 import {
@@ -90,8 +90,22 @@ const FPS_DESC: Record<FpsCap, string> = {
   60: '1 秒に 60 回描きます。動きがなめらかです。',
 }
 
+const MUSIC_LABELS: Record<MusicLevel, string> = { 0: '切', 1: '小', 2: '中', 3: '大' }
+const MUSIC_DESC: Record<MusicLevel, string> = {
+  0: '音楽を鳴らしません。',
+  1: '音楽を小さく鳴らします。',
+  2: '時代ごとの音楽を鳴らします。iPhone はマナーモードのあいだ鳴りません。',
+  3: '音楽を大きく鳴らします。',
+}
+
+/** 設定の値（data-v の文字） */
+function settingValue(row: SettingRow, p: GraphicsPrefs): string {
+  return row === 'quality' ? p.quality : row === 'fps' ? String(p.fps) : String(p.music)
+}
+
 function settingOpts(row: SettingRow): string {
-  const opts: Array<[string, string]> = row === 'quality' ? QUALITY_LEVELS.map((q) => [q, QUALITY_LABELS[q]]) : FPS_CAPS.map((f) => [String(f), FPS_LABELS[f]])
+  const opts: Array<[string, string]> =
+    row === 'quality' ? QUALITY_LEVELS.map((q) => [q, QUALITY_LABELS[q]]) : row === 'fps' ? FPS_CAPS.map((f) => [String(f), FPS_LABELS[f]]) : MUSIC_LEVELS.map((m) => [String(m), MUSIC_LABELS[m]])
   return opts.map(([v, label]) => `<span class="nx-set-opt" data-row="${row}" data-v="${v}">${escapeHtml(label)}</span>`).join('')
 }
 
@@ -336,7 +350,7 @@ export class HudFuture {
   private menuOn = false
   private pauseTab: PauseTab = PAUSE_DEFAULT_TAB
   /** 設定タブ：いまの画質・フレームレートと、選んでいる項目 */
-  private graphics: GraphicsPrefs = { quality: 'high', fps: 60 }
+  private graphics: GraphicsPrefs = { quality: 'high', fps: 60, music: 2 }
   private setRow: SettingRow = SETTING_ROWS[0]
   /** 設定タブで画質・フレームレートを変えた（シェルが適用して、setGraphicsPrefs で戻す） */
   onGraphicsChange: ((p: GraphicsPrefs) => void) | null = null
@@ -487,12 +501,14 @@ export class HudFuture {
               <div class="nx-panel-note">キー設定は今後のバージョンで対応します</div>
             </div>
             <div class="nx-pane" data-pane="settings">
-              <div class="nx-panel-sub">画面の設定（この端末に保存します）</div>
+              <div class="nx-panel-sub">画面と音の設定（この端末に保存します）</div>
               <div class="nx-settings">
                 <div class="nx-set-row" data-row="quality"><span class="nx-set-name">画質</span><div class="nx-set-opts">${settingOpts('quality')}</div></div>
                 <div class="nx-set-desc" data-desc="quality"></div>
                 <div class="nx-set-row" data-row="fps"><span class="nx-set-name">フレームレート</span><div class="nx-set-opts">${settingOpts('fps')}</div></div>
                 <div class="nx-set-desc" data-desc="fps"></div>
+                <div class="nx-set-row" data-row="music"><span class="nx-set-name">音楽</span><div class="nx-set-opts">${settingOpts('music')}</div></div>
+                <div class="nx-set-desc" data-desc="music"></div>
               </div>
               <div class="nx-panel-note nx-set-note">スマホが熱くなるときは「省電力」と「30」を選んでください。</div>
             </div>
@@ -1240,7 +1256,9 @@ export class HudFuture {
         const row = o.dataset.row as SettingRow
         this.setRow = row
         const v = o.dataset.v ?? ''
-        this.changeGraphics(row === 'quality' ? { ...this.graphics, quality: v as QualityLevel } : { ...this.graphics, fps: Number(v) as FpsCap })
+        this.changeGraphics(
+          row === 'quality' ? { ...this.graphics, quality: v as QualityLevel } : row === 'fps' ? { ...this.graphics, fps: Number(v) as FpsCap } : { ...this.graphics, music: Number(v) as MusicLevel },
+        )
         return true
       }
       // 設定の枠の中（選択肢のすき間）をタップしても閉じない
@@ -1263,7 +1281,7 @@ export class HudFuture {
   }
 
   private changeGraphics(p: GraphicsPrefs): void {
-    const changed = p.quality !== this.graphics.quality || p.fps !== this.graphics.fps
+    const changed = p.quality !== this.graphics.quality || p.fps !== this.graphics.fps || p.music !== this.graphics.music
     this.graphics = { ...p }
     this.renderSettings()
     if (changed) this.onGraphicsChange?.({ ...p })
@@ -1273,12 +1291,12 @@ export class HudFuture {
     const pane = this.pause.querySelector<HTMLElement>('.nx-pane[data-pane="settings"]')
     if (!pane) return
     pane.querySelectorAll<HTMLElement>('.nx-set-opt').forEach((o) => {
-      const v = o.dataset.row === 'quality' ? this.graphics.quality : String(this.graphics.fps)
-      o.classList.toggle('on', o.dataset.v === v)
+      o.classList.toggle('on', o.dataset.v === settingValue(o.dataset.row as SettingRow, this.graphics))
     })
     pane.querySelectorAll<HTMLElement>('.nx-set-row').forEach((r) => r.classList.toggle('sel', !this.touch && r.dataset.row === this.setRow))
     el(pane, '.nx-set-desc[data-desc="quality"]').textContent = QUALITY_DESC[this.graphics.quality]
     el(pane, '.nx-set-desc[data-desc="fps"]').textContent = FPS_DESC[this.graphics.fps]
+    el(pane, '.nx-set-desc[data-desc="music"]').textContent = MUSIC_DESC[this.graphics.music]
   }
 
   private setPauseTab(t: PauseTab): void {

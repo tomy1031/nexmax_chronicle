@@ -120,6 +120,16 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 `renderer.info.memory` は移動のたびに新しいステージの分まで下がる（例：1726 年 約 137 geometries / 92 textures →
 2026 年 約 131 / 63 → 2086 年の仮ステージ 約 39 / 42）。
 
+## 起動の流れ（`main.ts`）
+
+1. `Pwa.register()`（`src/pwa/pwa.ts`）：Service Worker を登録。前に開いたときに新しい版の準備ができていれば、ここで切り替えて読み込み直す
+2. タイトル画面（`src/ui/title/`）：`titleLogic.ts`（セーブの要約・案内を出すかの判断。テストあり）・`titleScreen.ts`（画面）・
+   `titleNexmax.ts`（タイトル専用の小さな WebGL の 3D ネクマックス。始めるときに手放す）・`installGuide.ts`（ホーム画面への追加の案内）。
+   タイトルを見ている間に、ゲームのシェル（`game.ts`、物理などを含む大きいファイル）と始める時代のステージ（`registry.ts` の `preloadStage`）を読み込んでおく
+3. `startGame(app, ui, { mode })`：`continue`＝`?continue`、`new`＝`?newgame` と同じ
+
+開発用のパラメータ（`?stage=` `?spawn=` `?flags=` `?continue` `?newgame` `?shot=` `?nohud`）があるときはタイトルを出さない。
+
 ## URL パラメータ（開発・検証用）
 
 `?stage=1726|1970|2026|2086`・`?spawn=ID`・`?flags=met_matsui,gate_repaired,loop_count=2`（`name=false` で下ろす）・
@@ -137,7 +147,7 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 |---|---|---|---|
 | 環境遮蔽（N8AO） | なし | なし | あり（半分の解像度） |
 | ブルーム | なし（パスから外す） | あり | あり |
-| アンチエイリアス（SMAA） | なし | MEDIUM | HIGH |
+| アンチエイリアス（SMAA） | なし | HIGH | HIGH |
 | 影の解像度・ぼかし | 1024・1 | 1024・2 | 2048・3 |
 | 解像度の上限（CSS の画素あたり） | 0.85 | 1.0 | 1.25 |
 | 点光源（提灯など） | 2 | 4 | 6 |

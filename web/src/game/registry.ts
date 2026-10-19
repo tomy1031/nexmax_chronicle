@@ -14,6 +14,23 @@ export const STAGE_INFO: Record<StageKey, StageInfo> = {
 /** 起動時のステージ（URL の ?stage= も ?continue も無いとき）。1726年の縦切り試作をそのまま入口にしておく */
 export const DEFAULT_STAGE: StageKey = '2086'
 
+/**
+ * ステージのファイルを先に読み込んでおく（タイトル画面を見ている間に。作りはしない）。
+ * createStage と同じ import なので、あとで createStage したときはすぐ返る
+ */
+export function preloadStage(key: StageKey): Promise<unknown> {
+  switch (key) {
+    case '1726':
+      return import('../stages/edo1726/stage')
+    case '1970':
+      return import('../stages/expo1970/stage')
+    case '2026':
+      return import('../stages/namba2026/stage')
+    case '2086':
+      return import('./future2086Adapter')
+  }
+}
+
 export async function createStage(key: StageKey): Promise<Stage> {
   switch (key) {
     case '1726': {

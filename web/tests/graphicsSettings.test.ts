@@ -11,7 +11,8 @@ describe('画質の段階', () => {
     const { low, medium, high } = QUALITY_PRESETS
     expect([low.ao, medium.ao, high.ao]).toEqual([false, false, true])
     expect([low.bloom, medium.bloom, high.bloom]).toEqual([false, true, true])
-    expect([low.smaa, medium.smaa, high.smaa]).toEqual([null, 'medium', 'high'])
+    // 標準（スマホの既定）は描画解像度が低くギザギザが目立つので、SMAA は高画質と同じ HIGH
+    expect([low.smaa, medium.smaa, high.smaa]).toEqual([null, 'high', 'high'])
     expect(low.maxPixelRatio).toBeLessThan(medium.maxPixelRatio)
     expect(medium.maxPixelRatio).toBeLessThan(high.maxPixelRatio)
     expect(medium.shadowMapSize).toBeLessThan(high.shadowMapSize)

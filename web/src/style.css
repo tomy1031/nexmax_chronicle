@@ -179,3 +179,45 @@ html, body { margin: 0; height: 100%; background: #0b1426; overflow: hidden; }
 .loading-bar { margin: 1.2em auto 0; height: 10px; width: 100%; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .loading-fill { height: 100%; width: 0; background: linear-gradient(90deg, #2bd2ff, #8af0ff); box-shadow: 0 0 10px #5fe0ff; transition: width 0.25s; }
 .loading-msg { margin-top: 0.8em; font-size: 13px; opacity: 0.8; }
+
+/* ---------------------------------------------------------------- 起動直後（タイトルが出るまで。main.ts が外す） */
+#boot {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: linear-gradient(180deg, #0a1838, #17306a);
+  color: #5ee6ff;
+  font-family: var(--ui-font);
+  transition: opacity 0.3s;
+}
+#boot.done {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 3px solid rgba(94, 230, 255, 0.18);
+  border-top-color: #5ee6ff;
+  animation: boot-spin 1s linear infinite;
+}
+.boot-name {
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.3em;
+}
+@keyframes boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot-ring {
+    animation-duration: 3s;
+  }
+}

@@ -258,7 +258,7 @@ export const INTRO_OBJECTIVES: Record<IntroStep, Objective> = {
   attempt_night: { title: '夜の時代博覧祭', sub: '……また、空が' },
   confront: { title: '空の存在に、クローを撃とう', sub: '空へカメラを向けて J' },
   confide: { title: 'ソラに打ち明けよう', sub: '' },
-  records: { title: '記録の石標の QR を読もう', sub: '石標の前で F：QR を読む　君の記録は「2026年・なんば」' },
+  records: { title: '君を作った人の記録を探そう', sub: '石標の前で F：QR を読む　手がかりは「2026年・なんば」' },
   resonance: { title: '……鉱石が反応している！', sub: '' },
   travel: { title: '光の穴の向こうへ', sub: '' },
   returned: { title: 'ソラに会いに行こう', sub: '時代博覧祭の IDO 展示へ' },

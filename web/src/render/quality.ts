@@ -30,8 +30,9 @@ export type QualitySettings = {
 export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = {
   // Retina でも描画解像度は 1.25 倍まで・AO は半分の解像度（M1 実機で 25fps 前後しか出なかったため）
   high: { level: 'high', shadowMapSize: 2048, shadowRadius: 3, maxPixelRatio: 1.25, minPixelRatio: 0.7, ao: true, aoHalfRes: true, bloom: true, smaa: 'high', petals: 600, pointLights: 6, portraitFps: 20 },
-  // AO を切り、影と解像度を 1 段下げる（見た目の差は小さく、重さは半分ほど）
-  medium: { level: 'medium', shadowMapSize: 1024, shadowRadius: 2, maxPixelRatio: 1.0, minPixelRatio: 0.65, ao: false, aoHalfRes: true, bloom: true, smaa: 'medium', petals: 250, pointLights: 4, portraitFps: 12 },
+  // AO を切り、影と解像度を 1 段下げる（見た目の差は小さく、重さは半分ほど）。
+  // スマホは描画解像度が低い（CSS の画素以下まで下がる）ので、ふちのギザギザが目立ちやすい。SMAA は低い解像度ほど安いので HIGH にする
+  medium: { level: 'medium', shadowMapSize: 1024, shadowRadius: 2, maxPixelRatio: 1.0, minPixelRatio: 0.65, ao: false, aoHalfRes: true, bloom: true, smaa: 'high', petals: 250, pointLights: 4, portraitFps: 12 },
   // 後処理はかすみと色調だけ（ブルーム・アンチエイリアスなし）。解像度も少し下げる
   low: { level: 'low', shadowMapSize: 1024, shadowRadius: 1, maxPixelRatio: 0.85, minPixelRatio: 0.6, ao: false, aoHalfRes: true, bloom: false, smaa: null, petals: 120, pointLights: 2, portraitFps: 8 },
 }

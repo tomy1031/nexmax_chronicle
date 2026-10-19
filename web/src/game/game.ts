@@ -20,6 +20,7 @@ import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, sele
 import { CombatSystem } from '../combat/combatSystem'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
+import { setOutlineViewport } from '../world/nexmax/materials'
 import { Hud, LoadingOverlay, type Hint } from '../ui/hud'
 import { TimelineState } from '../core/timelineState'
 import { StoryState } from '../core/storyFlags'
@@ -163,12 +164,15 @@ export class Game {
   /** HUD などの重ね物の親（#ui） */
   private readonly uiEl: HTMLDivElement
 
-  constructor(app: HTMLDivElement, ui: HTMLDivElement) {
+  constructor(app: HTMLDivElement, ui: HTMLDivElement, start: StartOptions = {}) {
     this.app = app
     this.uiEl = ui
     const params = readParams()
     this.fixedRatio = params.fixedRatio
     this.gp = parseGameParams(location.search)
+    // タイトル画面で選んだこと（URL の ?continue / ?newgame と同じ扱い）
+    if (start.mode === 'continue') this.gp.continue = true
+    if (start.mode === 'new') this.gp.newGame = true
     this.urlp = new URLSearchParams(location.search)
     // スマホ（指が主な入力の端末）だけタッチ操作。画質の初期値もこれで決める（スマホは「標準・30」）
     const useTouch = shouldUseTouch({
@@ -338,7 +342,11 @@ export class Game {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h)
     this.post.setSize(w, h)
+    // 輪郭線の最小の太さ（画素）を描画の解像度で換算する（スマホで解像度が下がっても途切れない）
+    setOutlineViewport(this.renderer.getDrawingBufferSize(this.bufSize).y)
   }
+
+  private readonly bufSize = new THREE.Vector2()
 
   // ================================================================ ステージの読み込み・解放
 
@@ -1149,7 +1157,10 @@ export class Game {
   }
 }
 
-export async function startGame(app: HTMLDivElement, ui: HTMLDivElement): Promise<void> {
-  const g = new Game(app, ui)
+/** タイトル画面から始めるとき：continue＝セーブから再開、new＝セーブを消して最初から */
+export type StartOptions = { mode?: 'continue' | 'new' }
+
+export async function startGame(app: HTMLDivElement, ui: HTMLDivElement, start: StartOptions = {}): Promise<void> {
+  const g = new Game(app, ui, start)
   await g.boot()
 }

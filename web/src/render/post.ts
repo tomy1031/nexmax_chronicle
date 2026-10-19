@@ -155,7 +155,7 @@ export type PostChain = {
  * 後処理の組み立て。画質で次のように変える（重い順）：
  * ・AO（N8AO）：高画質だけ。半透明の物をもう一度描く処理（transparencyAware）は使わない
  * ・ブルーム：省電力では入れない（強さ 0 にしても縮小・拡大の 17 回は描いてしまうので、パスから外す）
- * ・SMAA：高画質は HIGH、標準は MEDIUM、省電力は無し
+ * ・SMAA：高画質・標準は HIGH（標準はスマホの既定で解像度が低いため）、省電力は無し
  * かすみと色調はいつも 1 回の全画面処理にまとめる
  */
 export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, q: QualitySettings): PostChain {

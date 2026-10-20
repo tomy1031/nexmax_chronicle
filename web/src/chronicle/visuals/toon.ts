@@ -31,7 +31,8 @@ export function personToonRamp(): THREE.DataTexture {
 }
 
 export function createPersonMaterial(o: ToonOpts = {}): THREE.MeshToonMaterial {
-  const m = createToonMaterial({ selfLight: 0.12, ...o })
+  // 暗いコートも夜の空との境界を保つ、ごく弱い空色の回り込み。
+  const m = createToonMaterial({ ...o, selfLight: o.selfLight ?? 0.12, rim: o.rim ?? '#7788a8', rimK: o.rimK ?? (o.rim ? 1 : 0.06) })
   m.gradientMap = personToonRamp()
   const base = m.onBeforeCompile
   m.onBeforeCompile = (shader, renderer) => {

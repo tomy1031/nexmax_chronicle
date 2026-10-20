@@ -777,7 +777,7 @@ function dressChanda(c: BuildCtx): void {
   ps.add(sheath, SHAPES.capsule, '#6b3f22', T(0, -bl * 0.5, 0, 0, 0, 0, 0.022, bl * 0.33, 0.012))
   ps.add(sheath, SHAPES.cone, gold, T(0, -bl - 0.012, 0, Math.PI, 0, 0, 0.022, 0.045, 0.014))
   // 刃（別の材質：アルンの青い石）
-  const bmat = createToonMaterial({ selfLight: 0.35, rim: '#bce7ff', rimK: 0.45, line: '#1c4a6a' })
+  const bmat = createPersonMaterial({ selfLight: 0.22, rim: '#bce7ff', rimK: 0.35, line: '#1c4a6a' })
   c.mats.push(bmat)
   const bps = new PartSet()
   const blade = new THREE.Group()
@@ -1503,9 +1503,24 @@ export function createBed(): { root: THREE.Group; hipSpot: THREE.Vector3; dispos
   ps.add(root, SHAPES.capsule, '#ffffff', T(0, top + 0.12, L / 2 - 0.22, 0, 0, Math.PI / 2, 0.11, 0.24, 0.16))
   ps.add(root, SHAPES.capsule, '#f2e8ee', T(0, top + 0.2, L / 2 - 0.32, -0.6, 0, Math.PI / 2, 0.1, 0.22, 0.14))
   // ひざ掛け（足の上をおおう、ふっくら）
-  const blanket = new RoundedBoxGeometry(W * 1.02, 0.15, L * 0.76, 4, 0.065)
-  ps.add(root, blanket, '#d9b6c2', T(0, top + 0.04, -L * 0.12))
-  for (let i = 0; i < 3; i++) ps.add(root, new RoundedBoxGeometry(0.055, 0.012, 1.25 - i * 0.12, 3, 0.005), '#e9cbd4', T((i - 1) * 0.23, top + 0.119, -0.24, 0, (i - 1) * 0.04, 0), false)
+  const blanketRise = (x: number, z: number) => 0.2 * THREE.MathUtils.smoothstep(-z, -0.1, 0.45) * Math.exp(-Math.pow((z + 0.2) / 0.6, 4) - Math.pow(x / 0.4, 4))
+  const drape = (g: THREE.BufferGeometry, x0: number, z0: number) => {
+    // 丸箱は中央に大きな平面を持つため、先に分割して布の中央まで曲げる。
+    const cloth = new TessellateModifier(0.09, 6).modify(g)
+    g.dispose()
+    const p = cloth.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + blanketRise(p.getX(i) + x0, p.getZ(i) + z0))
+    cloth.computeVertexNormals()
+    return cloth
+  }
+  // 足を覆う中央だけを持ち上げ、両端は寝具へ落とす。
+  const blanket = drape(new RoundedBoxGeometry(W * 1.02, 0.15, L * 0.76, 5, 0.065), 0, -L * 0.12)
+  ps.add(root, blanket, '#d9b6c2', T(0, top + 0.04, -L * 0.12), false)
+  for (let i = 0; i < 3; i++) {
+    const x = (i - 1) * 0.23
+    const fold = drape(new RoundedBoxGeometry(0.055, 0.012, 1.25 - i * 0.12, 5, 0.005), x, -0.24)
+    ps.add(root, fold, '#e9cbd4', T(x, top + 0.119, -0.24), false)
+  }
   const mat = createToonMaterial({ line: '#3a2a1a' })
   ps.bake(mat, { name: 'bed' })
   return {

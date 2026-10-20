@@ -4,6 +4,7 @@
 //   act=名前              はじめに 1 回うごかす（view ごとの動き。画面右上のボタンと同じ）
 //   at=秒                 その秒まで進めてから止める（撮影用。t も固定）
 //   walk=1                people：その場で歩く / pose=… people：全員のポーズ / only=preset 1 人だけ大きく
+//   blade=whole|broken|none  people：刃の状態（折れ口の撮影にも）
 //   night=1|0             夜（既定は view ごと）
 //   cam=x,y,z&look=x,y,z&fov=度    好きな位置から
 //   quality=low|medium|high / nohud
@@ -129,7 +130,8 @@ function peopleView(c: ViewCtx): View {
     }
     if (e.mask === false) e.p.setMask(false)
     if (e.expr) e.p.setExpression(e.expr as never)
-    if (e.blade) e.p.setBlade(e.blade as never)
+    const blade = e.blade ?? urlp.get('blade')
+    if (blade) e.p.setBlade(blade as never)
     if (e.p.preset === 'towaMother' && (forcePose ?? e.pose) === 'sitBed') {
       bed = createBed()
       bed.root.position.set(e.x, 0, (e.z ?? 0) + 0.0)
@@ -180,7 +182,14 @@ function lineupView(c: ViewCtx): View {
   c.tag(v3(nx.root.position.x, 1.9, 0), 'ネクマックス')
   // 髪飾りを含む外形の高さも揃え、照明と材質を等条件で見る。
   for (const p of people) {
-    const bounds = new THREE.Box3().setFromObject(p.root)
+    const bounds = new THREE.Box3()
+    p.root.updateMatrixWorld(true)
+    // 杖や手に持つ物の端を足元と誤認しないよう、人物の結合メッシュだけで測る。
+    p.root.traverse(o => {
+      if (!(o instanceof THREE.Mesh) || o.name !== p.preset) return
+      o.geometry.computeBoundingBox()
+      if (o.geometry.boundingBox) bounds.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld))
+    })
     const k = 1.5 / (bounds.max.y - bounds.min.y)
     p.root.scale.setScalar(k)
     p.root.position.y = -bounds.min.y * k

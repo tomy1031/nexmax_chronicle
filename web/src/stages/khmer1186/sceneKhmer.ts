@@ -293,7 +293,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
       if (!night) skyCrack.setOpen(0)
       fireflies.setOpacity(night ? 0.9 : 0)
       scar.mist.setColor(night ? '#2a1640' : '#120e18')
-      scar.mist.setOpacity(night ? 0.7 : 0.55)
+      scar.mist.setOpacity(night ? 0.8 : 0.68)
       turntable.setSunlight(t === 'afternoon')
     },
     attachPhysics(phys: Physics) {
@@ -1225,7 +1225,7 @@ function buildScar(c: KCtx): { mist: Drift } {
   c.root.add(mesh)
   // ふちの切り株と、半分かじられた木
   const rng = c.rng
-  for (let k = 0; k < 70; k++) {
+  for (let k = 0; k < 120; k++) {
     const a = S.a0 + rng() * (S.a1 - S.a0)
     const side = rng() < 0.5 ? -1 : 1
     const r = S.r + side * (S.width * 0.5 + rng() * 3)
@@ -1233,7 +1233,7 @@ function buildScar(c: KCtx): { mist: Drift } {
     const z = S.cz + Math.sin(a) * r
     const h = 0.6 + rng() * 1.6
     c.bf.add(new THREE.CylinderGeometry(0.35, 0.45, h, 6), c.m.bark, M(x, h / 2 - 0.3, z), { tint: '#4a3e36' })
-    if (rng() < 0.35) {
+    if (rng() < 0.6) {
       // 切り口が平らな、かじられた葉のかたまり
       c.bf.add(new THREE.SphereGeometry(3 + rng() * 2, 8, 5, 0, Math.PI), c.m.canopy, M(x, 5.5, z, 0, a + (side > 0 ? 0 : Math.PI), 0, 1, 0.7, 1), { tint: '#3a5a30' })
     }
@@ -1253,7 +1253,7 @@ function buildScar(c: KCtx): { mist: Drift } {
     const r = S.r + (rng() - 0.5) * S.width * 0.9
     base.push(v(S.cx + Math.cos(a) * r, -S.depth + rng() * 2, S.cz + Math.sin(a) * r))
   }
-  const mist = new Drift(base, { size: 12, rise: 11, color: '#120e18', opacity: 0.55, speed: 0.035, seed: 66 })
+  const mist = new Drift(base, { size: 15, rise: 14, color: '#120e18', opacity: 0.68, speed: 0.035, seed: 66 })
   mist.points.name = 'khmer_scar_mist'
   return { mist }
 }

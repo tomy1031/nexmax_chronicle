@@ -846,19 +846,27 @@ function buildGallery(c: KCtx): void {
     box(c, xr, G.ridge + 0.05, (z0 + z1) / 2, 0.42, 0.3, len, c.m.sandstone, { tint: shade(KC.sand, 1.04), texM: 2 })
     box(c, xa + 0.1, ys + 0.05, (z0 + z1) / 2, 0.5, 0.32, len, c.m.sandstone, { tint: shade(KC.sand, 1.06), texM: 2 })
   }
-  // 浮き彫りの板（壁の西の面に貼る）
-  const relief = (z0: number, z1: number, mat: THREE.Material, uvScale: [number, number]) => {
+  // 浮き彫りの板（壁の西の面に貼る）。h は板の高さ、y0 は下の端
+  const relief = (z0: number, z1: number, mat: THREE.Material, uvScale: [number, number], h = G.wallH - 0.7, y0 = fy + 0.35, dx = 0) => {
     if (z1 - z0 < 1) return
-    const g = new THREE.PlaneGeometry(z1 - z0, G.wallH - 0.7)
+    const g = new THREE.PlaneGeometry(z1 - z0, h)
     g.rotateY(-Math.PI / 2)
-    c.b.add(g, mat, M(G.xWall - 0.012, fy + 0.35 + (G.wallH - 0.7) / 2, (z0 + z1) / 2), { tint: '#ffffff', uv: 'scale', uvScale, cast: false })
+    c.b.add(g, mat, M(G.xWall - 0.012 - dx, y0 + h / 2, (z0 + z1) / 2), { tint: '#ffffff', uv: 'scale', uvScale, cast: false })
   }
+  // 物語の浮き彫り（16:9 の一枚絵）：門を入ってすぐ南。少し浮かせた額の中に
   const RS = K.RELIEF_STORY
-  relief(RS.z0, RS.z1, c.m.reliefStory, [1, 1])
-  const bandLen = 8.8
-  relief(G.z0 + 0.6, gz0 - 0.4, c.m.reliefBand, [(gz0 - 0.4 - G.z0 - 0.6) / bandLen, 1])
-  relief(gz1 + 0.4, RS.z0 - 0.2, c.m.reliefBand, [(RS.z0 - 0.2 - gz1 - 0.4) / bandLen, 1])
-  relief(RS.z1 + 0.2, G.z1 - 0.6, c.m.reliefBand, [(G.z1 - 0.6 - RS.z1 - 0.2) / bandLen, 1])
+  const storyH = G.wallH - 0.2
+  const storyW = storyH * (16 / 9) * (c.m.art.story ? 1 : 2.2)
+  const sz = (RS.z0 + RS.z1) / 2
+  boxAB(c, G.xWall - 0.12, G.xWall, fy + 0.02, fy + G.wallH - 0.02, sz - storyW / 2 - 0.25, sz + storyW / 2 + 0.25, c.m.sandstone, { tint: shade(KC.sand, 1.06), texM: 2 })
+  relief(sz - storyW / 2, sz + storyW / 2, c.m.reliefStory, [1, 1], storyH, fy + 0.1, 0.12)
+  // 帯の浮き彫り（アプサラ・はす・ナーガ）
+  const bandH = G.wallH - 0.7
+  const bandLen = bandH * 2
+  const band = (z0: number, z1: number) => relief(z0, z1, c.m.reliefBand, [(z1 - z0) / bandLen, 1], bandH)
+  band(G.z0 + 0.6, gz0 - 0.4)
+  band(gz1 + 0.4, sz - storyW / 2 - 0.4)
+  band(sz + storyW / 2 + 0.4, G.z1 - 0.6)
   // 門（ゴープラ）：通り抜けの道・両わきの壁・上の段と小さな塔
   const x0 = P.x - 3.6
   const x1 = P.x + 3.6

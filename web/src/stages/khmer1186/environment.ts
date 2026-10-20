@@ -87,7 +87,7 @@ export const KHMER_ENVIRONMENTS: Record<TimeOfDay, KhmerEnvironment> = {
     hdri: './hdri/kloofendal_48d_partly_cloudy_puresky_1k.hdr',
     envIntensity: 0.75,
     fog: { color: '#dcdccc', density: 0.0016 },
-    grade: { exposure: 0.95, saturation: 1.16, contrast: 1.1, vignette: 0.28 },
+    grade: { exposure: 0.95, saturation: 1.08, contrast: 1.1, vignette: 0.28 },
     bloom: { intensity: 1.1, threshold: 0.95 },
     haze: { near: '#f2e6cc', far: '#b8d0e8', density: 0.003, start: 70, falloff: 0.028, max: 0.55 },
   },

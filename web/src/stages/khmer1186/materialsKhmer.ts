@@ -2,7 +2,8 @@
 // 静的な物は Batch で頂点カラー（色の違い）付きに結合するので、多くは vertexColors=true（色はタイントで付ける）。
 import * as THREE from 'three'
 import { makeFoliage, uTime } from '../../render/materials'
-import { paintBark, paintLeafCard, paintNoiseNormal, tex } from '../../render/textures'
+import { heightToNormal, paintBark, paintLeafCard, paintNoiseNormal, tex } from '../../render/textures'
+import { V7_ART, V7_TEXTURES } from '../../chronicle/art'
 import { createWaterMaterial } from '../../world/edo/water'
 import {
   GROUND_AREA,
@@ -100,13 +101,53 @@ function makeGround(map: THREE.Texture, detail: THREE.Texture): THREE.MeshStanda
 
 export type KhmerMaterials = Awaited<ReturnType<typeof createKhmerMaterials>>
 
+/** 絵の画像（web/public/textures/story/v7。Codex の画像生成）を読む。読めなければ null（手続きの絵で代用） */
+async function loadArt(url: string, aniso: number, repeat = true): Promise<THREE.Texture | null> {
+  try {
+    const t = await loader.loadAsync(url)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.wrapS = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping
+    t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping
+    t.anisotropy = aniso
+    t.generateMipmaps = true
+    t.minFilter = THREE.LinearMipmapLinearFilter
+    return t
+  } catch (e) {
+    console.warn(`[khmer] ${url} を読めないので手続きの絵で代用します`, e)
+    return null
+  }
+}
+
+/** 絵から、明るさを高さとみなした法線マップ（石積みの目地・浮き彫りのでこぼこ）。size に縮めて計算 */
+function normalFromImage(img: CanvasImageSource & { width: number; height: number }, size: number, strength: number, aniso: number): THREE.Texture {
+  const w = size
+  const h = Math.max(4, Math.round((size * img.height) / img.width))
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const g = c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D
+  g.drawImage(img, 0, 0, w, h)
+  const d = g.getImageData(0, 0, w, h).data
+  const H = new Float32Array(w * h)
+  for (let i = 0; i < H.length; i++) H[i] = (d[i * 4] * 0.3 + d[i * 4 + 1] * 0.55 + d[i * 4 + 2] * 0.15) / 255
+  return tex(heightToNormal(H, w, h, strength), false, aniso)
+}
+
 export async function createKhmerMaterials(aniso: number) {
-  const [tiles, woodP, planksP] = await Promise.all([loadPBR('large_grey_tiles', aniso), loadPBR('rough_wood', aniso), loadPBR('weathered_brown_planks', aniso)])
+  const [tiles, woodP, planksP, sandArt, bandArt, storyArt] = await Promise.all([
+    loadPBR('large_grey_tiles', aniso),
+    loadPBR('rough_wood', aniso),
+    loadPBR('weathered_brown_planks', aniso),
+    loadArt(V7_TEXTURES.khmerSandstone, aniso),
+    loadArt(V7_TEXTURES.khmerReliefBand, aniso),
+    loadArt(V7_ART.relief1186, aniso, false),
+  ])
   const noiseN = tex(paintNoiseNormal(256, 10, 2.2), false, aniso)
-  const ashlar = paintAshlar()
+  // 砂岩の石積み・浮き彫りは絵の画像を使う（読めなかったときだけキャンバスで描く）
+  const ashlar = sandArt ? null : paintAshlar()
   const later = paintLaterite()
-  const story = paintStoryRelief()
-  const proc = paintProcessionRelief()
+  const story = storyArt ? null : paintStoryRelief()
+  const proc = bandArt ? null : paintProcessionRelief()
   const thatchP = paintThatch()
   const weaveP = paintWeave()
   const kramaP = paintKrama()
@@ -117,13 +158,20 @@ export async function createKhmerMaterials(aniso: number) {
   const barkP = paintBark()
 
   /** 砂岩（切り石の段）。色はタイントで（灰色がかった黄土色・桃色がかった砂岩） */
-  const sandstone = std({ map: tex(ashlar.color, true, aniso), normalMap: tex(ashlar.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.92 })
+  // 絵の石はもう色がついているので、タイント（黄土色）の色みを打ち消す（灰色の石はほぼ灰色に）
+  const sandstone = sandArt
+    ? std({ map: sandArt, normalMap: normalFromImage(sandArt.image as HTMLImageElement, 512, 2.4, aniso), normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.92, color: new THREE.Color(1.0, 1.25, 1.8) })
+    : std({ map: tex(ashlar!.color, true, aniso), normalMap: tex(ashlar!.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.92 })
   /** 舗装・上の台（大きな平たい石） */
   const paving = pbr(tiles, { color: new THREE.Color(1.18, 1.06, 0.9) })
   const laterite = std({ map: tex(later.color, true, aniso), normalMap: tex(later.normal as HTMLCanvasElement, false, aniso), roughness: 0.95 })
-  const reliefStory = std({ map: tex(story.color, true, aniso), normalMap: tex(story.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.9 })
+  const reliefStory = storyArt
+    ? std({ map: storyArt, normalMap: normalFromImage(storyArt.image as HTMLImageElement, 640, 2.0, aniso), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.9 })
+    : std({ map: tex(story!.color, true, aniso), normalMap: tex(story!.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.9 })
   reliefStory.map!.wrapS = THREE.ClampToEdgeWrapping
-  const reliefBand = std({ map: tex(proc.color, true, aniso), normalMap: tex(proc.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(1.1, 1.1), roughness: 0.9 })
+  const reliefBand = bandArt
+    ? std({ map: bandArt, normalMap: normalFromImage(bandArt.image as HTMLImageElement, 512, 2.4, aniso), normalScale: new THREE.Vector2(1.0, 1.0), roughness: 0.9 })
+    : std({ map: tex(proc!.color, true, aniso), normalMap: tex(proc!.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(1.1, 1.1), roughness: 0.9 })
   const thatch = std({ map: tex(thatchP.color, true, aniso), normalMap: tex(thatchP.normal as HTMLCanvasElement, false, aniso), roughness: 1, side: THREE.DoubleSide })
   const weave = std({ map: tex(weaveP.color, true, aniso), roughness: 0.9, normalMap: noiseN, normalScale: new THREE.Vector2(0.4, 0.4) })
   const wood = pbr(woodP, { color: new THREE.Color(0.95, 0.82, 0.68) })
@@ -183,7 +231,7 @@ export async function createKhmerMaterials(aniso: number) {
     water,
   }
   for (const [k, m] of Object.entries(named)) (m as THREE.Material).name = `khmer_${k}`
-  return named
+  return { ...named, art: { story: storyArt !== null, band: bandArt !== null, sandstone: sandArt !== null } }
 }
 
 /** 色（砂岩・ラテライト・木・屋根など。タイントに使う） */

@@ -20,6 +20,7 @@ import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, sele
 import { CombatSystem } from '../combat/combatSystem'
 import { ChronoSystem } from '../chronicle/chrono'
 import { lightsLeft, riftClawUnlocked, v7Started } from '../chronicle/progress'
+import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
 import { setOutlineViewport } from '../world/nexmax/materials'
@@ -214,6 +215,8 @@ export class Game {
     this.hud.setPortraitFps(this.q.portraitFps)
     this.hud.setGraphicsPrefs(this.prefs)
     this.hud.onGraphicsChange = (p) => this.setGraphics(p)
+    // 物語 v7 の人物の会話の顔（イラスト）
+    applyV7Portraits(this.hud)
     if (this.gp.nohud) ui.style.display = 'none'
     this.input = createInput(this.renderer.domElement)
     // つないだキーボードも使えるよう割り当てを足す

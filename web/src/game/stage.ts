@@ -28,6 +28,7 @@ import type { RiftFx } from './riftFx'
 import type { CineShot } from './cinematic'
 import type { ObjectiveMark } from './objectiveMarker'
 import type { CombatSystem } from '../combat/combatSystem'
+import type { ChronoSystem } from '../chronicle/chrono'
 
 export type { StageKey, TravelRequest, CineShot, ObjectiveMark }
 
@@ -96,6 +97,8 @@ export type StageRuntime = {
   claw: ClawSystem
   /** 戦闘（体力・攻撃・敵）。ステージが enabled にして敵を出す（combat/combatSystem.ts） */
   combat: CombatSystem
+  /** 時空裂きのNMクロー（物語 v7：止める・裂く。chronicle/chrono.ts）。ステージが対象を add する */
+  chrono: ChronoSystem
   phys: Physics
   /** 主人公の見た目（シェルが持つ。ステージは解放しない） */
   nexmax: Character

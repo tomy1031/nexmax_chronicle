@@ -9,6 +9,7 @@
 // 描画・DOM には依存しない純粋なロジック。
 
 import { Emitter } from "./emitter";
+import { V7_FLAGS } from "../chronicle/progress";
 import { BOOL_FLAG_NAMES, TimelineState, type BoolFlagName } from "./timelineState";
 
 export const STORY_VERSION = 1;
@@ -58,6 +59,8 @@ export const STORY_BOOL_FLAGS = [
   "expo_child_saved", // 1970年 寄り道：竹林の入口で欠けに囲まれた迷子の子を、親のところへ帰した
   "expo_hat_returned", // 1970年 寄り道：ロープウェイの係員の帽子を取ってあげた
   "expo_reported", // 2086年 11章の前：1970年の錨をほどいたことをソラに話した
+  // 物語 v7（docs/物語_v7_時を裂く爪.md）：chronicle/progress.ts の V7_FLAGS（v7_ で始まる）
+  ...V7_FLAGS,
 ] as const;
 
 export type StoryBoolFlag = (typeof STORY_BOOL_FLAGS)[number];

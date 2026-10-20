@@ -156,6 +156,7 @@ const THEME_PATTERNS: Record<HudTheme, { main: [PatternName, string]; sub: [Patt
   '2026': { main: ['grid', '#8ff5ea'], sub: ['grid', '#ffffff'] },
   '1726': { main: ['asanoha', '#f2c662'], sub: ['seigaiha', '#f2c662'] },
   '1970': { main: ['shippo', '#ffb066'], sub: ['grid', '#7fe8dc'] },
+  '1186': { main: ['shippo', '#e9c46a'], sub: ['seigaiha', '#7fd8b0'] },
 }
 
 /** ルート要素にテーマのクラスと模様の CSS 変数を付ける（HUD と読み込み画面で共用） */
@@ -249,6 +250,7 @@ function armRingSvg(side: 'left' | 'right'): string {
 const PART_DESC: Record<string, string> = {
   つかむNMClaw: 'ワイヤーを射出して対象をつかむ。射程 約10m。軽い物は手元へ、固定された金具へは自分が移動、仕掛けはその場で保持。小さい敵は引き寄せ、大きい敵へは飛び込む。',
   はじくNMClaw: '電気で爪を一瞬だけ弾き、前へ衝撃を飛ばす。ひび割れた壁を壊し、敵をよろけさせ、盾や装甲を割る。1970年に佐伯ミチが組み上げた。',
+  時空裂きのNMクロー: 'NMクローの先に、源兵衛さんの「時を裂く爪」をはめたもの。つかむ・引く・ぶら下がるはそのまま。J で、動いている物を少しのあいだ止める（爪の先が物を時の流れない裏側へさしこむ）・空中のゆらぎを裂いて裏側への切れ目をひらく・裏側にしかない物（黒い手など）を裂く。',
 }
 
 export class HudFuture {
@@ -268,6 +270,10 @@ export class HudFuture {
   private readonly hpBox: HTMLDivElement
   private readonly energy: HTMLDivElement
   private readonly energyFill: HTMLDivElement
+  /** 物語 v7 の背中の石の光のつぶ（7 つ）。null の間は出さない */
+  private readonly lightsBox: HTMLDivElement
+  private readonly lightDots: HTMLElement[]
+  private lightsN: number | null = null
   private readonly era: HTMLDivElement
   // 右上
   private readonly objective: HTMLDivElement
@@ -395,6 +401,7 @@ export class HudFuture {
           <div class="nx-hp"><div class="nx-frame-host" data-frame="bar"></div><div class="nx-hearts" aria-label="体力">${`<span class="nx-heart">${HEART_SVG}</span>`.repeat(HP_MAX)}</div></div>
           <div class="nx-micro nx-micro-hp"><span>NX-01 · VITAL</span><i class="nx-barcode"></i></div>
           <div class="nx-energy"><div class="nx-frame-host" data-frame="bar"></div><span class="nx-crystal">${CRYSTAL_SVG}</span><div class="nx-gauge"><div class="nx-gauge-fill"></div><div class="nx-gauge-seg"></div></div></div>
+          <div class="nx-lights" hidden><div class="nx-frame-host" data-frame="bar"></div><span class="nx-crystal">${CRYSTAL_SVG}</span><span class="nx-lights-label">光のつぶ</span><div class="nx-light-row" aria-label="光のつぶ">${'<i class="nx-light"></i>'.repeat(7)}</div></div>
         </div>
         <div class="nx-portrait">
           <div class="nx-pf-glow"></div>
@@ -554,6 +561,8 @@ export class HudFuture {
     this.hpBox = el(r, '.nx-hp')
     this.energy = el(r, '.nx-energy')
     this.energyFill = el(r, '.nx-gauge-fill')
+    this.lightsBox = el(r, '.nx-lights')
+    this.lightDots = Array.from(r.querySelectorAll<HTMLElement>('.nx-light'))
     this.era = el(r, '.nx-era-text')
     // 右上
     this.objective = el(r, '.nx-objective')
@@ -824,6 +833,26 @@ export class HudFuture {
     this.energyV = c
     this.energyFill.style.transform = `scaleX(${c.toFixed(3)})`
     this.energy.classList.toggle('full', c >= 0.999)
+  }
+
+  /**
+   * 背中の石の光のつぶ（物語 v7。0〜7。null で非表示）。減ったつぶははじけて消え、顔の縁が光る。
+   * シェルがフラグ（chronicle/progress.ts lightsLeft）から毎フレーム渡す（同じ数なら何もしない）
+   */
+  setLights(n: number | null): void {
+    if (n === this.lightsN) return
+    const prev = this.lightsN
+    this.lightsN = n
+    const show = n !== null
+    if (this.lightsBox.hidden === show) this.lightsBox.hidden = !show
+    this.root.classList.toggle('nx-has-lights', show)
+    if (n === null) return
+    this.lightDots.forEach((d, i) => {
+      d.classList.toggle('off', i >= n)
+      if (prev !== null && n < prev && i >= n && i < prev) this.retrigger(d, 'lost')
+    })
+    this.lightsBox.classList.toggle('last', n <= 1)
+    if (prev !== null && n < prev) this.retrigger(this.lightsBox, 'spent')
   }
 
   setShot(label: string | null): void {

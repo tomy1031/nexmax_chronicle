@@ -5,6 +5,7 @@
 /** 時代ID。拠点（異次元拠点）は 0。 */
 export const ERA = {
   HUB: 0,
+  KHMER: 1186,
   EDO: 1726,
   EXPO: 1970,
   PRESENT: 2026,
@@ -14,13 +15,14 @@ export const ERA = {
 export type EraId = (typeof ERA)[keyof typeof ERA];
 
 export const ERA_HUB = ERA.HUB;
+export const ERA_KHMER = ERA.KHMER;
 export const ERA_EDO = ERA.EDO;
 export const ERA_EXPO = ERA.EXPO;
 export const ERA_PRESENT = ERA.PRESENT;
 export const ERA_FUTURE = ERA.FUTURE;
 
-/** 全時代ID（Godot の ERA_SCENES と同じ並び。1970 は中盤で追加）。 */
-export const ERA_IDS: readonly EraId[] = [ERA.EDO, ERA.PRESENT, ERA.FUTURE, ERA.HUB, ERA.EXPO];
+/** 全時代ID（Godot の ERA_SCENES と同じ並び。1970 は中盤で追加、1186 は物語 v7 の 11 章で追加）。 */
+export const ERA_IDS: readonly EraId[] = [ERA.EDO, ERA.PRESENT, ERA.FUTURE, ERA.HUB, ERA.EXPO, ERA.KHMER];
 
 export function isEraId(value: unknown): value is EraId {
   return ERA_IDS.includes(value as EraId);
@@ -28,6 +30,7 @@ export function isEraId(value: unknown): value is EraId {
 
 /** 場所の名前（HUD の「年代・場所」表示、移動中の文言に使う）。 */
 export const ERA_PLACES: Readonly<Record<EraId, string>> = {
+  [ERA.KHMER]: "クメールの都・アルンの寺",
   [ERA.EDO]: "大坂・仕掛け横丁",
   [ERA.EXPO]: "千里丘陵・万国博覧会",
   [ERA.PRESENT]: "なんば",
@@ -43,6 +46,7 @@ export interface EraTint {
 }
 
 export const ERA_TINTS: Readonly<Record<EraId, EraTint>> = {
+  [ERA.KHMER]: { r: 0.98, g: 0.82, b: 0.42 },
   [ERA.EDO]: { r: 1.0, g: 0.72, b: 0.38 },
   [ERA.EXPO]: { r: 1.0, g: 0.58, b: 0.26 },
   [ERA.PRESENT]: { r: 0.45, g: 0.8, b: 1.0 },

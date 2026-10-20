@@ -5,17 +5,18 @@
 //      → loading：読み込み画面の裏で古いステージを解放し、新しいステージを組み立ててシェーダを事前コンパイル
 //      → intro：裂け目が閉じて新しい時代が見える（時代カードを出す）→ idle
 // 移動は自由ではない：IDO（2086年の展示・2026年の QR・中盤はソラの羅針盤）か、鉱石に残った出発地点への帰還だけ。
+// 物語 v7（docs/ステージ設計_v1.md §8.3）：ソラのイドーのわっか（ido_ring）・2026年の路地のかんばん（ido_kanban）・夜明けの帰還（return）。
 
-export type StageKey = '1726' | '1970' | '2026' | '2086'
+export type StageKey = '1186' | '1726' | '1970' | '2026' | '2086'
 
-export const STAGE_KEYS: readonly StageKey[] = ['1726', '1970', '2026', '2086']
+export const STAGE_KEYS: readonly StageKey[] = ['1186', '1726', '1970', '2026', '2086']
 
 export function isStageKey(v: unknown): v is StageKey {
   return typeof v === 'string' && (STAGE_KEYS as readonly string[]).includes(v)
 }
 
-export function stageEra(k: StageKey): 1726 | 1970 | 2026 | 2086 {
-  return Number(k) as 1726 | 1970 | 2026 | 2086
+export function stageEra(k: StageKey): 1186 | 1726 | 1970 | 2026 | 2086 {
+  return Number(k) as 1186 | 1726 | 1970 | 2026 | 2086
 }
 
 export function eraStage(era: number): StageKey | null {
@@ -27,9 +28,10 @@ export function eraStage(era: number): StageKey | null {
  * 移動のきっかけ。
  * ido_exhibit：2086年のソラの IDO 展示（VR）／ido_qr：2026年の IDO の QR／
  * ido_compass：2086年のソラの IDO の羅針盤（針が振れた記録の石標の QR。中盤）／return：鉱石に残った出発地点へ帰る／
+ * ido_ring：v7 のソラのイドーのわっか（記録をうつすと、背中の石が道をひらく）／ido_kanban：v7 の 2026年の路地のかんばんに手をあてる／
  * debug：開発用（URL の ?stage= や検証）／load：セーブから再開
  */
-export type TravelCause = 'ido_exhibit' | 'ido_qr' | 'ido_compass' | 'return' | 'debug' | 'load'
+export type TravelCause = 'ido_exhibit' | 'ido_qr' | 'ido_compass' | 'ido_ring' | 'ido_kanban' | 'return' | 'debug' | 'load'
 
 export type TravelRequest = {
   to: StageKey
@@ -51,6 +53,8 @@ export function travelRule(from: StageKey | null, req: TravelRequest, f: TravelF
   if (req.cause === 'debug' || req.cause === 'load' || from === null) return ok()
   if (from === req.to) return ng('同じ時代へは移動できません')
   const route = `${from}>${req.to}`
+  const v7 = travelRuleV7(route, req, f)
+  if (v7) return v7
   switch (route) {
     case '2086>2026':
       // 最初の 2026年行き：ソラの IDO 展示で「NEXMAX の最初の記録」を選んだとき、鉱石が反応して偶然つながる
@@ -76,6 +80,37 @@ export function travelRule(from: StageKey | null, req: TravelRequest, f: TravelF
       return f('expo_anchor_cleared') ? ok() : ng('まだ帰れない（未来の塔の錨をほどこう）')
   }
   return ng(`${from}年から${req.to}年へは直接移動できません`)
+}
+
+/**
+ * 物語 v7 の道（docs/ステージ設計_v1.md §8.3）。v7 のきっかけ（ido_ring・ido_kanban）か、v7 の帰還の条件がそろっているときだけ判定し、
+ * それ以外は null（旧版の道の判定へ）。時間を渡れるのは背中の石の力だけ：わっか・かんばんは行き先の記録をうつすだけ。
+ */
+function travelRuleV7(route: string, req: TravelRequest, f: TravelFlags): TravelVerdict | null {
+  switch (route) {
+    case '2086>2026':
+      if (req.cause !== 'ido_ring') return null
+      // 5章：60年前の NEXTMAKE の記録で、目をさました石が道をひらく／8章：年代ダイヤルで、自分で行き先をえらぶ
+      if (f('v7_confided') && !f('v7_back1')) return ok()
+      if (f('v7_dial_seen') && !f('v7_back2')) return ok()
+      return ng('いまは、わっかの記録が本物の道にならない')
+    case '2026>1726':
+      if (req.cause !== 'ido_kanban') return null
+      return f('v7_search_done') ? ok() : ng('まだ、どの記録へ行けばいいかわからない')
+    case '1726>2086':
+      if (req.cause !== 'return') return ng('1726年からは、夜明けの帰還でしか戻れません')
+      return f('v7_claw_stored') ? ok() : ng('まだ帰れない（爪をほこらにおさめよう）')
+    case '2026>2086':
+      if (req.cause !== 'return' || !f('v7_dial_seen')) return null
+      return f('v7_shrine_saved') ? ok() : ng('まだ帰れない（ほこらを守りぬこう）')
+    case '2086>1186':
+      if (req.cause !== 'ido_ring') return ng('1186年へは、わっかの年代ダイヤルからしかつながりません')
+      return f('v7_towa_duel') && !f('v7_back3') ? ok() : ng('まだ、900年前へ行く理由がない')
+    case '1186>2086':
+      if (req.cause !== 'return') return ng('1186年からは、帰還でしか戻れません')
+      return f('v7_khmer_done') ? ok() : ng('まだ帰れない（アルンを守りぬこう）')
+  }
+  return null
 }
 
 // ------------------------------------------------------------------ 状態機械

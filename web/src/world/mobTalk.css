@@ -35,6 +35,15 @@
   --mob-acc: #3fe0cf;
 }
 
+/* 1186（クメールの都）：HUD の 1186 と同じ砂岩の金茶＋翡翠の緑 */
+.nx-mob-layer.nx-mob-1186 {
+  --mob-line: #e9c46a;
+  --mob-line-dim: rgba(233, 196, 106, 0.5);
+  --mob-glass-a: rgba(40, 70, 52, 0.74);
+  --mob-glass-b: rgba(14, 24, 18, 0.86);
+  --mob-acc: #5fd6ff;
+}
+
 /* 1726（江戸の大坂）：HUD の 1726 と同じ藍＋金、朱のさし色 */
 .nx-mob-layer.nx-mob-1726 {
   --mob-line: #f3c865;

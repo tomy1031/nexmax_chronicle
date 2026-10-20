@@ -43,6 +43,8 @@ export type ViewCtx = {
   tag(pos: THREE.Vector3, text: string): void
   setNight(on: boolean): void
   ground: THREE.Mesh
+  /** シェルの rt.sky・rt.sun・rt.post にあたるもの（環境の切りかえを試す） */
+  env: { sky: THREE.Mesh; sun: THREE.DirectionalLight; hemi: THREE.HemisphereLight; post: ReturnType<typeof createPost> }
 }
 
 export type View = {
@@ -228,11 +230,15 @@ async function main(): Promise<void> {
     tag: (pos, text) => tags.push({ pos: pos.clone(), text }),
     setNight,
     ground,
+    env: { sky, sun: rig.sun, hemi: rig.hemi, post },
   }
   const factory = VIEWS[viewName] ?? VIEWS.people
+  // 夜の view は先に夜にしておく（view の中で環境を覚えるものがあるため）
+  const preNight = urlp.has('night') ? urlp.get('night') === '1' : ['lamp', 'hands', 'slit', 'fx', 'ura', 'heart', 'shade'].includes(viewName)
+  setNight(preNight)
   const view = await factory(ctx)
   const night = urlp.has('night') ? urlp.get('night') === '1' : (view.night ?? false)
-  setNight(night)
+  if (night !== preNight) setNight(night)
   if (view.noGround) {
     ground.visible = false
     grid.visible = false

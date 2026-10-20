@@ -264,6 +264,10 @@ export class SignAtlas {
       this.y += this.rowH + gap
       this.rowH = 0
     }
+    if (this.y + h > this.size) {
+      console.warn('[signs] アトラスがいっぱいです', id)
+      return { u0: 0, v0: 0, u1: 0.01, v1: 0.01 }
+    }
     this.g.save()
     this.g.beginPath()
     this.g.rect(this.x, this.y, w, h)
@@ -275,6 +279,11 @@ export class SignAtlas {
     this.x += w + gap
     this.rowH = Math.max(this.rowH, h)
     return r
+  }
+
+  /** 使った高さ（px。アトラスの空きを確かめる） */
+  get usedHeight(): number {
+    return this.y + this.rowH
   }
 
   get(id: string): UVRect {

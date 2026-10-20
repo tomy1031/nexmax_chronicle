@@ -27,7 +27,7 @@ import { Pedestrians } from '../pedestrians'
 import type { NCtx } from '../kit'
 import { buildBackLot } from './backLot'
 import type { Shrine } from './shrine'
-import { buildClockShopSign, buildLabTerminal, buildNewKanbanDressing, buildStation, registerV7Art } from './townProps'
+import { buildClockShopSign, buildLabTerminal, buildNewKanbanDressing, buildPresidentBoard, buildStation, registerV7Art } from './townProps'
 import { KanbanSurge } from './kanbanSurge'
 import { ArmorSources } from './armorPlates'
 import { MorningProjection } from './morningProjection'
@@ -89,7 +89,8 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
   registerStreetArt(signs)
   const inner = new SignAtlas(2048)
   registerInteriorArt(inner)
-  registerV7Art(signs, inner)
+  registerV7Art(signs)
+  if (signs.usedHeight > signs.size || inner.usedHeight > inner.size) console.warn('[namba v7] 看板のアトラスがいっぱいです', signs.usedHeight, inner.usedHeight)
   const signTex = signs.texture(aniso)
   const innerTex = inner.texture(aniso)
   const signMat = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.55, metalness: 0.05, name: 'namba_signs' })
@@ -110,6 +111,7 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
   await yieldFrame()
   const nextmake = buildNextmake(c)
   buildLabTerminal(c)
+  buildPresidentBoard(c)
   const idos: Record<KanbanId, IdoMarker> = {
     a: buildIdo(c, KANBAN.a.pos, KANBAN.a.yaw),
     b: buildIdo(c, KANBAN.b.pos, KANBAN.b.yaw),

@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { M, rbox } from '../../../render/batch'
 import { box, boxAB, cyl, decal, sag, sign, type NCtx } from '../kit'
 import type { SignAtlas } from '../signs'
+import { makeCanvas } from '../../../render/textures'
 import { drawNextmakeMark } from '../signs'
 import { paintV7ConceptBoard } from './recordArt'
 import { CLOCK_SHOP, KANBAN, LAB, MEASURE, STATION } from './layoutV7'
@@ -62,7 +63,7 @@ function clockFace(g: CanvasRenderingContext2D, cx: number, cy: number, r: numbe
 }
 
 /** 看板・室内の絵を足す（signs は外のアトラス、inner は室内のアトラス。どちらも texture() を作る前に） */
-export function registerV7Art(signs: SignAtlas, inner: SignAtlas): void {
+export function registerV7Art(signs: SignAtlas): void {
   // ---- 時計屋の丸時計（両面で使う）と札
   signs.addCustom('v7_clockface', 256, 256, (g, x, y, w) => clockFace(g, x + w / 2, y + w / 2, w / 2 - 2, '#2e4a3a', '#fbf6e8', '#1a1a14'))
   signs.addCustom('v7_clockshop', 320, 112, (g, x, y, w, h) => {
@@ -192,9 +193,10 @@ export function registerV7Art(signs: SignAtlas, inner: SignAtlas): void {
     g.textBaseline = 'middle'
     g.fillText('映りぐあい 98%', x + 10, y + h - 14)
   })
-  // ---- 室内：ラボの構想ボード（v7：社長の絵を貼る）と、佐伯さんの端末の画面
-  inner.addCustom('concept_board', 1024, 600, paintV7ConceptBoard)
-  inner.addCustom('v7_terminal', 320, 200, (g, x, y, w, h) => {
+}
+
+/** 佐伯さんの端末の画面（IDO の記録さがし） */
+function paintTerminal(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
     g.fillStyle = '#061820'
     g.fillRect(x, y, w, h)
     g.fillStyle = '#0d2c38'
@@ -233,7 +235,29 @@ export function registerV7Art(signs: SignAtlas, inner: SignAtlas): void {
       g.fill()
     }
     drawNextmakeMark(g, x + w - 40, y + h * 0.88, 14, '#4ee6dc', '#ffffff')
-  })
+  }
+
+/** 自分のキャンバスの板（アトラスに入れない大きな絵。1 回の描画） */
+function canvasPlane(c: NCtx, cv: HTMLCanvasElement, w: number, h: number, glow: boolean, name: string): THREE.Mesh {
+  const t = new THREE.CanvasTexture(cv)
+  t.colorSpace = THREE.SRGBColorSpace
+  t.anisotropy = 4
+  const mat = glow ? new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.9, roughness: 0.3, name }) : new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, name })
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat)
+  m.receiveShadow = true
+  c.root.add(m)
+  return m
+}
+
+/** ラボの構想ボード（v7）：社長の絵を貼ったホワイトボード。もとのボードの上に重ねる */
+export function buildPresidentBoard(c: NCtx): THREE.Mesh {
+  const [cv, g] = makeCanvas(1024, 600)
+  paintV7ConceptBoard(g, 0, 0, 1024, 600)
+  const m = canvasPlane(c, cv, 2.6, 1.52, false, 'v7_concept_board')
+  // ../nextmake.ts の構想ボード：西の壁 x = NM.x0 + 0.34 + 0.055、中心 (y 1.75, z 19.9)、東向き
+  m.position.set(-19 + 0.34 + 0.06, 1.75, 19.9)
+  m.rotation.y = Math.PI / 2
+  return m
 }
 
 /** 時計屋の看板：柱の上の両面の丸時計と、その下の札 */
@@ -346,7 +370,11 @@ export function buildLabTerminal(c: NCtx): void {
   boxAB(c, t.x - 0.05, t.x + 0.05, top, t.y - 0.18, t.z + 0.05, t.z + 0.11, c.m.metal, { tint: '#2a2d33' })
   boxAB(c, t.x - 0.16, t.x + 0.16, top, top + 0.015, t.z - 0.02, t.z + 0.16, c.m.metal, { tint: '#2a2d33', cast: false })
   box(c, t.x, t.y, t.z, 0.66, 0.42, 0.03, c.m.plastic, { tint: '#1a1c20' })
-  decal(c, c.inner.get('v7_terminal'), t.x, t.y, t.z - 0.017, Math.PI, 0.62, 0.38, c.innerGlow)
+  const [cv, g] = makeCanvas(320, 200)
+  paintTerminal(g, 0, 0, 320, 200)
+  const scr = canvasPlane(c, cv, 0.62, 0.38, true, 'v7_terminal')
+  scr.position.set(t.x, t.y, t.z - 0.017)
+  scr.rotation.y = Math.PI
   // キーボード
   box(c, t.x, top + 0.01, t.z - 0.3, 0.44, 0.015, 0.14, c.m.plastic, { tint: '#e8eaee', cast: false })
   c.lights.push({ pos: v(t.x, t.y, t.z - 0.4), color: '#9af6ec', intensity: 0.8, dist: 3 })

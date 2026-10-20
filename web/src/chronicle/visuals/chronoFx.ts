@@ -294,3 +294,91 @@ export class SlashFx {
     disposeRoot(this.root)
   }
 }
+
+// ------------------------------------------------------------------ すりぬけ
+
+const rippleFrag = /* glsl */ `
+uniform float uT;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv * 2.0 - 1.0;
+  float r = length(p);
+  float a = 0.0;
+  for (int i = 0; i < 3; i++) {
+    float t = uT * 1.6 - float(i) * 0.18;
+    if (t <= 0.0 || t >= 1.0) continue;
+    a += exp(-pow((r - t * 0.95) / (0.025 + t * 0.04), 2.0)) * (1.0 - t);
+  }
+  gl_FragColor = vec4(vec3(0.85, 0.7, 1.5) * a, 0.0);
+}
+`
+
+type RippleItem = { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; t: number; on: boolean }
+
+/** クローがすりぬけたときの波紋（広がる紫の輪 3 つ。同時に 3 つまで） */
+export class RippleFx {
+  readonly root = new THREE.Group()
+  private readonly pool: RippleItem[] = []
+  private readonly sparks: Particles
+  private readonly v = new THREE.Vector3()
+
+  constructor(parent: THREE.Object3D) {
+    this.root.name = 'rippleFx'
+    parent.add(this.root)
+    for (let i = 0; i < 3; i++) {
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: bbVert,
+        fragmentShader: rippleFrag,
+        uniforms: { uT: { value: 0 }, uRoll: { value: 0 } },
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.OneFactor,
+        blendDst: THREE.OneMinusSrcAlphaFactor,
+        toneMapped: false,
+      })
+      const mesh = new THREE.Mesh(unitQuad(), mat)
+      mesh.visible = false
+      mesh.frustumCulled = false
+      mesh.renderOrder = 9
+      this.root.add(mesh)
+      this.pool.push({ mesh, mat, t: 0, on: false })
+    }
+    this.sparks = new Particles({ max: 80, shape: 'soft', additive: true, renderOrder: 10 })
+    this.root.add(this.sparks.points)
+  }
+
+  /** at に波紋（size：直径 m） */
+  play(at: THREE.Vector3, size = 2): void {
+    const it = this.pool.find((x) => !x.on) ?? this.pool[0]
+    it.on = true
+    it.t = 0
+    it.mesh.visible = true
+    it.mesh.position.copy(at)
+    it.mesh.scale.set(size, size, 1)
+    const c = new THREE.Color('#d8c8ff').multiplyScalar(1.8)
+    for (let i = 0; i < 12; i++) {
+      this.v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(1.5 + Math.random() * 1.5)
+      this.sparks.emit(at, this.v, { life: 0.5, size: 0.06, color: c, drag: 3 })
+    }
+  }
+
+  update(dt: number): void {
+    for (const it of this.pool) {
+      if (!it.on) continue
+      it.t += dt
+      it.mat.uniforms.uT.value = it.t
+      if (it.t > 0.9) {
+        it.on = false
+        it.mesh.visible = false
+      }
+    }
+    this.sparks.update(dt)
+  }
+
+  dispose(): void {
+    this.sparks.dispose()
+    disposeRoot(this.root)
+  }
+}

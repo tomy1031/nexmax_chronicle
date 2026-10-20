@@ -10,6 +10,7 @@
 //   play=1                     実際に操作して遊ぶ（物理・NMClaw・物語の状態機械）。step=ステップ ID で途中から
 //   nohud / stats / quality=low / t=秒（シェーダの時刻を固定）
 //   campos=x,y,z&look=x,y,z&fov=度   好きな位置から撮る
+//   chronicle=1                物語 v7 の舞台を足して撮る（cam=clocktower など。chronicle/previewChronicle.ts）
 import * as THREE from 'three'
 import { readParams } from '../../render/quality'
 import { createRenderer, createSunRig } from '../../render/renderer'
@@ -26,6 +27,9 @@ import { LoopFx } from './loopFx'
 import { F } from './layout'
 import { Future2086Story, OBJECTIVES, type StoryStepId } from './future2086Story'
 import { startPlay } from './previewPlay'
+import { buildChronicleFuture, type ChronicleAdditions } from './chronicle/additions'
+import { CHRONICLE_CAMS, setupChroniclePreview } from './chronicle/previewChronicle'
+import { buildIntroProps } from './introProps2086'
 
 const urlp = new URLSearchParams(location.search)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
@@ -76,7 +80,16 @@ async function main(): Promise<void> {
   loading.set(0.45, 'ナンバタウンを組み立て中…')
   await nextFrame()
   const t0 = performance.now()
-  const fs: FutureScene = buildFutureScene(mats, q, { aniso })
+  const chronicle = urlp.get('chronicle') === '1'
+  let ch: ChronicleAdditions | null = null
+  let fs: FutureScene
+  if (chronicle) {
+    const built = buildChronicleFuture(mats, q, { aniso })
+    fs = built.fs
+    ch = built.ch
+  } else fs = buildFutureScene(mats, q, { aniso })
+  // 物語 v7 の確認では、街頭ビジョン・風船などの小物も置く
+  const introProps = chronicle ? buildIntroProps(fs.root, fs.colliders) : null
   const buildMs = performance.now() - t0
   scene.add(fs.root)
 
@@ -98,6 +111,7 @@ async function main(): Promise<void> {
   }
   const setTime = (mode: TimeOfDay) => {
     fs.setTimeOfDay(mode)
+    ch?.setTimeOfDay(mode)
     applyTimeOfDay(fs.environment, { scene, sky, sun: rig.sun, hemi: rig.hemi, post, envMaps: { morning: morningEnv, night: nightEnv } })
   }
 
@@ -158,7 +172,10 @@ async function main(): Promise<void> {
 
   // ---------------------------------------------------------------- 撮影
   const camName = urlp.get('cam') ?? 'overview'
-  const preset = CAMS[camName] ?? CAMS.overview
+  const chCam = chronicle ? CHRONICLE_CAMS[camName] : undefined
+  const preset: CamPreset = chCam
+    ? { pos: chCam.pos.clone(), look: chCam.look.clone(), fov: chCam.fov, time: chCam.time, nexmax: chCam.nexmax, step: 'go_booth' }
+    : (CAMS[camName] ?? CAMS.overview)
   const time: TimeOfDay = (urlp.get('time') as TimeOfDay) ?? preset.time ?? 'morning'
   setTime(time === 'night' ? 'night' : 'morning')
   if (time === 'night') {
@@ -183,6 +200,14 @@ async function main(): Promise<void> {
     nexmax.setPose((preset.nexmax.pose as 'idle') ?? 'idle')
   }
   placeSora(preset.sora ?? (time === 'night' ? 'night' : 'booth'))
+  if (chCam && chCam.sora !== undefined) {
+    if (chCam.sora === null) soraCh.root.visible = false
+    else {
+      soraCh.root.position.copy(chCam.sora.pos)
+      soraCh.root.rotation.y = Math.atan2(-(chCam.sora.face.x - chCam.sora.pos.x), -(chCam.sora.face.z - chCam.sora.pos.z))
+      soraCh.setPose((chCam.sora.pose as 'idle') ?? 'idle')
+    }
+  }
   const story = new Future2086Story({ start: preset.step ?? 'go_booth' })
   const stepParam = urlp.get('step') as StoryStepId | null
   const obj = OBJECTIVES[stepParam ?? story.step]
@@ -193,6 +218,7 @@ async function main(): Promise<void> {
   if (urlp.get('debris') === '1') fs.debris.setActive(true)
   if (urlp.has('label')) label.textContent = `${camName} / ${time}`
   else label.style.display = 'none'
+  const chPreview = ch && chCam ? setupChroniclePreview({ urlp, fs, ch, hud, ui, nexmax, sora: soraCh, cam: chCam, street: introProps?.street }) : null
 
   // 事前コンパイル
   loading.set(0.9, 'シェーダを準備中…')
@@ -244,6 +270,8 @@ async function main(): Promise<void> {
     scene,
     camera,
     fs,
+    ch,
+    introProps,
     nexmax,
     sora: soraCh,
     setTime,
@@ -258,6 +286,9 @@ async function main(): Promise<void> {
     nexmax.update(dt, 0)
     soraCh.update(dt, 0)
     fs.update(dt, uTime.value)
+    ch?.update(dt, uTime.value)
+    introProps?.update(dt)
+    chPreview?.update(dt)
     if (fs.debris.active) {
       const r = fs.debris.update(dt, nexmax.root.position)
       shake = r.shake

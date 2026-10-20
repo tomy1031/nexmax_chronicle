@@ -10,6 +10,8 @@ import { NEON, bulbString, chochin, column, fbox, glowRailing, lanternString, ne
 import { atlasPlane } from './textures2086'
 import { paintWaterNormal } from '../../render/textures'
 import { createSpray, type Emitter } from '../../world/edo/water'
+import { floorWithHoles, planeWithHoles, rectsOverlap } from './groundHoles'
+import type { FutureSceneMods } from './scene'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -57,14 +59,19 @@ function holoPost(c: FCtx, x: number, z: number, h: number, color = NEON.cyan): 
 
 // ------------------------------------------------------------------ 床
 
-function plazaFloor(c: FCtx): void {
+function plazaFloor(c: FCtx, mods: FutureSceneMods): void {
   const P = F.PLAZA
   const W = P.x1 - P.x0 + 1.2
   const D = P.z1 - P.z0 + 1.2
   // パールがかった大判タイル（テクスチャ 1 枚 ≒ 6m 四方）と、流れるように曲がる光の道（コンセプト案A）
   const fk = createFloorKit(c, c.root)
-  c.b.add(new THREE.PlaneGeometry(W, D), fk.tile, M(0, 0, 0, -Math.PI / 2, 0, 0), { uv: 'scale', uvScale: [W / 6, D / 6], tint: '#d9d8d4' })
-  c.col.floor(-120, 120, -120, 120, 0, 1)
+  const holes = mods.groundHoles ?? []
+  const tileRect = { x0: -W / 2, x1: W / 2, z0: -D / 2, z1: D / 2 }
+  if (holes.some((h) => rectsOverlap(h, tileRect))) c.b.add(planeWithHoles(tileRect, holes, 6), fk.tile, M(0, 0, 0), { uv: 'keep', tint: '#d9d8d4' })
+  else c.b.add(new THREE.PlaneGeometry(W, D), fk.tile, M(0, 0, 0, -Math.PI / 2, 0, 0), { uv: 'scale', uvScale: [W / 6, D / 6], tint: '#d9d8d4' })
+  // 床の当たり判定（穴があれば、穴の周りの箱に分ける）
+  if (holes.length) floorWithHoles(c.col, { x0: -120, x1: 120, z0: -120, z1: 120 }, 0, 1, holes)
+  else c.col.floor(-120, 120, -120, 120, 0, 1)
   const y = 0.006
   const ring = (cx: number, cz: number, r: number, col: THREE.Color, n = 64) => {
     for (let i = 0; i < n; i++) {
@@ -285,8 +292,8 @@ function southGate(c: FCtx): void {
 
 // ------------------------------------------------------------------ 全体
 
-export function buildFestival(c: FCtx): void {
-  plazaFloor(c)
+export function buildFestival(c: FCtx, mods: FutureSceneMods = {}): void {
+  plazaFloor(c, mods)
   walkways(c)
   arch(c)
   stalls(c)
@@ -344,7 +351,7 @@ export function buildFestival(c: FCtx): void {
   c.col.wall(P.x0, P.z1, F.SOUTH_GATE.x0, P.z1, -1, 8)
   c.col.wall(F.SOUTH_GATE.x1, P.z1, P.x1, P.z1, -1, 8)
   c.col.wall(F.SOUTH_GATE.x0 - 0.6, P.z1 + 3.2, F.SOUTH_GATE.x1 + 0.6, P.z1 + 3.2, -1, 8)
-  c.col.wall(F.STREET.x0, -34, F.STREET.x1, -34, -1, 12)
+  c.col.wall(F.STREET.x0, mods.streetEndZ ?? -34, F.STREET.x1, mods.streetEndZ ?? -34, -1, 12)
   // 回廊の外（ビルの壁で止まるが、念のため）
   c.col.wall(P.x0, P.z0, P.x0, P.z1, -1, 12)
   c.col.wall(P.x1, P.z0, P.x1, P.z1, -1, 12)

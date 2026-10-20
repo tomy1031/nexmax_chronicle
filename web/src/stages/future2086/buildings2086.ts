@@ -12,6 +12,8 @@ import { ColliderList } from '../../world/colliders'
 import { F } from './layout'
 import { NEON, fbox, neon, vine, type FCtx } from './kit2086'
 import { terraceBuilding, terraceCascade, terraceSign } from './terraces2086'
+import { inRect, planeWithHoles, rectsOverlap } from './groundHoles'
+import type { FutureSceneMods } from './scene'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -149,8 +151,11 @@ export function farTree(c: FCtx, x: number, y: number, z: number, r: number, rng
 
 // ------------------------------------------------------------------ 広場を囲む街
 
-export function buildDistrict(c: FCtx): void {
+export function buildDistrict(c: FCtx, mods: FutureSceneMods = {}): void {
   const P = F.PLAZA
+  const holes = mods.groundHoles ?? []
+  const clear = mods.clearAreas ?? []
+  const gap = mods.streetEastGap
   // 広場を囲むのは白い段々の曲面建築（terraces2086.ts）。空中回廊（高さ 4.5）の前は張り出さない
   const walk = F.WALK_Y + 1.5
   // 西（IDO 展示ブースの奥。2 階が空中回廊に取り付く）
@@ -180,24 +185,39 @@ export function buildDistrict(c: FCtx): void {
     const hl = 12.6 + (i % 2) * 4.2 + (farB ? 4.2 : 0)
     const hr = 16.8 + (i % 2) * 4.2 + Math.min(16.8, (-z - 36) * 0.5)
     terraceBuilding(c, { x0: -24, x1: S.x0 - 0.3, z0: z - len, z1: z, h: hl, front: 'e', seed: 30 + i, far: farB, green: 'light', over: 1.6, amp: 0.7, waves: 1, accent: i % 2 ? NEON.cyan : NEON.pink })
-    terraceBuilding(c, { x0: S.x1 + 0.3, x1: 24, z0: z - len - 1.5, z1: z - 1.5, h: hr, front: 'w', seed: 50 + i, far: farB, green: 'light', over: 1.6, amp: 0.7, waves: 1, accent: i % 2 ? NEON.blue : NEON.cyan })
+    const east = { x0: S.x1 + 0.3, x1: 24, h: hr, front: 'w' as const, seed: 50 + i, far: farB, green: 'light' as const, over: 1.6, amp: 0.7, waves: 1, accent: i % 2 ? NEON.blue : NEON.cyan }
+    const ez0 = z - len - 1.5
+    const ez1 = z - 1.5
+    if (gap && ez0 < gap.z1 && ez1 > gap.z0) {
+      // 東側のこの範囲には別の建物を建てる（物語 v7 の NEXTMAKE の跡地）。はみ出した残りだけ、同じ形で短く建てる
+      if (gap.z0 - ez0 > 4) terraceBuilding(c, { ...east, z0: ez0, z1: gap.z0 - 0.2 })
+      if (ez1 - gap.z1 > 4) terraceBuilding(c, { ...east, z0: gap.z1 + 0.2, z1: ez1 })
+    } else terraceBuilding(c, { ...east, z0: ez0, z1: ez1 })
     z -= len + 0.6
     i++
   }
   // 通りの並木と、通りの上の電球の連なり
   for (let zz = -24; zz > -64; zz -= 7) {
     for (const x of [S.x0 + 0.9, S.x1 - 0.9]) {
+      if (clear.some((r) => inRect(r, x, zz, 0.8))) continue
       if (zz > -40) c.foliage.bush(x, 0, zz, 0.9, Math.round(zz * 3 + x), 1.6)
       else farTree(c, x, 0, zz, 1.0, mulberry32(Math.round(-zz * 10 + x)))
     }
   }
   // 地面：広場の外の舗装（通り）と遠景の地面
-  c.b.add(new THREE.PlaneGeometry(S.x1 - S.x0 + 28, S.z1 - S.z0 + 6), c.fm.paving, M(0, -0.01, (S.z0 + S.z1) / 2 - 3, -Math.PI / 2, 0, 0), {
-    uv: 'scale',
-    uvScale: [(S.x1 - S.x0 + 28) / 2, (S.z1 - S.z0 + 6) / 2],
-    tint: '#e9e4da',
-  })
-  c.bf.add(new THREE.PlaneGeometry(1800, 1800), c.fm.farPlain, M(0, -0.08, 0, -Math.PI / 2, 0, 0), { tint: '#bdb6a6', cast: false })
+  const PW = S.x1 - S.x0 + 28
+  const PD = S.z1 - S.z0 + 6
+  const PZ = (S.z0 + S.z1) / 2 - 3
+  const paveRect = { x0: -PW / 2, x1: PW / 2, z0: PZ - PD / 2, z1: PZ + PD / 2 }
+  if (holes.some((h) => rectsOverlap(h, paveRect))) c.b.add(planeWithHoles(paveRect, holes, 2), c.fm.paving, M(0, -0.01, 0), { uv: 'keep', tint: '#e9e4da' })
+  else
+    c.b.add(new THREE.PlaneGeometry(PW, PD), c.fm.paving, M(0, -0.01, PZ, -Math.PI / 2, 0, 0), {
+      uv: 'scale',
+      uvScale: [PW / 2, PD / 2],
+      tint: '#e9e4da',
+    })
+  if (holes.length) c.bf.add(planeWithHoles({ x0: -900, x1: 900, z0: -900, z1: 900 }, holes, 1800), c.fm.farPlain, M(0, -0.08, 0), { uv: 'keep', tint: '#bdb6a6', cast: false })
+  else c.bf.add(new THREE.PlaneGeometry(1800, 1800), c.fm.farPlain, M(0, -0.08, 0, -Math.PI / 2, 0, 0), { tint: '#bdb6a6', cast: false })
 }
 
 // ------------------------------------------------------------------ 遠景のビル群

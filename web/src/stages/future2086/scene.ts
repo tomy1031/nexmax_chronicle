@@ -30,6 +30,7 @@ import { AttrBatch, type FCtx } from './kit2086'
 import { F, ZONES, yawTo, zoneAt, type Interactable, type Zone, type ZoneId } from './layout'
 import { DebrisField, buildOrum, type OrumParts } from './orum'
 import { buildUnits, type Units } from './units'
+import type { GroundRect } from './groundHoles'
 
 export type FutureSpawn = { pos: THREE.Vector3; facing: number; camYaw: number; camPitch: number }
 
@@ -84,7 +85,22 @@ export type FutureScene = {
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
-export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings, opts: { aniso?: number } = {}): FutureScene {
+/**
+ * 町の組み立てを少し変える指定（物語 v7 の舞台を足すとき：stages/future2086/chronicle/）。どれも省略すれば今までどおり。
+ */
+export type FutureSceneMods = {
+  /** 地面の穴（地下への階段・中庭の池）。床の当たり判定・通りの舗装・遠景の地面から抜く */
+  groundHoles?: readonly GroundRect[]
+  /** 北の通りの行き止まり（見えない壁）の z。既定 -34 */
+  streetEndZ?: number
+  /** 北の通りの東側で、ビルを建てない z の範囲（ここに別の建物を建てる） */
+  streetEastGap?: { z0: number; z1: number }
+  /** 人・通りの植え込みを置かない範囲 */
+  clearAreas?: readonly GroundRect[]
+}
+
+export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings, opts: { aniso?: number; mods?: FutureSceneMods } = {}): FutureScene {
+  const mods = opts.mods ?? {}
   const root = new THREE.Group()
   root.name = 'future2086'
   const fm = createFutureMaterials(mats, opts.aniso ?? 8)
@@ -105,8 +121,8 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
   const farFoliage = new Foliage(cf)
   cf.foliage = farFoliage
 
-  buildFestival(c)
-  buildDistrict(c)
+  buildFestival(c, mods)
+  buildDistrict(c, mods)
   buildFarCity(c)
   buildCentralTower(c, root)
   buildExpoGlobe(c, root)
@@ -117,7 +133,7 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
   const booth = buildBooth(c, root)
   const claw = buildClawTargets2086(c)
   buildFountain(c, root)
-  const crowd = buildCrowd(root, c.col)
+  const crowd = buildCrowd(root, c.col, { clear: mods.clearAreas })
   const orum = buildOrum(fm, root)
   const debris = new DebrisField(fm, root)
   const units = buildUnits(root)

@@ -46,6 +46,9 @@ const FIRE_VERB: Record<ClawTargetType, string> = {
   hold_mechanism: '支える',
   enemy_pull: '引き寄せる',
   enemy_zip: '飛び込む',
+  chrono_freeze: '止める',
+  chrono_seam: '裂く',
+  chrono_ura: '裂く',
 }
 
 export async function startKhmerPlay(p: KhmerPlayCtx): Promise<void> {

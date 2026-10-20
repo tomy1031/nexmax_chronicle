@@ -50,6 +50,9 @@ const FIRE_VERB: Record<ClawTargetType, string> = {
   hold_mechanism: '支える',
   enemy_pull: '引き寄せる',
   enemy_zip: '飛び込む',
+  chrono_freeze: '止める',
+  chrono_seam: '裂く',
+  chrono_ura: '裂く',
 }
 
 /** 会話を 1 行ずつ出す（F で次へ、放っておいても進む） */

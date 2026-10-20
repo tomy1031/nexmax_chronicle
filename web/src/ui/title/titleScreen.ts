@@ -26,10 +26,10 @@ export type TitleOptions = {
   now?: number
 }
 
-/** 時の輪の 4 つの時代（左下から時計回りに古い順） */
+/** 時の輪の 4 つの時代（左下から時計回りに古い順）。物語 v7 の時代：1186・1726・2026・2086（1970 は本編の道から外した） */
 const ERAS: Array<{ key: StageKey; year: string; place: string; cls: string }> = [
+  { key: '1186', year: '1186', place: 'アルンの寺', cls: 'khmer' },
   { key: '1726', year: '1726', place: '仕掛け横丁', cls: 'edo' },
-  { key: '1970', year: '1970', place: '万国博覧会', cls: 'expo' },
   { key: '2026', year: '2026', place: 'なんば', cls: 'now' },
   { key: '2086', year: '2086', place: 'ナンバタウン', cls: 'future' },
 ]

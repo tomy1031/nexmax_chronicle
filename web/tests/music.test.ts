@@ -71,7 +71,7 @@ describe('曲のデータ', () => {
   })
 
   it('時代ごとの曲がある', () => {
-    for (const k of ['1726', '1970', '2026', '2086'] as const) expect(TRACKS[STAGE_MUSIC[k]]).toBeTruthy()
+    for (const k of ['1186', '1726', '1970', '2026', '2086'] as const) expect(TRACKS[STAGE_MUSIC[k]]).toBeTruthy()
   })
 })
 

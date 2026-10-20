@@ -195,3 +195,15 @@ look などの Vector3 は毎フレーム読むので、ステージが動かし
 台詞 `dialogue_1970.json`・`mob_lines_1970.json`。2086 年からはソラの羅針盤（9 章。`compass_built`）で `ido_compass`、
 錨をほどく（`expo_anchor_cleared`）と `return` で 2086 年へ帰れる。
 
+
+## 物語 v7（`docs/物語_v7_時を裂く爪.md`・`docs/ステージ設計_v1.md`）の土台
+
+本編は物語 v7 の流れ（2086 → 2026 → 1726 → 2086 → 2026 → 2086 → 1186 → 2086）。共通の部品は `src/chronicle/`。
+
+- `chronicle/progress.ts`：v7 のフラグ（`v7_` で始まる。`core/storyFlags.ts` に登録）・光のつぶ `lightsLeft(f)`（巻き戻し 3・帰還 3・最後の一撃 1 で 7 → 0）・何度目の 10月18日 `dayCount(f)`・章 `chapterOf(f)`。純粋な計算（`tests/chronicleProgress.test.ts`）
+- 光のつぶの HUD：シェルが v7 を始めてから毎フレーム `hud.setLights(lightsLeft)`（体力の下。減るとはじける）
+- 時空移動：v7 のきっかけ `ido_ring`（ソラのわっか）・`ido_kanban`（2026年の路地のかんばん）と夜明けの `return`（`travel.ts travelRuleV7`）。時代キー `'1186'`（クメールの都・アルンの寺）を追加
+- 時空裂きのNMクロー（`chronicle/chrono.ts`、`rt.chrono`）：`v7_rift_claw` で右腕が `rift_claw` になる（つかむ力はそのまま）。照準はクローと同じ `chrono_freeze`（止める）／`chrono_seam`（ゆらぎを裂く）／`chrono_ura`（裏側の物を裂く。持つ前はすりぬける）。J でワイヤーを撃たずにその場に効く。`slit(pos, opts)` で空中の切れ目の見た目（`tests/chrono.test.ts`）
+- 戦闘の追加：よろいの板（`spawn(..., { plates, onPlate })`。クローで 1 枚ずつはがす）・K が当たる敵でない的（`addHitTarget`）・敵でないボスの体力バー（`showBossBar`・`setBossBar`）
+- `chronicle/kit/`：`SceneClock`（`await wait(sec)`）・`Walker`（NPC の歩き）・`Curtain`（暗転）・`ChoiceBox`（選択肢）・`KinematicBox`（あとから足せる・動かせる当たり判定）
+- 開発用：`window.__game.chrono`・`combat`・`rt`

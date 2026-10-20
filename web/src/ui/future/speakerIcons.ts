@@ -24,6 +24,11 @@ const KNOWN: Array<[RegExp, SpeakerStyle]> = [
   [/^ミチ|^佐伯ミチ/, { key: 'michi', color: '#ffb066', source: null }],
   [/^佐伯/, { key: 'saeki', color: '#7fe6ff', source: 'saeki' }],
   [/^ソラ/, { key: 'sora', color: '#c8a6ff', source: 'sora' }],
+  // 物語 v7 の人物（顔は chronicle/visuals/person.ts の手続きの人物から）
+  [/^トワ/, { key: 'towa', color: '#b99cff', source: 'towa' }],
+  [/^チャンダのおばあさん|^守り手/, { key: 'elder', color: '#f2d27a', source: 'khmerElder' }],
+  [/^チャンダ/, { key: 'chanda', color: '#ffb36b', source: 'chanda' }],
+  [/^おふじ/, { key: 'ofuji', color: '#ffc6a8', source: 'ofuji' }],
   [/^ネクマックス|^NEXMAX/i, { key: 'nexmax', color: '#62d4ff', source: 'nexmax' }],
   [/^システム/, { key: 'system', color: '#9fe8ff', source: 'system' }],
 ]
@@ -48,6 +53,10 @@ const FRAMING: Record<SpeakerModel, { down: number; size: number; yaw: number }>
   saeki: { down: 0.125, size: 0.28, yaw: 0.2 },
   sora: { down: 0.14, size: 0.31, yaw: 0.2 },
   michi: { down: 0.14, size: 0.3, yaw: 0.2 },
+  towa: { down: 0.13, size: 0.3, yaw: 0.2 },
+  chanda: { down: 0.15, size: 0.33, yaw: 0.2 },
+  khmerElder: { down: 0.15, size: 0.33, yaw: 0.2 },
+  ofuji: { down: 0.15, size: 0.34, yaw: 0.2 },
 }
 
 const MODEL_HEIGHT = 1.6

@@ -20,6 +20,7 @@ import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, sele
 import { CombatSystem } from '../combat/combatSystem'
 import { ChronoSystem } from '../chronicle/chrono'
 import { lightsLeft, riftClawUnlocked, v7Started } from '../chronicle/progress'
+import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
 import { setOutlineViewport } from '../world/nexmax/materials'
@@ -103,10 +104,11 @@ type Active = {
 
 /** 時代ごとに登場する話者（HUD の顔アイコンを読み込み時に先に作る） */
 const SPEAKERS_BY_STAGE: Partial<Record<StageKey, string[]>> = {
+  '1186': ['チャンダ', 'チャンダのおばあさん', 'トワ'],
   '1726': ['源兵衛', 'おはる'],
   '1970': ['ミチ'],
-  '2026': ['マツイ社長', '佐伯'],
-  '2086': ['ソラ'],
+  '2026': ['マツイ社長', '佐伯', 'おふじ'],
+  '2086': ['ソラ', 'トワ'],
 }
 
 export class Game {
@@ -213,6 +215,8 @@ export class Game {
     this.hud.setPortraitFps(this.q.portraitFps)
     this.hud.setGraphicsPrefs(this.prefs)
     this.hud.onGraphicsChange = (p) => this.setGraphics(p)
+    // 物語 v7 の人物の会話の顔（イラスト）
+    applyV7Portraits(this.hud)
     if (this.gp.nohud) ui.style.display = 'none'
     this.input = createInput(this.renderer.domElement)
     // つないだキーボードも使えるよう割り当てを足す

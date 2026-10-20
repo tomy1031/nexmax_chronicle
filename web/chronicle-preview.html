@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>v7 の共通の見た目（プレビュー）</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/style.css" />
+    <style>
+      #cv-label {
+        position: fixed;
+        left: 12px;
+        top: 10px;
+        font: 700 13px 'M PLUS Rounded 1c', system-ui, sans-serif;
+        color: #fff;
+        background: rgba(14, 24, 52, 0.62);
+        padding: 6px 12px;
+        border-radius: 10px;
+        pointer-events: none;
+        white-space: pre;
+        line-height: 1.5;
+      }
+      #cv-tags {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        font: 700 12px 'M PLUS Rounded 1c', system-ui, sans-serif;
+      }
+      #cv-tags div {
+        position: absolute;
+        transform: translate(-50%, -100%);
+        color: #fff;
+        background: rgba(20, 16, 40, 0.7);
+        padding: 2px 8px;
+        border-radius: 8px;
+        white-space: nowrap;
+      }
+      #cv-nav {
+        position: fixed;
+        right: 10px;
+        top: 10px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 60vw;
+      }
+      #cv-nav a,
+      #cv-nav button {
+        font: 700 12px 'M PLUS Rounded 1c', system-ui, sans-serif;
+        color: #fff;
+        background: rgba(30, 40, 80, 0.7);
+        border: 1px solid rgba(160, 200, 255, 0.4);
+        border-radius: 8px;
+        padding: 3px 8px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="cv-tags"></div>
+    <div id="cv-label"></div>
+    <div id="cv-nav"></div>
+    <script type="module" src="./src/chronicle/visuals/preview.ts"></script>
+  </body>
+</html>

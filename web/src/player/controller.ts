@@ -43,6 +43,11 @@ export class PlayerController {
   speed = 0
   /** false のときは移動入力を受けない（仕掛けを支えている間など）。重力は効く */
   enabled = true
+  /**
+   * これより下に落ちたら近くの安全な所へ戻す高さ（m）。既定は MOVE_TUNING.killY。
+   * 地下や裏側のある舞台では、ステージが場所に合わせて毎フレーム変えてよい（ステージごとに作り直すので戻さなくてよい）
+   */
+  killY = MOVE_TUNING.killY
   /** true の間は外部（ワイヤー）が位置を決める */
   private external = false
   /** ワイヤー離脱後、着地するまで勢いを保つ */
@@ -206,7 +211,7 @@ export class PlayerController {
     } else if (this.speed > 0.2 && len > 0) this.turnToward(this.velocity.x, this.velocity.z, step, 12)
     else if (this.speed > 0.2 && this.momentum) this.turnToward(this.velocity.x, this.velocity.z, step, 6)
     if (this.grounded) this.lastSafe.copy(this.position)
-    if (this.position.y < T.killY) {
+    if (this.position.y < this.killY) {
       this.teleport(this.lastSafe.clone().add(new THREE.Vector3(0, 0.3, 0)))
       this.onRespawn?.()
     }

@@ -18,6 +18,38 @@ export function toonRamp(): THREE.DataTexture {
   return ramp
 }
 
+/** 人物だけに使う柔らかな5段。怪物・小道具の3段ランプは維持する。 */
+let personRamp: THREE.DataTexture | null = null
+export function personToonRamp(): THREE.DataTexture {
+  if (personRamp) return personRamp
+  const levels = [130, 165, 195, 223, 245]
+  personRamp = new THREE.DataTexture(new Uint8Array(levels.flatMap(v => [v, v, v, 255])), 5, 1, THREE.RGBAFormat)
+  personRamp.minFilter = personRamp.magFilter = THREE.NearestFilter
+  personRamp.generateMipmaps = false
+  personRamp.needsUpdate = true
+  return personRamp
+}
+
+export function createPersonMaterial(o: ToonOpts = {}): THREE.MeshToonMaterial {
+  const m = createToonMaterial({ selfLight: 0.12, ...o })
+  m.gradientMap = personToonRamp()
+  const base = m.onBeforeCompile
+  m.onBeforeCompile = (shader, renderer) => {
+    base.call(m, shader, renderer)
+    // 強い暖色の太陽で肌と布が飽和しないように、人物は空の回り込みを少し多く受ける。
+    const lights = THREE.ShaderChunk.lights_toon_pars_fragment.replace(
+      'getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color',
+      'getGradientIrradiance( geometryNormal, directLight.direction ) * mix(directLight.color, vec3(dot(directLight.color, vec3(0.2126, 0.7152, 0.0722))), 0.3)',
+    )
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <lights_toon_pars_fragment>', lights)
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n reflectedLight.directDiffuse *= 0.85;\n reflectedLight.indirectDiffuse *= 1.15;')
+      .replace('#include <opaque_fragment>', 'float personLuma = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));\n outgoingLight = mix(vec3(personLuma), outgoingLight, 0.84);\n #include <opaque_fragment>')
+  }
+  m.customProgramCacheKey = () => 'cvPersonToon5'
+  return m
+}
+
 export type ToonOpts = {
   /** 輪郭線の色（既定：こい茶） */
   line?: THREE.ColorRepresentation
@@ -245,4 +277,24 @@ export function innerShell(g: THREE.BufferGeometry, inset = 0.006): THREE.Buffer
     }
   }
   return out
+}
+
+/** 腕・心臓の管に共通の切断記号。ローカルZを管の接線へ向ける。輪と向かい合う切れ込みを1描画にまとめる。 */
+export function createCutMarker(radius: number, width = 0.12): THREE.Mesh {
+  const ring = new THREE.TorusGeometry(radius, width * 0.5, 6, 40)
+  const pieces: THREE.BufferGeometry[] = [ring]
+  for (const sd of [-1, 1]) {
+    for (const tilt of [-1, 1]) {
+      const bar = new THREE.BoxGeometry(width * 0.45, width * 1.8, width * 0.45)
+      bar.rotateZ(tilt * Math.PI / 4)
+      bar.translate(sd * (radius + width * 0.7), tilt * width * 0.4, 0)
+      pieces.push(bar)
+    }
+  }
+  const geo = merge(pieces)
+  pieces.forEach(g => g.dispose())
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: '#8fe8f3', toneMapped: false }))
+  mesh.name = 'cutMarker'
+  mesh.renderOrder = 3
+  return mesh
 }

@@ -6,9 +6,11 @@
 // 既存の Character（world/characters.ts）と同じ形で返す（name は型の都合で CharacterName にそろえる）。
 import * as THREE from 'three'
 import type { Character, CharacterName, Pose } from '../../world/characters'
-import { createToonMaterial, PartSet, SHAPES, T, capsuleAB, lathe, innerShell, setToonRim, setToonSelfLight } from './toon'
-import { faceTexture, facePatchGeometry, maskTexture, setFaceExpression, type Expression, type FaceStyle } from './face'
+import { createToonMaterial, createPersonMaterial, PartSet, SHAPES, T, capsuleAB, lathe, innerShell, setToonRim, setToonSelfLight } from './toon'
+import { faceTexture, facePatchGeometry, setFaceExpression, type Expression, type FaceStyle } from './face'
 import { approach, disposeRoot, seeded } from './common'
+import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { paint } from '../../world/nexmax/geom'
 
 export type { Expression } from './face'
@@ -83,7 +85,7 @@ export interface PersonCharacter extends Character {
   lookAt(target: THREE.Vector3 | null): void
   /** ふちの光（暗い場面で） */
   setRim(color: THREE.ColorRepresentation, k?: number): void
-  /** 自分の色の光り方（暗い場面で少し上げる。既定 0.2） */
+  /** 自分の色の光り方（暗い場面で少し上げる。既定 0.12） */
   setSelfLight(k: number): void
   /** 物を付ける場所 */
   readonly sockets: { handL: THREE.Object3D; handR: THREE.Object3D; head: THREE.Object3D; hip: THREE.Object3D; lamp: THREE.Object3D }
@@ -211,10 +213,10 @@ function buildRig(name: string, d: Dims): Rig {
   const chest = g(spine, 0, d.chestY, 0, 'chest')
   const neck = g(chest, 0, d.neckY, 0, 'neck')
   const head = g(neck, 0, d.neckLen, 0, 'head')
-  const shL = g(chest, -d.shoulderX, d.shoulderY, 0, 'shL')
+  const shL = g(chest, -Math.max(0, d.shoulderX - 0.02), d.shoulderY, 0, 'shL')
   const elL = g(shL, 0, -d.upper, 0, 'elL')
   const haL = g(elL, 0, -d.fore, 0, 'haL')
-  const shR = g(chest, d.shoulderX, d.shoulderY, 0, 'shR')
+  const shR = g(chest, Math.max(0, d.shoulderX - 0.02), d.shoulderY, 0, 'shR')
   const elR = g(shR, 0, -d.upper, 0, 'elR')
   const haR = g(elR, 0, -d.fore, 0, 'haR')
   const thL = g(hips, -d.hipX, -0.02, 0, 'thL')
@@ -275,10 +277,20 @@ function baseBody(ps: PartSet, r: Rig, s: Spec, L: Look, lite: boolean): void {
   ps.add(chest, SHAPES.capsule, L.skin, T(0, d.neckY + d.neckLen * 0.35, 0.004, 0, 0, 0, d.headRx * 0.38, d.neckLen * 0.4, d.headRx * 0.38))
   // 腕
   const arm = (sh: THREE.Object3D, el: THREE.Object3D, side: number) => {
-    ps.add(sh, SHAPES.capsule, L.sleeveU ?? L.skin, capsuleAB(V(0, -0.005, 0), V(0, -d.upper, 0), d.rUpper))
+    const ur = d.rUpper * (L.sleeveU ? 1.15 : 1)
+    const fr = d.rFore * (L.sleeveF ? 1.15 : 1)
+    // 肩の丸みから袖を連続させる。袖の端は丸いカプセルで閉じず、短い輪で示す。
+    if (L.sleeveU) {
+      const end = L.sleeveF ? -d.upper - fr * 0.35 : -d.upper * 0.8
+      ps.add(sh, lathe([[ur * 0.94, end], [ur, -d.upper * 0.45], [ur * 1.12, -ur * 0.25], [ur * 0.8, ur * 0.65], [0.001, ur]], 16), L.sleeveU)
+      if (!L.sleeveF) ps.add(sh, SHAPES.cyl, L.sleeveU, T(0, end, 0, 0, 0, 0, ur * 1.03, 0.008, ur * 1.03), false)
+    } else ps.add(sh, SHAPES.capsule, L.skin, capsuleAB(V(0, 0, 0), V(0, -d.upper, 0), ur))
     const fj = lite ? sh : el
     const fy = lite ? -d.upper : 0
-    ps.add(fj, SHAPES.capsule, L.sleeveF ?? L.skin, capsuleAB(V(0, fy, 0), V(0, fy - d.fore * 0.92, 0), d.rFore))
+    if (L.sleeveF) {
+      ps.add(fj, lathe([[fr, fy - d.fore * 0.94], [fr * 1.08, fy - d.fore * 0.45], [ur * 0.98, fy], [ur * 0.8, fy + fr * 0.65]], 16), L.sleeveF)
+      ps.add(fj, SHAPES.cyl, L.sleeveF, T(0, fy - d.fore * 0.94, 0, 0, 0, 0, fr * 1.06, 0.008, fr * 1.06), false)
+    } else ps.add(fj, SHAPES.capsule, L.skin, capsuleAB(V(0, fy + (L.sleeveU ? d.upper * 0.21 : 0), 0), V(0, fy - d.fore * 0.92, 0), fr))
     // 手（ミトン＋親指）
     const hy = fy - d.fore
     ps.add(fj, SHAPES.sphere, L.skin, T(0, hy - d.handLen * 0.42, -0.004, 0, 0, 0, d.rFore * 1.08, d.handLen * 0.55, d.rFore * 0.75))
@@ -391,7 +403,7 @@ type BuildCtx = { ps: PartSet; r: Rig; s: Spec; lite: boolean; rnd: () => number
 
 /** プリセットが作る、あとから動かす部品 */
 type PresetParts = {
-  mask?: THREE.Mesh
+  mask?: THREE.Object3D
   blade?: { group: THREE.Group; whole: THREE.Object3D; broken: THREE.Object3D; sheathHilt: THREE.Object3D }
   staff?: THREE.Object3D
   coatSkirt?: THREE.Object3D
@@ -405,7 +417,7 @@ function presetDef(preset: PersonPreset, o: PersonOpts): Built {
   switch (preset) {
     case 'towa':
       return {
-        spec: { H: H(1.78), heads: 6.6, legK: 0.48, shoulder: 0.118, hip: 0.052, armK: 0.36, limb: 0.95, stoop: 0, headW: 0.84, child: false },
+        spec: { H: H(1.78), heads: 5.4, legK: 0.48, shoulder: 0.125, hip: 0.052, armK: 0.36, limb: 1.1, stoop: 0, headW: 0.84, child: false },
         face: { key: 'towa', style: { skin: '#f0d6c4', eye: '#5b4a6e', brow: '#1d1a24', blush: 0.18, eyeScale: 0.92, browW: 1.1 } },
         defaultPose: 'idle',
         headTop: 0,
@@ -413,35 +425,35 @@ function presetDef(preset: PersonPreset, o: PersonOpts): Built {
       }
     case 'towaChild':
       return {
-        spec: { H: H(1.34), heads: 5.3, legK: 0.44, shoulder: 0.105, hip: 0.05, armK: 0.34, limb: 1.0, stoop: 0, headW: 0.92, child: true },
+        spec: { H: H(1.34), heads: 4.3, legK: 0.44, shoulder: 0.105, hip: 0.05, armK: 0.31, limb: 1.15, stoop: 0, headW: 0.92, child: true },
         face: { key: 'towaChild', style: { skin: '#f6dac6', eye: '#5b4a6e', brow: '#2a2230', blush: 0.45, eyeScale: 1.25 } },
         defaultPose: 'idle',
         headTop: 0,
       }
     case 'towaMother':
       return {
-        spec: { H: H(1.62), heads: 6.8, legK: 0.47, shoulder: 0.1, hip: 0.056, armK: 0.35, limb: 0.88, stoop: 0, headW: 0.86, child: false },
+        spec: { H: H(1.62), heads: 5.5, legK: 0.47, shoulder: 0.1, hip: 0.056, armK: 0.35, limb: 0.88, stoop: 0, headW: 0.86, child: false },
         face: { key: 'towaMother', style: { skin: '#f4e0d2', eye: '#6a4a3a', brow: '#4a3326', blush: 0.15, lashes: true, eyeScale: 1.0 } },
         defaultPose: 'sitBed',
         headTop: 0,
       }
     case 'chanda':
       return {
-        spec: { H: H(1.45), heads: 5.7, legK: 0.46, shoulder: 0.104, hip: 0.054, armK: 0.35, limb: 0.98, stoop: 0, headW: 0.9, child: true },
-        face: { key: 'chanda', style: { skin: '#c4987a', eye: '#4a2c1a', brow: '#1b1414', blush: 0.5, lashes: true, eyeScale: 1.2 } },
+        spec: { H: H(1.45), heads: 4.5, legK: 0.46, shoulder: 0.104, hip: 0.054, armK: 0.35, limb: 0.98, stoop: 0, headW: 0.9, child: true },
+        face: { key: 'chanda', style: { skin: '#c4987a', eye: '#4a2c1a', brow: '#1b1414', blush: 0.3, lashes: true, eyeScale: 1.3 } },
         defaultPose: 'idle',
         headTop: 0,
       }
     case 'khmerElder':
       return {
-        spec: { H: H(1.5), heads: 6.5, legK: 0.46, shoulder: 0.1, hip: 0.056, armK: 0.35, limb: 0.9, stoop: 0.22, headW: 0.87, child: false },
+        spec: { H: H(1.5), heads: 5.3, legK: 0.46, shoulder: 0.1, hip: 0.0616, armK: 0.35, limb: 0.9, stoop: 0.28, headW: 0.87, child: false },
         face: { key: 'khmerElder', style: { skin: '#b48a70', eye: '#3a2a20', brow: '#9a948c', blush: 0.15, wrinkles: true, eyeScale: 0.86, lashes: true } },
         defaultPose: 'cane',
         headTop: 0,
       }
     case 'ofuji':
       return {
-        spec: { H: H(1.46), heads: 6.4, legK: 0.45, shoulder: 0.1, hip: 0.058, armK: 0.35, limb: 0.92, stoop: 0.28, headW: 0.88, child: false },
+        spec: { H: H(1.46), heads: 5.3, legK: 0.45, shoulder: 0.1, hip: 0.058, armK: 0.35, limb: 0.92, stoop: 0.28, headW: 0.88, child: false },
         face: { key: 'ofuji', style: { skin: '#f2d8c2', eye: '#4a3a30', brow: '#a8a29a', blush: 0.25, wrinkles: true, eyeScale: 0.84, glasses: '#8a5a3a' } },
         defaultPose: 'idle',
         headTop: 0,
@@ -454,7 +466,7 @@ function presetDef(preset: PersonPreset, o: PersonOpts): Built {
       return {
         spec: {
           H: H(female ? pick([1.52, 1.56, 1.5], v) : pick([1.64, 1.6, 1.68], v)),
-          heads: 6.6,
+          heads: 5.5,
           legK: 0.47,
           shoulder: female ? 0.1 : 0.114,
           hip: female ? 0.056 : 0.052,
@@ -481,10 +493,10 @@ function dressTowa(c: BuildCtx): void {
   const { ps, r, s } = c
   const d = r.d
   const [hips, , chest, , head, shL, elL, , shR, elR, , thL, knL, thR, knR] = r.joints
-  const coat = '#1a1720'
-  const coatHi = '#26212f'
-  const lining = '#3b2552'
-  const trim = '#6b3fa8'
+  const coat = '#252938'
+  const coatHi = '#394052'
+  const lining = '#49335f'
+  const trim = '#6f6580'
   const skin = '#f0d6c4'
   const hair = '#1d1a24'
   baseBody(ps, r, s, { skin, sleeveU: coat, sleeveF: coat, legU: '#24222c', legL: '#24222c', shoe: '#121016', top: coat, bottom: '#24222c' }, c.lite)
@@ -516,9 +528,9 @@ function dressTowa(c: BuildCtx): void {
   )
   ps.add(chest, cape, coatHi, T(0, 0, 0.004, 0, 0, 0, 1, 1, 0.66))
   ps.add(chest, innerShell(cape, 0.003), lining, T(0, 0, 0.004, 0, 0, 0, 1, 1, 0.66), false)
-  band(ps, chest, capeBottom + 0.006, d.shoulderX * 1.18, d.shoulderX * 1.18 * 0.66, 0.008, 0.016, trim)
+  band(ps, chest, capeBottom + 0.006, d.shoulderX * 1.18, d.shoulderX * 1.18 * 0.66, 0.005, 0.01, trim)
   // 袖口
-  for (const el of [elL, elR]) if (!c.lite) ps.add(el, SHAPES.cyl, coatHi, T(0, -d.fore * 0.82, 0, 0, 0, 0, d.rFore * 1.35, d.fore * 0.14, d.rFore * 1.35))
+  for (const el of [elL, elR]) if (!c.lite) ps.add(el, SHAPES.cyl, coatHi, T(0, -d.fore * 0.94, 0, 0, 0, 0, d.rFore * 1.35, 0.008, d.rFore * 1.35))
   // ベルト
   band(ps, hips, d.waist * 0.75, d.hipX * 2.0, d.hipX * 2.0 * 0.78, 0.02, 0.06, '#2b2633')
   ps.add(hips, SHAPES.box, '#b9b4c8', T(0, d.waist * 0.75, -d.hipX * 1.62, 0, 0, 0, 0.05, 0.035, 0.012), false)
@@ -527,6 +539,14 @@ function dressTowa(c: BuildCtx): void {
   skirtJ.name = 'coatSkirt'
   hips.add(skirtJ)
   skirt(ps, skirtJ, d.waist * 0.7, -(d.thigh + d.shin * 0.55), d.hipX * 2.05, d.hipX * 3.6, coat, lining, 0.42, 0.82)
+  // 前開きに沿う折り返し。横線よりも縦のシルエットを読ませる。
+  for (const sd of [-1, 1]) {
+    const y0 = d.waist * 0.7
+    const y1 = -(d.thigh + d.shin * 0.55)
+    const a = V(sd * Math.sin(0.42) * d.hipX * 2.05, y0, -Math.cos(0.42) * d.hipX * 2.05 * 0.82)
+    const b = V(sd * Math.sin(0.42) * d.hipX * 3.6, y1, -Math.cos(0.42) * d.hipX * 3.6 * 0.82)
+    ps.add(skirtJ, SHAPES.capsule, coatHi, capsuleAB(a, b, 0.009), false)
+  }
   c.out.coatSkirt = skirtJ
   // ブーツ（すねの下半分）
   for (const kn of [knL, knR]) if (!c.lite) ps.add(kn, SHAPES.capsule, '#121016', capsuleAB(V(0, -d.shin * 0.45, 0), V(0, -d.shin + 0.02, 0), d.rShin * 1.18))
@@ -547,21 +567,66 @@ function dressTowa(c: BuildCtx): void {
     [3.14, 0.05, 0.62],
   ] as const)
     tuft(ps, head, d, hair, ax, ay, l)
-  // 仮面（白・目の穴・紫の涙のしるし）：別の材質で、頭の前に少し浮かせる
-  const mmat = createToonMaterial({ map: maskTexture(), alphaTest: 0.5, selfLight: 0.42, line: '#1a1420' })
+  // 頬を覆う湾曲した磁器の面。実際の目穴・8mmの厚み・鼻の稜線を作る。
+  const shape = new THREE.Shape()
+  shape.moveTo(0, 0.82)
+  shape.bezierCurveTo(0.55, 0.84, 0.94, 0.55, 0.98, 0.12)
+  shape.bezierCurveTo(0.93, -0.35, 0.45, -0.86, 0, -0.9)
+  shape.bezierCurveTo(-0.45, -0.86, -0.93, -0.35, -0.98, 0.12)
+  shape.bezierCurveTo(-0.94, 0.55, -0.55, 0.84, 0, 0.82)
+  for (const sd of [-1, 1]) {
+    const hole = new THREE.Path()
+    hole.absellipse(sd * 0.39, 0.12, 0.22, 0.12, 0, Math.PI * 2, true, sd * 0.18)
+    shape.holes.push(hole)
+  }
+  const mask = new THREE.Group()
+  const mps = new PartSet()
+  const blank = new THREE.ExtrudeGeometry(shape, { depth: 0.008, bevelEnabled: false, curveSegments: 24, steps: 1 })
+  // 大きな三角面を先に分割してから湾曲させ、面が頭の球へ食い込むのを防ぐ。
+  const mg = new TessellateModifier(0.12, 5).modify(blank)
+  blank.dispose()
+  const originalNormal = mg.attributes.normal.clone()
+  const pos = mg.attributes.position as THREE.BufferAttribute
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), depth = pos.getZ(i)
+    const bulge = Math.sqrt(Math.max(0.12, 1 - (x * 0.88) ** 2 - (y * 0.82) ** 2))
+    const nose = Math.exp(-x * x * 65 - (y + 0.08) ** 2 * 14) * 0.018
+    pos.setXYZ(i, x * d.headRx * 0.9, y * d.headRy * 0.85, -bulge * d.headRz - 0.012 - depth - nose)
+  }
+  mg.computeVertexNormals()
+  // 磁器の面は滑らかな法線、厚みの側面は稜線を残す。
+  const smooth = new THREE.Vector3()
+  const maskNormal = mg.attributes.normal as THREE.BufferAttribute
+  for (let i = 0; i < pos.count; i++) {
+    const sign = originalNormal.getZ(i)
+    if (Math.abs(sign) < 0.5) continue
+    const x = pos.getX(i) / (d.headRx * 0.9), y = pos.getY(i) / (d.headRy * 0.85)
+    const bulge = Math.sqrt(Math.max(0.12, 1 - (x * 0.88) ** 2 - (y * 0.82) ** 2))
+    const nose = Math.exp(-x * x * 65 - (y + 0.08) ** 2 * 14) * 0.018
+    smooth.set((d.headRz * x * 0.7744 / bulge + x * 130 * nose) / (d.headRx * 0.9), (d.headRz * y * 0.6724 / bulge + (y + 0.08) * 28 * nose) / (d.headRy * 0.85), -1).normalize().multiplyScalar(sign)
+    maskNormal.setXYZ(i, smooth.x, smooth.y, smooth.z)
+  }
+  const colors = new Float32Array(pos.count * 3)
+  const normal = originalNormal
+  const front = new THREE.Color('#eeeaf5'), side = new THREE.Color('#bcb5cb')
+  for (let i = 0; i < pos.count; i++) (Math.abs(normal.getZ(i)) > 0.6 ? front : side).toArray(colors, i * 3)
+  mg.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  mg.setAttribute('aOutline', new THREE.BufferAttribute(new Float32Array(pos.count), 1))
+  const mmat = createPersonMaterial({ line: '#1a1420', side: THREE.DoubleSide })
+  const shell = new THREE.Mesh(mg, mmat)
+  mask.add(shell)
   c.mats.push(mmat)
-  const mg = facePatchGeometry(1.1, 26)
-  paint(mg, '#ffffff')
-  mg.setAttribute('aOutline', new THREE.BufferAttribute(new Float32Array(mg.attributes.position.count), 1))
   c.geos.push(mg)
-  const mask = new THREE.Mesh(mg, mmat)
-  const hc = headC(d)
-  mask.position.copy(hc)
-  mask.scale.set(d.headRx, d.headRy, d.headRz)
-  mask.castShadow = false
+  // 奥の黒で目穴を読ませる（肌が穴の奥へ見えないように）。
+  for (const sd of [-1, 1]) mps.add(mask, SHAPES.sphere, '#171326', T(sd * d.headRx * 0.35, d.headRy * 0.1, -d.headRz * 0.95, 0, 0, sd * 0.18, d.headRx * 0.21, d.headRy * 0.115, 0.006), false)
+  const tear = V(d.headRx * 0.35, -d.headRy * 0.1, -d.headRz * 1.04 - 0.012)
+  mps.add(mask, SHAPES.capsule, '#705298', capsuleAB(tear, tear.clone().add(V(-0.005, -d.headRy * 0.35, 0.012)), 0.003), false)
+  mps.bake(mmat, { name: 'maskDetail', castShadow: false })
+  mask.position.copy(headC(d))
   mask.name = 'mask'
   head.add(mask)
   c.out.mask = mask
+
 }
 
 function dressTowaChild(c: BuildCtx): void {
@@ -575,7 +640,15 @@ function dressTowaChild(c: BuildCtx): void {
   // 半ズボンのすそ（ももの上半分）
   for (const th of [r.joints[J.thL], r.joints[J.thR]]) ps.add(th, SHAPES.capsule, shorts, capsuleAB(V(0, 0, 0), V(0, -d.thigh * 0.5, 0), d.rThigh * 1.2))
   // シャツの胸の黄色い星（小さな印）
-  ps.add(chest, SHAPES.sphere, '#ffd44a', T(0, d.neckY * 0.55, -d.shoulderX * 0.6, 0, 0, Math.PI / 4, 0.03, 0.03, 0.008), false)
+  const star = new THREE.Shape()
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + i * Math.PI / 5
+    const rr = i % 2 ? 0.015 : 0.035
+    if (i === 0) star.moveTo(Math.cos(a) * rr, Math.sin(a) * rr)
+    else star.lineTo(Math.cos(a) * rr, Math.sin(a) * rr)
+  }
+  star.closePath()
+  ps.add(chest, new THREE.ShapeGeometry(star), '#ffd44a', T(0, d.neckY * 0.55, -d.shoulderX * 0.62, 0, Math.PI, 0), false)
   // 白いくつした
   for (const kn of [knL, knR]) if (!c.lite) ps.add(kn, SHAPES.capsule, '#ffffff', capsuleAB(V(0, -d.shin * 0.78, 0), V(0, -d.shin + 0.015, 0), d.rShin * 1.08))
   // えりの線
@@ -630,10 +703,10 @@ function dressChanda(c: BuildCtx): void {
   const { ps, r, s } = c
   const d = r.d
   const [hips, , chest, , head, , elL, , , elR, , , knL, , knR] = r.joints
-  const top = '#f2b630'
-  const sampot = '#c8382f'
-  const gold = '#f0c552'
-  const sash = '#e0457b'
+  const top = '#dfad42'
+  const sampot = '#b94c46'
+  const gold = '#e7c577'
+  const sash = '#cb6484'
   const hair = '#1b1414'
   const skin = '#c4987a'
   baseBody(ps, r, s, { skin, sleeveU: top, sleeveF: null, legU: sampot, legL: null, shoe: '#7a4a2a', top, bottom: sampot }, c.lite)
@@ -642,10 +715,38 @@ function dressChanda(c: BuildCtx): void {
   sk.name = 'skirt'
   hips.add(sk)
   const hem = -(d.thigh + d.shin * 0.55)
-  skirt(ps, sk, d.waist * 0.6, hem, d.hipX * 1.7, d.hipX * 2.4, sampot, '#9a2a24', 0, 0.8)
+  const cloth = lathe(Array.from({ length: 6 }, (_, i): [number, number] => {
+    const u = i / 5
+    return [d.hipX * (2.4 - 0.7 * u + Math.sin(u * Math.PI) * 0.08), hem + (d.waist * 0.6 - hem) * u]
+  }), 48)
+  const cp = cloth.attributes.position as THREE.BufferAttribute
+  for (let i = 0; i < cp.count; i++) {
+    const phi = Math.atan2(cp.getX(i), cp.getZ(i))
+    const k = 1 + 0.025 * Math.cos(6 * phi)
+    cp.setXYZ(i, cp.getX(i) * k, cp.getY(i), cp.getZ(i) * k)
+  }
+  cloth.computeVertexNormals()
+  ps.add(sk, cloth, sampot, T(0, 0, 0, 0, 0, 0, 1, 1, 0.8))
+  ps.add(sk, innerShell(cloth), '#913f3d', T(0, 0, 0, 0, 0, 0, 1, 1, 0.8), false)
   band(ps, sk, hem + 0.012, d.hipX * 2.38, d.hipX * 2.38 * 0.8, 0.012, 0.035, gold)
   // 前の折りかえし（サンポットのひだ）
-  ps.add(sk, SHAPES.box, '#b02e28', T(d.hipX * 0.5, hem * 0.42, -d.hipX * 1.86, 0.07, 0, 0, d.hipX * 0.18, -hem * 0.7, 0.008), false)
+  const fold = new THREE.PlaneGeometry(1, 1, 2, 5)
+  const fp = fold.attributes.position as THREE.BufferAttribute
+  for (let i = 0; i < fp.count; i++) {
+    const u = 0.5 - fp.getY(i)
+    const x = fp.getX(i) * (0.045 - u * 0.018) + d.hipX * 0.4
+    const y = d.waist * 0.6 + (hem * 0.87 - d.waist * 0.6) * u
+    const rad = d.hipX * (1.7 + u * 0.7 * 0.87)
+    const z = -Math.sqrt(Math.max(0, rad * rad - x * x)) * 0.8 - 0.006 - (1 - Math.abs(fp.getX(i)) * 2) * 0.006
+    fp.setXYZ(i, x, y, z)
+  }
+  // 表を人物の正面（-Z）へ向ける。
+  if (fold.index) {
+    const ix = fold.index.array
+    for (let i = 0; i < ix.length; i += 3) [ix[i + 1], ix[i + 2]] = [ix[i + 2], ix[i + 1]]
+  }
+  fold.computeVertexNormals()
+  ps.add(sk, fold, '#9d403d', undefined, false)
   c.out.skirt = sk
   // 金の帯
   band(ps, hips, d.waist * 0.62, d.hipX * 1.72, d.hipX * 1.72 * 0.8, 0.014, 0.045, gold)
@@ -676,7 +777,7 @@ function dressChanda(c: BuildCtx): void {
   ps.add(sheath, SHAPES.capsule, '#6b3f22', T(0, -bl * 0.5, 0, 0, 0, 0, 0.022, bl * 0.33, 0.012))
   ps.add(sheath, SHAPES.cone, gold, T(0, -bl - 0.012, 0, Math.PI, 0, 0, 0.022, 0.045, 0.014))
   // 刃（別の材質：アルンの青い石）
-  const bmat = createToonMaterial({ selfLight: 0.95, rim: '#ffffff', rimK: 1.4, line: '#1c4a6a' })
+  const bmat = createToonMaterial({ selfLight: 0.35, rim: '#bce7ff', rimK: 0.45, line: '#1c4a6a' })
   c.mats.push(bmat)
   const bps = new PartSet()
   const blade = new THREE.Group()
@@ -689,39 +790,50 @@ function dressChanda(c: BuildCtx): void {
   const whole = new THREE.Group()
   whole.name = 'whole'
   blade.add(whole)
-  // 少しそった両刃（細長いひし形）
-  const bg = new THREE.CylinderGeometry(0.5, 0.5, 1, 4, 6)
-  {
-    const p = bg.attributes.position as THREE.BufferAttribute
-    for (let i = 0; i < p.count; i++) {
-      const y = p.getY(i) + 0.5 // 0..1
-      const w = y > 0.82 ? (1 - y) / 0.18 : 1
-      p.setXYZ(i, p.getX(i) * w, p.getY(i), p.getZ(i) * w * 0.25 + y * y * 0.04)
-    }
-    bg.computeVertexNormals()
-  }
-  bps.add(whole, bg, '#8fdcff', T(0, 0.02 + bl * 0.5, 0, 0, Math.PI / 4, 0, 0.06, bl, 0.06))
+  // 中央の稜線・淡い刃先・暗い側面が続く石の刃。
+  addStoneBlade(bps, whole, false, T(0, 0.02 + bl * 0.5, 0, 0, 0, 0, 0.075, bl, 0.075))
   const broken = new THREE.Group()
   broken.name = 'broken'
   blade.add(broken)
-  const kg = new THREE.CylinderGeometry(0.5, 0.5, 1, 4, 2)
-  {
-    const p = kg.attributes.position as THREE.BufferAttribute
-    for (let i = 0; i < p.count; i++) {
-      const y = p.getY(i) + 0.5
-      // 折れ口のぎざぎざ
-      const jag = y > 0.9 ? Math.sin(p.getX(i) * 40 + p.getZ(i) * 30) * 0.12 : 0
-      p.setXYZ(i, p.getX(i), p.getY(i) + jag, p.getZ(i) * 0.25)
-    }
-    kg.computeVertexNormals()
-  }
-  bps.add(broken, kg, '#8fdcff', T(0, 0.02 + bl * 0.2, 0, 0, Math.PI / 4, 0, 0.06, bl * 0.4, 0.06))
+  addStoneBlade(bps, broken, true, T(0, 0.02 + bl * 0.2, 0, 0, 0, 0, 0.075, bl * 0.4, 0.075))
   bps.bake(bmat, { name: 'blade' })
   // 鞘に入っているとき見える柄（柄だけ）
   const sheathHilt = new THREE.Group()
   sheathHilt.name = 'sheathHilt'
   sheath.add(sheathHilt)
   c.out.blade = { group: blade, whole, broken, sheathHilt }
+}
+
+/** 刃の中央・刃先・厚みを同じ描画へまとめる。 */
+function addStoneBlade(ps: PartSet, joint: THREE.Object3D, broken: boolean, matrix: THREE.Matrix4): void {
+  const section: [number, number][] = [[-0.5, 0], [-0.34, -0.13], [0, -0.2], [0.34, -0.13], [0.5, 0], [0, 0.2]]
+  const levels = broken ? [0, 0.5, 1] : [0, 0.65, 0.82, 1]
+  const bins: number[][] = [[], [], []]
+  const at = (j: number, k: number): THREE.Vector3 => {
+    const u = levels[j]
+    const [x, z] = section[k]
+    const taper = !broken && u > 0.82 ? Math.max(0.001, (1 - u) / 0.18) : 1
+    // 折れ口の大きいV字の欠け（幅の約1/3）。全長も通常の4割。
+    const notch = broken && j === levels.length - 1 ? [0, -0.08, -0.36, -0.12, 0, -0.18][k] : 0
+    return V(x * taper, u - 0.5 + notch, z * taper + u * u * 0.04)
+  }
+  const tri = (bin: number, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => bins[bin].push(...a.toArray(), ...b.toArray(), ...c.toArray())
+  for (let k = 0; k < section.length; k++) {
+    const next = (k + 1) % section.length
+    const bin = k === 0 || k === 3 ? 1 : k < 4 ? 0 : 2
+    for (let j = 0; j < levels.length - 1; j++) {
+      const a = at(j, k), b = at(j, next), c = at(j + 1, k), d = at(j + 1, next)
+      tri(bin, a, c, b); tri(bin, b, c, d)
+    }
+    if (broken) tri(2, at(levels.length - 1, k), V(0, 0.2, 0), at(levels.length - 1, next))
+  }
+  bins.forEach((positions, i) => {
+    const facet = new THREE.BufferGeometry()
+    facet.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    facet.computeVertexNormals()
+    ps.add(joint, facet, ['#8fcbe0', '#e5f7ff', '#4d829e'][i], matrix)
+    facet.dispose()
+  })
 }
 
 function dressElder(c: BuildCtx): void {
@@ -738,6 +850,7 @@ function dressElder(c: BuildCtx): void {
   c.out.skirt = sk
   // 肩かけ（左肩から右の腰へ、幅広）
   band(ps, chest, d.chestY * 0.35, d.shoulderX * 0.82, d.shoulderX * 0.58, 0.02, 0.16, sbai, -0.68, 0.08)
+  for (const sd of [-1, 1]) ps.add(chest, new RoundedBoxGeometry(0.065, 0.15, 0.018, 3, 0.008), sbai, T(sd * d.shoulderX * 0.55, d.neckY * 0.22 - 0.04, -d.shoulderX * 0.62, 0.1, 0, sd * -0.14), false)
   // 首の白い布
   band(ps, chest, d.neckY * 0.96, d.headRx * 0.52, d.headRx * 0.44, 0.02, 0.05, robe)
   // 短く刈った白髪
@@ -765,7 +878,7 @@ function dressOfuji(c: BuildCtx): void {
   const { ps, r, s } = c
   const d = r.d
   const [hips, , chest, , head] = r.joints
-  const cardigan = '#9a80b4'
+  const cardigan = '#925264'
   const blouse = '#f6f2ea'
   const skirtC = '#6e5f56'
   baseBody(ps, r, s, { skin: '#f2d8c2', sleeveU: cardigan, sleeveF: cardigan, legU: skirtC, legL: '#d8c8b8', shoe: '#5a4a40', top: cardigan, bottom: skirtC }, c.lite)
@@ -778,6 +891,8 @@ function dressOfuji(c: BuildCtx): void {
   band(ps, chest, d.neckY * 0.95, d.headRx * 0.55, d.headRx * 0.46, 0.015, 0.04, blouse)
   ps.add(chest, SHAPES.box, blouse, T(0, d.neckY * 0.6, -d.shoulderX * 0.5, 0, 0, 0, d.shoulderX * 0.28, d.neckY * 0.7, 0.01), false)
   for (let i = 0; i < 4; i++) ps.add(chest, SHAPES.sphere, '#f0e2c0', T(d.shoulderX * 0.16, d.neckY * (0.55 - i * 0.24), -d.shoulderX * 0.5, 0, 0, 0, 0.01), false)
+  ps.add(sk, new RoundedBoxGeometry(0.24, 0.42, 0.014, 3, 0.012), blouse, T(0, -0.18, -d.hipX * 1.88), false)
+  band(ps, hips, d.waist * 0.5, d.hipX * 2, d.hipX * 1.7, 0.009, 0.025, blouse)
   // 白髪をうしろでおだんご
   const hc = headC(d)
   hairCap(ps, head, d, '#e4e1dc', { cover: 0.56, back: 0.78, grow: 0.07 })
@@ -984,10 +1099,10 @@ function posePose(o: Float32Array, p: PersonPose, c: PoseCtx): void {
       add3(o, J.spine, 0.22, 0, 0)
       add3(o, J.chest, 0.04, 0, 0)
       add3(o, J.head, -0.12, 0, Math.sin(t * 0.6) * 0.04)
-      set3(o, J.shL, 0.55, 0, 0.12)
-      set3(o, J.shR, 0.55, 0, -0.12)
-      set3(o, J.elL, 0.9, 0, 0)
-      set3(o, J.elR, 0.9, 0, 0)
+      set3(o, J.shL, 0.85, -0.15, -0.42)
+      set3(o, J.shR, 0.5, 0.12, -0.08)
+      set3(o, J.elL, 0.72, 0, 0)
+      set3(o, J.elR, 0.45, 0, 0)
       break
     }
     case 'bow':
@@ -1113,12 +1228,12 @@ export function createPerson(preset: PersonPreset, opts: PersonOpts = {}): Perso
     default:
       dressVillager(ctx, opts)
   }
-  const mat = createToonMaterial({ line: def.line ?? '#2a1a12', rim: opts.rim, rimK: opts.rimK })
+  const mat = createPersonMaterial({ line: def.line ?? '#2a1a12', rim: opts.rim, rimK: opts.rimK })
   mats.push(mat)
   ps.bake(mat, { castShadow: opts.castShadow ?? true, name: preset })
   // 顔
   const ftex = faceTexture(def.face.key, def.face.style)
-  const fmat = createToonMaterial({ map: ftex, rim: opts.rim, rimK: opts.rimK })
+  const fmat = createPersonMaterial({ map: ftex, rim: opts.rim, rimK: opts.rimK })
   mats.push(fmat)
   const fg = facePatchGeometry()
   paint(fg, '#ffffff')
@@ -1150,7 +1265,7 @@ export function createPerson(preset: PersonPreset, opts: PersonOpts = {}): Perso
   let phase = 0
   let walkW = 0
   let runK = 0
-  let expr: Expression = preset === 'towa' ? 'cry' : 'neutral'
+  let expr: Expression = preset === 'towa' ? 'cry' : preset === 'towaMother' ? 'sad' : 'neutral'
   let shown: Expression | null = null
   let blinkT = 2 + Math.random() * 3
   let blinking = 0
@@ -1374,7 +1489,7 @@ export function createBed(): { root: THREE.Group; hipSpot: THREE.Vector3; dispos
   const top = 0.5
   const wood = '#c9a77c'
   // わく・あし・頭の板
-  ps.add(root, SHAPES.box, wood, T(0, top - 0.17, 0, 0, 0, 0, W + 0.06, 0.12, L + 0.06))
+  ps.add(root, new RoundedBoxGeometry(W + 0.06, 0.12, L + 0.06, 3, 0.025), wood, T(0, top - 0.17, 0))
   for (const [x, z] of [
     [-1, -1],
     [1, -1],
@@ -1384,12 +1499,13 @@ export function createBed(): { root: THREE.Group; hipSpot: THREE.Vector3; dispos
     ps.add(root, SHAPES.box, wood, T((x * W) / 2, (top - 0.17) / 2, (z * L) / 2, 0, 0, 0, 0.07, top - 0.17, 0.07))
   ps.add(root, SHAPES.box, wood, T(0, top + 0.28, L / 2 + 0.02, 0, 0, 0, W + 0.08, 0.9, 0.06))
   // ふとん・まくら
-  ps.add(root, SHAPES.box, '#fbf8f2', T(0, top - 0.06, 0, 0, 0, 0, W - 0.02, 0.16, L - 0.04))
+  ps.add(root, new RoundedBoxGeometry(W - 0.02, 0.16, L - 0.04, 3, 0.025), '#fbf8f2', T(0, top - 0.06, 0))
   ps.add(root, SHAPES.capsule, '#ffffff', T(0, top + 0.12, L / 2 - 0.22, 0, 0, Math.PI / 2, 0.11, 0.24, 0.16))
   ps.add(root, SHAPES.capsule, '#f2e8ee', T(0, top + 0.2, L / 2 - 0.32, -0.6, 0, Math.PI / 2, 0.1, 0.22, 0.14))
   // ひざ掛け（足の上をおおう、ふっくら）
-  ps.add(root, SHAPES.sphere, '#e8c6d0', T(0, top + 0.02, -L * 0.12, 0, 0, 0, W * 0.52, 0.16, L * 0.42))
-  ps.add(root, SHAPES.box, '#e8c6d0', T(0, top - 0.02, -L * 0.12, 0, 0, 0, W * 1.0, 0.1, L * 0.78))
+  const blanket = new RoundedBoxGeometry(W * 1.02, 0.15, L * 0.76, 4, 0.065)
+  ps.add(root, blanket, '#d9b6c2', T(0, top + 0.04, -L * 0.12))
+  for (let i = 0; i < 3; i++) ps.add(root, new RoundedBoxGeometry(0.055, 0.012, 1.25 - i * 0.12, 3, 0.005), '#e9cbd4', T((i - 1) * 0.23, top + 0.119, -0.24, 0, (i - 1) * 0.04, 0), false)
   const mat = createToonMaterial({ line: '#3a2a1a' })
   ps.bake(mat, { name: 'bed' })
   return {

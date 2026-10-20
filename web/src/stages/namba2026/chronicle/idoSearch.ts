@@ -314,7 +314,7 @@ export class SketchCloseup {
     const el = document.createElement('div')
     el.className = 'nx-sketch'
     el.hidden = true
-    el.innerHTML = `<div class="nx-sketch-paper"><div class="nx-sketch-mark"></div><div class="nx-sketch-cap"></div></div>`
+    el.innerHTML = `<div class="nx-sketch-paper"><div class="nx-sketch-mark"></div></div><div class="nx-sketch-cap"></div>`
     this.el = el
     this.paper = el.querySelector('.nx-sketch-paper') as HTMLDivElement
     this.mark = el.querySelector('.nx-sketch-mark') as HTMLDivElement

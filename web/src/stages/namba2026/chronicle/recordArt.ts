@@ -76,7 +76,8 @@ function drawNexmaxBack(g: CanvasRenderingContext2D, cx: number, cy: number, s: 
   g.textAlign = 'center'
   g.textBaseline = 'middle'
   g.fillText('NEXTMAKE', 0, s * 0.07)
-  g.fillText('0 0 1', 0, s * 0.11)
+  // 番号の欄（数字はまだ書いていない）
+  g.fillRect(-s * 0.05, s * 0.112, s * 0.1, s * 0.006)
   // 腕と脚（玉つなぎ）
   const bead = (x: number, y: number, r: number) => {
     g.beginPath()
@@ -140,8 +141,15 @@ export function drawPresidentSketch(g: CanvasRenderingContext2D, x: number, y: n
   g.strokeStyle = '#2a6fd0'
   g.lineWidth = Math.max(2, h * 0.005)
   g.beginPath()
-  g.moveTo(x + w * 0.7, y + h * 0.25)
-  g.quadraticCurveTo(x + w * 0.76, y + h * 0.4, x + w * 0.72, y + h * 0.56)
+  g.moveTo(x + w * 0.88, y + h * 0.25)
+  g.quadraticCurveTo(x + w * 0.96, y + h * 0.48, x + w * 0.76, y + h * 0.56)
+  g.stroke()
+  // 矢じり
+  g.beginPath()
+  g.moveTo(x + w * 0.76, y + h * 0.56)
+  g.lineTo(x + w * 0.785, y + h * 0.535)
+  g.moveTo(x + w * 0.76, y + h * 0.56)
+  g.lineTo(x + w * 0.79, y + h * 0.57)
   g.stroke()
   hand(g, '人と いっしょに', x + w * 0.52, y + h * 0.84, h * 0.04, '#c0392b')
   hand(g, 'つくる・あそぶ', x + w * 0.52, y + h * 0.9, h * 0.04, '#c0392b')

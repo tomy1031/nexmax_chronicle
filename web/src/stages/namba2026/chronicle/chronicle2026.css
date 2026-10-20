@@ -94,5 +94,6 @@
   box-shadow: 0 0 calc(16 * var(--u)) rgba(255, 210, 63, 0.9); opacity: 0; transition: opacity 0.4s; }
 .nx-sketch-mark.on { opacity: 1; animation: nx-sketch-pulse 1.1s ease-in-out infinite; }
 @keyframes nx-sketch-pulse { 50% { box-shadow: 0 0 calc(30 * var(--u)) rgba(255, 210, 63, 1); } }
-.nx-sketch-cap { position: absolute; left: 50%; bottom: calc(-46 * var(--u)); transform: translateX(-50%) rotate(1.2deg); white-space: nowrap;
-  font: 800 calc(17 * var(--u)) / 1 var(--nx-jp); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+.nx-sketch-cap { position: absolute; left: 50%; bottom: calc(150 * var(--u)); transform: translateX(-50%); white-space: nowrap; padding: calc(8 * var(--u)) calc(18 * var(--u));
+  font: 800 calc(18 * var(--u)) / 1 var(--nx-jp); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); background: rgba(2, 10, 18, 0.6); border-radius: calc(6 * var(--u)); }
+.nx-sketch-cap:empty { display: none; }

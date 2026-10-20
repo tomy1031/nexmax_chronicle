@@ -87,15 +87,20 @@ export function registerV7Art(signs: SignAtlas, inner: SignAtlas): void {
     gr.addColorStop(1, '#163f96')
     g.fillStyle = gr
     g.fillRect(x, y, w, h)
-    // 駅のしるし（電車）
+    // 駅のしるし（電車の横の形）
     g.fillStyle = '#ffffff'
-    g.fillRect(x + 22, y + 30, 64, 52)
+    g.beginPath()
+    g.roundRect(x + 14, y + 34, 84, 48, 12)
+    g.fill()
     g.fillStyle = '#1d4fb8'
-    g.fillRect(x + 30, y + 38, 20, 16)
-    g.fillRect(x + 58, y + 38, 20, 16)
+    for (let i = 0; i < 3; i++) g.fillRect(x + 22 + i * 24, y + 42, 18, 16)
     g.fillStyle = '#ffffff'
-    g.fillRect(x + 30, y + 86, 10, 12)
-    g.fillRect(x + 68, y + 86, 10, 12)
+    for (const wx of [30, 82]) {
+      g.beginPath()
+      g.arc(x + wx, y + 90, 7, 0, Math.PI * 2)
+      g.fill()
+    }
+    g.fillRect(x + 10, y + 96, 92, 4)
     g.font = `900 ${h * 0.46}px ${ROUND}`
     g.textAlign = 'left'
     g.textBaseline = 'middle'
@@ -255,16 +260,26 @@ export function buildStation(c: NCtx): void {
   // 屋根と後ろの壁
   boxAB(c, S.x0 - 0.15, S.x1 + 0.15, S.h, S.h + 0.22, S.z0, S.z1 + 0.2, c.m.paint, { tint: '#f2f2ee' })
   boxAB(c, S.x0, S.x1, 0, S.h, S.z0, S.z0 + 0.2, c.m.plaster, { tint: '#e2e4e6', texM: 2 })
-  // 両側のガラスの壁と柱
+  // 両側のガラスの壁（四すみに青い柱）
   for (const x of [S.x0, S.x1]) {
-    boxAB(c, x - 0.06, x + 0.06, 0, S.h, S.z0, S.z1, c.m.metal, { tint: '#2a62b8' })
-    c.b.add(new THREE.PlaneGeometry(S.z1 - S.z0, S.h - 0.3), c.m.glass, M(x, S.h / 2, (S.z0 + S.z1) / 2, 0, Math.PI / 2, 0), { cast: false })
+    for (const z of [S.z0 + 0.1, S.z1 - 0.06]) boxAB(c, x - 0.07, x + 0.07, 0, S.h, z - 0.06, z + 0.06, c.m.metal, { tint: '#2a62b8' })
+    boxAB(c, x - 0.04, x + 0.04, 0, 0.5, S.z0, S.z1, c.m.metal, { tint: '#2a62b8', cast: false })
+    c.b.add(new THREE.PlaneGeometry(S.z1 - S.z0, S.h - 0.6), c.m.glass, M(x, 0.5 + (S.h - 0.6) / 2, (S.z0 + S.z1) / 2, 0, Math.PI / 2, 0), { cast: false })
     c.col.box(x, S.h / 2, (S.z0 + S.z1) / 2, 0.15, S.h, S.z1 - S.z0)
   }
-  // 中（下りの階段に見える明るい壁と段）
+  // 正面のガラスの自動ドア（閉まっている）と枠。中は明るい改札
+  const fz = S.z1 - 0.06
+  boxAB(c, S.x0, S.x1, S.h - 0.32, S.h, fz - 0.05, fz + 0.05, c.m.metal, { tint: '#2a62b8' })
+  for (const x of [cx - 0.75, cx, cx + 0.75]) boxAB(c, x - 0.03, x + 0.03, 0, S.h - 0.32, fz - 0.03, fz + 0.03, c.m.metal, { tint: '#c8ccd2', cast: false })
+  c.b.add(new THREE.PlaneGeometry(S.x1 - S.x0, S.h - 0.32), c.m.glass, M(cx, (S.h - 0.32) / 2, fz, 0, 0, 0), { cast: false })
+  c.col.box(cx, S.h / 2, fz, S.x1 - S.x0, S.h, 0.14)
   boxAB(c, S.x0 + 0.1, S.x1 - 0.1, 0.01, S.h - 0.05, S.z0 + 0.2, S.z0 + 0.25, c.m.lightCool, { tint: '#e8f0ff', cast: false })
-  for (let i = 0; i < 6; i++) boxAB(c, S.x0 + 0.3, S.x1 - 0.3, 0, 0.6 - i * 0.1, S.z0 + 0.3 + i * 0.3, S.z0 + 0.6 + i * 0.3, c.m.stone, { tint: i % 2 ? '#c8c8c4' : '#d8d8d4', cast: false })
-  c.col.box(cx, 0.4, S.z0 + 1.2, S.x1 - S.x0 - 0.3, 0.8, 1.9)
+  boxAB(c, S.x0 + 0.08, S.x1 - 0.08, 0, 0.02, S.z0 + 0.2, fz - 0.05, c.m.stone, { tint: '#d8d8d4', cast: false })
+  for (let i = 0; i < 3; i++) {
+    const gx = S.x0 + 0.75 + i * 1.0
+    boxAB(c, gx - 0.12, gx + 0.12, 0, 1.0, S.z0 + 0.8, S.z0 + 1.7, c.m.metal, { tint: '#9aa0a8', cast: false })
+    boxAB(c, gx - 0.1, gx + 0.1, 1.0, 1.04, S.z0 + 1.45, S.z0 + 1.65, c.m.lightCool, { tint: '#7af08a', cast: false })
+  }
   // 駅の札（屋根の前）
   sign(c, 'v7_station', cx, S.h + 0.48, S.z1 + 0.2, 0, 2.4, 0.6, { glow: true, depth: 0.08 })
   // 大時計の塔（屋根の上）

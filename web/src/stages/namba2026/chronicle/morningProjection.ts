@@ -48,7 +48,7 @@ void main() {
   float flick = 0.94 + 0.06 * sin(uTime * 23.0 + vUv.x * 9.0);
   // 下のふちは地面になじむ
   float base = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
-  vec3 col = c * 1.25 * scan * flick * on * base + vec3(1.6, 1.3, 0.8) * line * 1.4;
+  vec3 col = c * 0.62 * scan * flick * on * base + vec3(1.4, 1.1, 0.7) * line * 1.1;
   gl_FragColor = vec4(col, 1.0);
 }
 `
@@ -77,7 +77,7 @@ void main() {
   float flow = 0.55 + 0.45 * sin(vT * 30.0 - uTime * 7.0);
   float bits = smoothstep(0.82, 1.0, sin(vT * 90.0 - uTime * 16.0 + vS * 3.0));
   float fade = smoothstep(1.0, 0.7, vT);
-  vec3 col = vec3(1.9, 1.45, 0.75) * (edge * flow * 0.8 + bits * edge * 1.2) * reach * fade;
+  vec3 col = vec3(1.5, 1.1, 0.55) * (edge * flow * 0.6 + bits * edge * 1.0) * reach * fade;
   gl_FragColor = vec4(col, 1.0);
 }
 `
@@ -95,7 +95,7 @@ void main() {
   // 格子の影（朝日が格子窓を通った光の縞）
   float lattice = 0.65 + 0.35 * step(0.5, fract((p.x + p.y * 0.35) * 18.0));
   float aim = smoothstep(0.16, 0.02, distance(vUv, uAim)) * uAimK;
-  vec3 col = vec3(1.25, 0.95, 0.55) * (pool * lattice * 0.55 * (1.0 - 0.5 * uAimK) + aim * 1.6);
+  vec3 col = vec3(1.0, 0.75, 0.42) * (pool * lattice * 0.38 * (1.0 - 0.5 * uAimK) + aim * 1.3);
   gl_FragColor = vec4(col * uK, 1.0);
 }
 `

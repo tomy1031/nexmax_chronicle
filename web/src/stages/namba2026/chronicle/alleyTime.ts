@@ -68,8 +68,8 @@ export const ALLEY_PALETTES: Record<AlleyPhase, AlleyPalette> = {
     sunColor: '#8ea4ff',
     sunIntensity: 0.62,
     skySun: 0,
-    hemi: { sky: '#3a4c9a', ground: '#1a1424', intensity: 0.52 },
-    env: 0.2,
+    hemi: { sky: '#34469a', ground: '#16101e', intensity: 0.42 },
+    env: 0.16,
     fog: { color: '#141a30', density: 0.006 },
     grade: { exposure: 1.18, saturation: 1.2, contrast: 1.1, vignette: 0.42 },
     bloom: { intensity: 1.45, threshold: 0.86 },
@@ -95,13 +95,13 @@ export const ALLEY_PALETTES: Record<AlleyPhase, AlleyPalette> = {
 
 /** 映し出し（江戸の朝）のときに寄せる値。空は変えない（路地のまわりだけの朝） */
 const PROJECTION = {
-  hemi: { sky: '#ffe2b0', ground: '#c09060', intensity: 1.15 },
+  hemi: { sky: '#ffdcaa', ground: '#a07a50', intensity: 0.78 },
   sunColor: '#ffd6a0',
-  sunIntensity: 1.6,
-  fog: { color: '#e8c098', density: 0.0045 },
-  exposure: 1.32,
-  bloom: 1.6,
-  env: 0.55,
+  sunIntensity: 1.2,
+  fog: { color: '#c89a78', density: 0.0045 },
+  exposure: 1.1,
+  bloom: 1.35,
+  env: 0.42,
 }
 
 /** 太陽の方位・高さ → 地面から太陽への向き */

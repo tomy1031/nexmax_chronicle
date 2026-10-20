@@ -19,9 +19,9 @@ export const BRUTE_ARMOR_SLOTS: readonly ArmorSlot[] = [
   // 胸：さびた鉄板（いちばん大きい）
   { kind: 'plate', pos: new THREE.Vector3(0, 1.3, -0.68), rot: new THREE.Euler(0.2, Math.PI, 0.06), w: 1.08, h: 0.82 },
   // 左の肩から腕：工事中の看板
-  { kind: 'koji', pos: new THREE.Vector3(-0.92, 1.78, -0.22), rot: new THREE.Euler(0.1, -2.25, 0.35), w: 0.74, h: 0.58 },
+  { kind: 'koji', pos: new THREE.Vector3(-0.9, 1.72, -0.34), rot: new THREE.Euler(0.12, -2.6, 0.3), w: 0.86, h: 0.67 },
   // 右の肩から腕：IDO の立て看板
-  { kind: 'aframe', pos: new THREE.Vector3(0.92, 1.72, -0.2), rot: new THREE.Euler(0.08, 2.3, -0.3), w: 0.56, h: 0.74 },
+  { kind: 'aframe', pos: new THREE.Vector3(0.9, 1.66, -0.32), rot: new THREE.Euler(0.1, 2.62, -0.26), w: 0.62, h: 0.82 },
 ]
 
 /** アトラスの中の矩形（u0,v0,u1,v1。キャンバスの上が v=1） */
@@ -266,6 +266,29 @@ function tendrilGeometry(w: number, h: number, seed: number): THREE.BufferGeomet
   return out
 }
 
+/**
+ * 戦闘の「よろいの板」（rt.combat.spawn('brute', pos, { plates, onPlate })）に渡す板。モデルの座標（slot の位置・向き）で作る。
+ * 戦闘がモデルの root に付け、クロー（J）ではがすと手元へ飛ばす（後ろの板からはがれる）。影のすじ付き。
+ * 材質は板ごとに 1 つ（はがす的を光らせるなら material.emissiveIntensity を上げる）
+ */
+export function createArmorPlateObjects(slots: readonly ArmorSlot[] = BRUTE_ARMOR_SLOTS): THREE.Mesh[] {
+  const tex = armorAtlas()
+  const tendrilMat = new THREE.MeshStandardMaterial({ color: '#140a1e', roughness: 0.4, metalness: 0.3, emissive: new THREE.Color('#7a2cff'), emissiveIntensity: 0.9, name: 'armor_tendril' })
+  return slots.map((slot, i) => {
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: slot.kind === 'plate' ? 0.6 : 0.15, emissive: new THREE.Color('#ffd23f'), emissiveIntensity: 0, name: `armor_${slot.kind}` })
+    const mesh = new THREE.Mesh(armorPlateGeometry(slot.kind, slot.w, slot.h), mat)
+    mesh.castShadow = true
+    mesh.name = `armor_${i}`
+    const tendril = new THREE.Mesh(tendrilGeometry(slot.w, slot.h, 11 + i), tendrilMat)
+    tendril.name = 'armor_tendril'
+    mesh.add(tendril)
+    mesh.position.copy(slot.pos)
+    mesh.rotation.copy(slot.rot)
+    mesh.userData.armorKind = slot.kind
+    return mesh
+  })
+}
+
 export type ArmorAnchor = THREE.Object3D | { root: THREE.Object3D }
 
 type Plate = {
@@ -309,19 +332,12 @@ export class ArmorPlates {
     this.group.name = 'armor_plates'
     this.holder.matrixAutoUpdate = false
     this.group.add(this.holder, this.loose)
-    const tex = armorAtlas()
-    this.tendrilMat = new THREE.MeshStandardMaterial({ color: '#140a1e', roughness: 0.4, metalness: 0.3, emissive: new THREE.Color('#7a2cff'), emissiveIntensity: 0.9, name: 'armor_tendril' })
-    this.plates = slots.map((slot, i) => {
-      const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: slot.kind === 'plate' ? 0.6 : 0.15, emissive: new THREE.Color('#ffd23f'), emissiveIntensity: 0, transparent: false, name: `armor_${slot.kind}` })
-      const mesh = new THREE.Mesh(armorPlateGeometry(slot.kind, slot.w, slot.h), mat)
-      mesh.castShadow = true
-      mesh.name = `armor_${i}`
-      const tendril = new THREE.Mesh(tendrilGeometry(slot.w, slot.h, 11 + i), this.tendrilMat)
-      mesh.add(tendril)
-      mesh.position.copy(slot.pos)
-      mesh.rotation.copy(slot.rot)
+    const meshes = createArmorPlateObjects(slots)
+    this.tendrilMat = (meshes[0]?.children[0] as THREE.Mesh | undefined)?.material as THREE.MeshStandardMaterial
+    this.plates = meshes.map((mesh, i) => {
+      const slot = slots[i]
       this.holder.add(mesh)
-      return { slot, mesh, mat, tendril, state: 'on', vel: new THREE.Vector3(), spin: new THREE.Vector3(), t: 0, from: new THREE.Vector3(), fromQ: new THREE.Quaternion(), dur: 0.8, highlight: 0, hlNow: 0 }
+      return { slot, mesh, mat: mesh.material as THREE.MeshStandardMaterial, tendril: mesh.children[0] as THREE.Mesh, state: 'on', vel: new THREE.Vector3(), spin: new THREE.Vector3(), t: 0, from: new THREE.Vector3(), fromQ: new THREE.Quaternion(), dur: 0.8, highlight: 0, hlNow: 0 }
     })
     this.points = this.plates.map(() => new THREE.Vector3())
     this.group.visible = false
@@ -506,7 +522,7 @@ export class ArmorPlates {
       p.tendril.geometry.dispose()
       p.mat.dispose()
     }
-    this.tendrilMat.dispose()
+    this.tendrilMat?.dispose()
     this.group.removeFromParent()
   }
 }

@@ -43,15 +43,15 @@ const CAMS: Record<string, Cam> = {
   terminal: { pos: v(-9.0, 1.6, 19.9), look: v(-9.3, 1.25, 22.3), fov: 52, saeki: { pos: v(-9.9, 0, 21.15), face: v(-9.3, 0, 22.3) } },
   search: { pos: v(-7.6, 1.65, 18.9), look: v(-10.0, 1.15, 21.6), fov: 56, saeki: { pos: v(-9.6, 0, 21.15), face: v(-9.3, 0, 22.3) }, nexmax: { pos: v(-8.7, 0, 20.6), face: v(-9.3, 0, 22.3) } },
   clock: { pos: v(10.9, 1.55, 10.0), look: v(8.0, 2.0, 6.2), fov: 54, nexmax: { pos: v(9.0, 0, 7.2), face: v(9.0, 0, 5.8) } },
-  station: { pos: v(4.4, 1.6, -4.7), look: v(0.0, 2.5, -8.6), fov: 56, nexmax: { pos: v(0.6, 0, -7.1), face: v(0.1, 0, -5.8) } },
+  station: { pos: v(6.6, 1.9, -6.6), look: v(-0.6, 2.3, -7.8), fov: 56, nexmax: { pos: v(0.4, 0, -7.0), face: v(0.1, 0, -5.8) } },
   alley: { pos: v(17.3, 1.65, 12.4), look: v(15.9, 1.1, 17.4), fov: 56, nexmax: { pos: v(16.85, 0, 16.0), face: v(15.68, 0, 16.6) }, matsui: { pos: v(17.2, 0, 17.6), face: v(15.68, 0, 16.6) } },
   record: { pos: v(17.3, 1.65, 12.4), look: v(15.9, 1.1, 17.4), fov: 56, nexmax: { pos: v(16.85, 0, 16.0), face: v(15.68, 0, 16.6) } },
   lot: { pos: v(19.9, 2.6, 21.0), look: v(13.0, 1.1, 24.6), fov: 60, nexmax: { pos: v(15.6, 0, 22.9), face: v(12.75, 0, 23.6) }, ofuji: { ...SPOTS_V7.ofujiWind, pose: 'crank' }, matsui: { ...SPOTS_V7.matsuiShrine }, saeki: { ...SPOTS_V7.saekiShrine } },
   shrine: { pos: v(15.6, 1.45, 22.3), look: v(12.8, 1.05, 23.75), fov: 44, ofuji: { ...SPOTS_V7.ofujiWind, pose: 'crank' } },
   shrine_new: { pos: v(15.6, 1.45, 22.3), look: v(12.8, 1.05, 23.75), fov: 44 },
-  armor: { pos: v(-1.4, 2.0, 5.8), look: v(-4.6, 1.5, 8.6), fov: 52, nexmax: { pos: v(-2.6, 0, 6.6), face: v(-4.6, 0, 8.6) }, brute: { pos: v(-4.8, 0, 8.7), face: v(-2.6, 0, 6.6) } },
-  defense: { pos: v(20.8, 3.4, 20.6), look: v(14.6, 1.6, 25.0), fov: 62, time: 'night', nexmax: { pos: v(15.2, 0, 23.4), face: v(19.5, 0, 26) }, matsui: { ...SPOTS_V7.matsuiProject } },
-  overview: { pos: v(25.5, 11.5, 13.5), look: v(15.0, 0.5, 23.0), fov: 55 },
+  armor: { pos: v(-0.4, 2.0, 6.4), look: v(-3.7, 1.5, 8.5), fov: 52, nexmax: { pos: v(-1.7, 0, 7.0), face: v(-3.7, 0, 8.5) }, brute: { pos: v(-3.8, 0, 8.6), face: v(-1.7, 0, 7.0) } },
+  defense: { pos: v(18.6, 1.7, 20.4), look: v(15.2, 3.6, 25.4), fov: 66, time: 'night', nexmax: { pos: v(15.2, 0, 23.4), face: v(19.5, 0, 26) }, matsui: { ...SPOTS_V7.matsuiProject } },
+  overview: { pos: v(23.4, 14.5, 17.5), look: v(15.6, 0.0, 24.0), fov: 58 },
 }
 
 declare global {
@@ -265,6 +265,12 @@ async function main(): Promise<void> {
   await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 8000))])
   loading.hide()
 
+  // 撮影用：検索の画面と記録の絵の組み上がりを先に進めておく（遅い描画でも結果が並んだ姿を撮れる）
+  for (let i = 0; i < 120; i++) {
+    search.update(0.1)
+    panelFx.update(0.1)
+    await Promise.resolve()
+  }
   const fixedT = urlp.has('t') ? Number(urlp.get('t')) : null
   if (fixedT !== null) uTime.value = fixedT
   const timer = new THREE.Timer()

@@ -136,6 +136,11 @@ export type StageRuntime = {
   readonly inCinematic: boolean
   /** 画面の揺れ（0〜1 くらい。少しずつ収まる。プレイ中にも使える） */
   shake(amount: number): void
+  /**
+   * 物語 v7 の章のとびら（chronicle/chapterCard.ts）を出す。n を省くとフラグから決まる今の章。
+   * もう出した章なら何もしない。終わると resolve（その間は操作を止める）。時代を移って着いたときはシェルが自動で出す
+   */
+  chapter(n?: number): Promise<void>
   readonly playTime: number
 }
 

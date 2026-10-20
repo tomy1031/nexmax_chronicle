@@ -22,9 +22,12 @@ const KNOWN: Array<[RegExp, SpeakerStyle]> = [
   [/^マツイ/, { key: 'matsui', color: '#ffb057', source: 'matsui' }],
   // 1970年の佐伯ミチ（玲奈とは別人。顔は人影のまま）
   [/^ミチ|^佐伯ミチ/, { key: 'michi', color: '#ffb066', source: null }],
+  // 物語 v7：年をとった佐伯さんの声（顔はイラスト。chronicle/art.ts）
+  [/^佐伯（2068年）/, { key: 'saeki_old', color: '#9fe8ff', source: null }],
   [/^佐伯/, { key: 'saeki', color: '#7fe6ff', source: 'saeki' }],
   [/^ソラ/, { key: 'sora', color: '#c8a6ff', source: 'sora' }],
   // 物語 v7 の人物（顔は chronicle/visuals/person.ts の手続きの人物から）
+  [/^トワ（小さいころ）/, { key: 'towa_child', color: '#9fd8ff', source: null }],
   [/^トワ/, { key: 'towa', color: '#b99cff', source: 'towa' }],
   [/^チャンダのおばあさん|^守り手/, { key: 'elder', color: '#f2d27a', source: 'khmerElder' }],
   [/^チャンダ/, { key: 'chanda', color: '#ffb36b', source: 'chanda' }],

@@ -156,6 +156,7 @@ const THEME_PATTERNS: Record<HudTheme, { main: [PatternName, string]; sub: [Patt
   '2026': { main: ['grid', '#8ff5ea'], sub: ['grid', '#ffffff'] },
   '1726': { main: ['asanoha', '#f2c662'], sub: ['seigaiha', '#f2c662'] },
   '1970': { main: ['shippo', '#ffb066'], sub: ['grid', '#7fe8dc'] },
+  '1186': { main: ['shippo', '#e9c46a'], sub: ['seigaiha', '#7fd8b0'] },
 }
 
 /** ルート要素にテーマのクラスと模様の CSS 変数を付ける（HUD と読み込み画面で共用） */

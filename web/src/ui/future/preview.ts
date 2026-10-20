@@ -60,7 +60,7 @@ async function iconSheet(): Promise<void> {
 const hud = new HudFuture(ui, q.get('ghost') === '1' ? { ghostSeconds: 600 } : {})
 ;(window as unknown as { __hud: HudFuture }).__hud = hud
 
-const ERA_TEXT: Record<HudTheme, string> = { '1726': '1726年　大坂・仕掛け横丁', '1970': '1970年　千里丘陵・万国博覧会', '2026': '2026年　大阪・なんば', '2086': '2086年　ナンバタウン' }
+const ERA_TEXT: Record<HudTheme, string> = { '1186': '1186年　クメールの都・アルンの寺', '1726': '1726年　大坂・仕掛け横丁', '1970': '1970年　千里丘陵・万国博覧会', '2026': '2026年　大阪・なんば', '2086': '2086年　ナンバタウン' }
 const themeKey = (q.get('theme') ?? (bgKey === '2026' ? '2026' : bgKey === 'none' ? '2086' : '1726')) as HudTheme
 function theme(t: HudTheme): void {
   hud.setTheme(t)
@@ -186,6 +186,7 @@ function gate(sig: string): void {
 if (q.get('gate')) gate(q.get('gate') as string)
 if (q.get('expr')) hud.setPortraitExpression(q.get('expr') as 'happy')
 const ERA_CARD: Record<HudTheme, [string, string, string, string]> = {
+  '1186': ['1186年', 'クメールの都・アルンの寺', '900年前のカンボジア', '#f2d27a'],
   '1726': ['1726年', '大坂・仕掛け横丁', 'からくり職人の町', '#ffd27a'],
   '1970': ['1970年', '千里丘陵・万国博覧会', '人類の明日が並んだ夏', '#ffb066'],
   '2026': ['2026年', '大阪・なんば', 'ネクマックスが生まれた時代', '#8fd8ff'],

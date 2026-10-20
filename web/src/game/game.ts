@@ -19,7 +19,8 @@ import { TARGET_CATEGORY, isChronoTarget, type ClawTargetType } from '../player/
 import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
 import { CombatSystem } from '../combat/combatSystem'
 import { ChronoSystem } from '../chronicle/chrono'
-import { lightsLeft, riftClawUnlocked, v7Started } from '../chronicle/progress'
+import { chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
+import { ChapterCard } from '../chronicle/chapterCard'
 import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
@@ -153,6 +154,10 @@ export class Game {
   /** 目標の目印（いまやることの相手の頭の上の「！」。ステージの objectiveMarkers） */
   private readonly objMarks: ObjectiveMarkerFx
   private readonly cineBars: HTMLDivElement
+  /** 物語 v7 の章のとびら。chapterShown はもう出した章（起動時の章は出さない） */
+  private readonly chapterCard: ChapterCard
+  private chapterShown = -1
+  private chapterIdle = 0
   private readonly cineAuto = new THREE.Vector3()
   private readonly cineDir = new THREE.Vector3()
   private adaptive!: AdaptiveResolution
@@ -240,6 +245,7 @@ export class Game {
     this.cineMarker = new CineMarkerFx(ui)
     this.scene.add(this.cineMarker.group)
     this.objMarks = new ObjectiveMarkerFx(ui)
+    this.chapterCard = new ChapterCard(ui)
     // 物語の途中で部品が変わる（物語 v7 の 10 章：時を裂く爪をはめて時空裂きのNMクローに）
     this.story.changed.on((name) => {
       if (name !== 'v7_rift_claw') return
@@ -286,6 +292,8 @@ export class Game {
     }
     const unknown = this.story.applyFlagList(this.gp.flags)
     if (unknown.length) console.warn('[game] 未知のフラグ', unknown)
+    // 起動したときの章のとびらは出さない（つづきから・途中の章から始めたとき）
+    this.chapterShown = chapterOf((n) => this.story.get(n))
     this.loading.setEra(STAGE_INFO[stageKey].label)
     this.loading.setTheme(stageKey)
     this.hud.setEra(STAGE_INFO[stageKey].label)
@@ -523,6 +531,7 @@ export class Game {
     a.dead = true
     this.cancelCinematic()
     this.endDialogue()
+    this.chapterCard.finish()
     this.hud.clearDialog()
     this.hud.hideIdo()
     this.hud.setGate(null)
@@ -612,6 +621,13 @@ export class Game {
         return g.cine.active
       },
       shake: (amount) => this.cine.addShake(amount),
+      chapter: (n) => {
+        if (a.dead) return Promise.resolve()
+        const c = (n ?? chapterOf((k) => this.story.get(k))) as Chapter
+        if (c <= this.chapterShown) return Promise.resolve()
+        this.chapterShown = c
+        return this.chapterCard.show(c)
+      },
       get playTime() {
         return g.playTime
       },
@@ -727,7 +743,17 @@ export class Game {
       else if (e.kind === 'revealed') this.showEraCard(e.request.to, this.active?.stage.subtitle ?? '')
       else if (e.kind === 'done') {
         const a = this.active
-        if (a) a.stage.revealed?.(a.rt)
+        if (a) {
+          // 物語 v7：章が進んでいたら、着いた所で章のとびらを出してから場面を始める
+          const f = (n: string) => this.story.get(n)
+          const c = chapterOf(f)
+          if (v7Started(f) && c > this.chapterShown) {
+            this.chapterShown = c
+            void this.chapterCard.show(c).then(() => {
+              if (this.active === a && !a.dead) a.stage.revealed?.(a.rt)
+            })
+          } else a.stage.revealed?.(a.rt)
+        }
       }
     }
     this.travelFx.draw(dt, this.travel.cover, this.travel.phase === 'intro', this.travel.phase === 'loading')
@@ -778,6 +804,7 @@ export class Game {
     a.combat.animate(ndt * a.combat.timeScale, uTime.value)
     a.chrono.update(ndt, this.camera)
     if (!frozen) this.tickDialogue(ndt, false)
+    this.chapterCard.update(frozen ? 0 : dt)
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
     this.nexmax.handAnchor.getWorldPosition(this.hand)
@@ -893,11 +920,25 @@ export class Game {
       const r = canOpenHub({ unlocked: false, atSafePoint: false, wireMoving: claw.wire.isWireMoving(), airborne: !player.grounded && !player.isExternal, inCombat: combat.inCombat })
       hud.toast(r.message)
     }
-    if (!cineOn && frame.pressed.has('interact')) {
+    const card = this.chapterCard.active
+    if (card && (frame.pressed.has('interact') || frame.pressed.has('jump') || frame.pressed.has('claw_fire'))) this.chapterCard.skip()
+    if (!cineOn && !card && frame.pressed.has('interact')) {
       if (this.talk) this.tickDialogue(0, true)
       else stage.interact(rt)
     }
-    const locked = this.controlLocked || cineOn || combat.downed
+    // 章のとびらの出しわすれ：章が進んだまま、何もしていない時間が続いたら出す
+    {
+      const f = (n: string) => this.story.get(n)
+      const idle = !card && !this.talk && !cineOn && !this.controlLocked && !this.travel.busy
+      if (v7Started(f) && chapterOf(f) > this.chapterShown && idle) {
+        this.chapterIdle += dt
+        if (this.chapterIdle > 1.5) {
+          this.chapterIdle = 0
+          void rt.chapter()
+        }
+      } else this.chapterIdle = 0
+    }
+    const locked = this.controlLocked || cineOn || combat.downed || card
     // K：戦闘のあるステージでは攻撃（無ければ案内だけ）
     this.attackToastCooldown -= dt
     if (!locked && frame.pressed.has('attack')) {
@@ -1084,6 +1125,7 @@ export class Game {
   /** キー案内（必要なときだけ）：ワイヤー → 照準 → ステージ（話す・調べる）→ 開始直後の操作案内 */
   private computeHints(a: Active): Hint[] {
     const { claw } = a
+    if (this.chapterCard.active) return [{ key: 'F', label: 'つぎへ' }]
     if (this.talk) return [{ key: 'F', label: '次へ' }]
     if (this.cine.active) return this.cine.skippable ? [{ key: 'F', label: 'スキップ' }] : []
     const w = claw.wire

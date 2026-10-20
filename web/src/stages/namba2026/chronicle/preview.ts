@@ -51,7 +51,7 @@ const CAMS: Record<string, Cam> = {
   shrine_new: { pos: v(15.6, 1.45, 22.3), look: v(12.8, 1.05, 23.75), fov: 44 },
   armor: { pos: v(-0.4, 2.0, 6.4), look: v(-3.7, 1.5, 8.5), fov: 52, nexmax: { pos: v(-1.7, 0, 7.0), face: v(-3.7, 0, 8.5) }, brute: { pos: v(-3.8, 0, 8.6), face: v(-1.7, 0, 7.0) } },
   defense: { pos: v(18.6, 1.7, 20.4), look: v(15.2, 3.6, 25.4), fov: 66, time: 'night', nexmax: { pos: v(15.2, 0, 23.4), face: v(19.5, 0, 26) }, matsui: { ...SPOTS_V7.matsuiProject } },
-  overview: { pos: v(23.4, 14.5, 17.5), look: v(15.6, 0.0, 24.0), fov: 58 },
+  overview: { pos: v(25.0, 17.0, 34.0), look: v(15.5, 0.0, 22.5), fov: 55 },
 }
 
 declare global {
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
   const [matsui, saeki] = await Promise.all([loadCharacter('matsui', 1.72), loadCharacter('saeki', 1.6).catch(() => createSaekiPlaceholder(1.6))])
   addPerson(matsui, preset.matsui)
   addPerson(saeki, preset.saeki)
-  addPerson(createOfujiPlaceholder(1.42), preset.ofuji)
+  addPerson(await loadCharacter('ofuji', 1.42).catch(() => createOfujiPlaceholder(1.42) as unknown as Character), preset.ofuji)
 
   // よろいの影獣（欠け重を影の色で）
   const brute = new EnemyModel('brute', { panel: '#1a1426', trim: '#8a3cff', eye: '#ffb02a', body: '#120c1a' })
@@ -278,6 +278,20 @@ async function main(): Promise<void> {
   let frames = 0
   let tt = fixedT ?? 0
   const stats = { calls: 0, tris: 0, frames: 0, buildMs }
+  /** 1 つの部品の三角形と描画の数（メッシュの数） */
+  const partStats = (o: THREE.Object3D) => {
+    let tris = 0
+    let meshes = 0
+    o.traverse((x) => {
+      const m = x as THREE.Mesh
+      if (!m.isMesh || !m.visible) return
+      meshes++
+      const g = m.geometry
+      const n = g.index ? g.index.count : g.attributes.position.count
+      tris += (n / 3) * ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count : 1)
+    })
+    return { meshes, tris: Math.round(tris) }
+  }
   const measure = () => {
     const auto = renderer.info.autoReset
     renderer.info.autoReset = false
@@ -299,6 +313,7 @@ async function main(): Promise<void> {
     hud,
     nexmax,
     measure,
+    parts: () => ({ shrine: partStats(ns.shrine.root), armor: partStats(armor.group), surge: partStats(ns.surge.group), projection: partStats(ns.projection.group), mouths: partStats(ns.mouths.mesh), crack: partStats(ns.skyCrack.mesh), armorSources: partStats(ns.armorSources.group), brute: partStats(brute.root) }),
     stats: () => ({ ...stats }),
     setTime: (p: AlleyPhase) => time.set(p),
   }

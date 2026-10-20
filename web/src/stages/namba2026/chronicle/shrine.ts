@@ -557,7 +557,7 @@ export function buildShrine(opts: ShrineOptions): Shrine {
     for (let i = 1; i < 4; i++) b.add(new THREE.BoxGeometry(0.016, doorH - 0.22, 0.018), wood, M(cx - doorW / 2 + (doorW * i) / 4, 0.19 + (doorH - 0.22) / 2, 0), { tint: WOOD_DARK })
     for (let i = 1; i < 5; i++) b.add(new THREE.BoxGeometry(doorW - 0.04, 0.014, 0.018), wood, M(cx, 0.19 + ((doorH - 0.22) * i) / 5, 0), { tint: WOOD_DARK })
     // 取っ手の金具
-    b.add(new THREE.SphereGeometry(0.014, 6, 4), detail, M(cx + side * (doorW / 2 - 0.05), doorH * 0.5, 0.02), { tint: '#d8a840' })
+    b.add(new THREE.SphereGeometry(0.014, 6, 4), wood, M(cx + side * (doorW / 2 - 0.05), doorH * 0.5, 0.02), { tint: '#e8b840' })
     const grp = b.build(side < 0 ? 'shrine_door_l' : 'shrine_door_r')
     grp.traverse((o) => ((o as THREE.Mesh).castShadow = cast))
     pivot.add(grp)
@@ -616,10 +616,7 @@ export function buildShrine(opts: ShrineOptions): Shrine {
   // てんぷ（ゆれる輪）
   const balance = new THREE.Group()
   balance.position.set(-0.02, 0.03, 0.014)
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.004, 6, 16), brass)
-  balance.add(ring)
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.004, 0.004), brass)
-  balance.add(bar)
+  balance.add(new THREE.Mesh(mergeSimple([new THREE.TorusGeometry(0.02, 0.004, 6, 16), new THREE.BoxGeometry(0.04, 0.004, 0.004)]), brass))
   lockG.add(balance)
   // ぜんまいの鍵（おふじさんが巻くときだけ）
   const key = new THREE.Group()

@@ -1218,7 +1218,7 @@ export function createPerson(preset: PersonPreset, opts: PersonOpts = {}): Perso
   }
 
   const ch: PersonCharacter = {
-    name: preset as unknown as CharacterName,
+    name: preset as CharacterName,
     preset,
     root: r.root,
     placeholder: true,

@@ -10,7 +10,10 @@ import { drawGear, makeCanvas } from '../render/textures'
 import { createNexmax } from './nexmax/nexmaxModel'
 import { OUTLINE } from './nexmax/materials'
 
-export type CharacterName = 'nexmax' | 'genbei' | 'oharu' | 'matsui' | 'saeki' | 'sora' | 'michi'
+export type CharacterName = 'nexmax' | 'genbei' | 'oharu' | 'matsui' | 'saeki' | 'sora' | 'michi' | 'towa' | 'chanda' | 'khmerElder' | 'ofuji'
+
+/** 物語 v7 の手続きの人物（GLB は無い。chronicle/visuals/person.ts の createPerson で組み立てる） */
+const V7_PERSONS: ReadonlySet<CharacterName> = new Set<CharacterName>(['towa', 'chanda', 'khmerElder', 'ofuji'])
 export type Pose = 'idle' | 'walk' | 'hold' | 'crank' | 'wave' | 'run' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'dash'
 
 /** 仮モデルが持つ基本のポーズへ寄せる（新しいポーズは近いものとして扱う） */
@@ -52,6 +55,10 @@ loader.setMeshoptDecoder(MeshoptDecoder)
 export async function loadCharacter(name: CharacterName, targetHeightMeters: number): Promise<Character> {
   // 主人公は部品ごとに組み立てたモデル（関節で動かす）。GLB は使わない
   if (name === 'nexmax') return createNexmax(targetHeightMeters)
+  if (V7_PERSONS.has(name)) {
+    const m = await import('../chronicle/visuals/person')
+    return m.createPerson(name as 'towa' | 'chanda' | 'khmerElder' | 'ofuji', { height: targetHeightMeters })
+  }
   const url = `./models/${name}.glb`
   try {
     const head = await fetch(url, { method: 'HEAD' })

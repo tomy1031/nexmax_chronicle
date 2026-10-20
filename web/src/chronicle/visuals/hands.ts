@@ -10,7 +10,7 @@ import { uTime } from '../../render/materials'
 import { Particles } from './particles'
 import { BILLBOARD_GLSL, NOISE_GLSL, approach, clamp01, disposeRoot, easeIn, easeOut, smooth, unitQuad } from './common'
 import { SLAM_TIMING, slamImpactAt, slamPhase, slamWarning, type SlamTiming } from './logic'
-import { toonRamp } from './toon'
+import { toonRamp, createCutMarker } from './toon'
 
 export type HandFrom = 'ground' | 'sky'
 export type HandState = 'emerge' | 'idle' | 'reach' | 'hold' | 'chase' | 'slam' | 'retract' | 'cut' | 'gone'
@@ -91,6 +91,7 @@ type Hand = {
   armFx: THREE.BufferAttribute
   crack: THREE.Mesh | null
   portal: THREE.Mesh | null
+  cutMark: THREE.Mesh
   warn: THREE.Mesh
   ripple: THREE.Mesh
   fingerF: THREE.Vector3
@@ -101,7 +102,7 @@ type Hand = {
 // ------------------------------------------------------------------ 材質（黒い体・紫のふち・ひびの光・ちりになる）
 
 function handMaterial(): THREE.MeshToonMaterial {
-  const m = new THREE.MeshToonMaterial({ color: '#0d0914', gradientMap: toonRamp() })
+  const m = new THREE.MeshToonMaterial({ color: '#242035', gradientMap: toonRamp() })
   m.onBeforeCompile = (s) => {
     s.uniforms.uTime = uTime
     s.vertexShader = s.vertexShader
@@ -119,11 +120,11 @@ function handMaterial(): THREE.MeshToonMaterial {
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
   float cvRim = 1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
-  totalEmissiveRadiance += vec3(0.55, 0.22, 1.0) * pow(cvRim, 2.4) * 1.3;
+  totalEmissiveRadiance += vec3(0.55, 0.22, 1.0) * pow(cvRim, 2.4) * 0.55;
   // うすく光るひび（ゆっくり脈うつ）
   float cvR = abs(cvNoise3(vLocal * 1.6 + 3.1) - 0.5);
   float cvCrack = smoothstep(0.03, 0.0, cvR) * (0.55 + 0.45 * sin(uTime * 2.6 + vLocal.y * 1.5));
-  totalEmissiveRadiance += vec3(0.75, 0.18, 1.0) * cvCrack * 0.8;
+  totalEmissiveRadiance += vec3(0.75, 0.18, 1.0) * cvCrack * 0.25;
   // ちりになるふち・すりぬけたときの光
   float cvEdge = vFx.y > 0.001 ? smoothstep(vFx.y * 1.08 + 0.1, vFx.y * 1.08 - 0.04, cvN) : 0.0;
   totalEmissiveRadiance += vec3(0.85, 0.45, 1.0) * (cvEdge * 3.0 + vFx.x * 1.4);`,
@@ -195,8 +196,12 @@ void main() {
   float ring = smoothstep(0.07, 0.0, abs(r - 0.9));
   float inner = step(r, 0.9 * uFill) * 0.3 + smoothstep(0.05, 0.0, abs(r - 0.9 * uFill)) * 0.9;
   float pulse = 0.75 + 0.25 * sin(uTime * 18.0);
-  vec3 col = vec3(1.0, 0.3, 0.55) * 1.6;
-  float a = (ring * pulse + inner) * uA * step(r, 1.0);
+  // 8個の山形が内側を指す。水色の切断輪と色・形で区別する。
+  float angle = atan(p.y, p.x);
+  float sector = abs(mod(angle + 0.392699, 0.785398) - 0.392699);
+  float chevron = smoothstep(0.035, 0.012, abs(r - (0.57 + sector * 0.5))) * step(sector, 0.24);
+  vec3 col = vec3(1.0, 0.42, 0.08) * 1.3;
+  float a = (ring * pulse + inner + chevron) * uA * step(r, 1.0);
   gl_FragColor = vec4(col * a, a);
 }
 `
@@ -415,6 +420,9 @@ export class BlackHands {
     warn.visible = false
     const ripple = mkDecal(rippleFrag, { uT: { value: 0 } }, bbVert)
     ripple.visible = false
+    const cutMark = createCutMarker(armRadius(CUT_U, size) + 0.065 * size, 0.12 * size)
+    cutMark.visible = false
+    this.root.add(cutMark)
     // 腕の管（頂点は毎フレーム書く）
     const g = new THREE.BufferGeometry()
     const nV = RINGS * RAD + 1
@@ -468,6 +476,7 @@ export class BlackHands {
       crack,
       portal,
       warn,
+      cutMark,
       ripple,
       fingerF: new THREE.Vector3(0, 0, -1),
       fingerN: UP.clone(),
@@ -620,6 +629,9 @@ export class BlackHands {
       const i = this.mats.indexOf(mat)
       if (i >= 0) this.mats.splice(i, 1)
     }
+    h.cutMark.removeFromParent()
+    h.cutMark.geometry.dispose()
+    ;(h.cutMark.material as THREE.Material).dispose()
     h.arm.removeFromParent()
     h.arm.geometry.dispose()
     this.hands.delete(id)
@@ -741,7 +753,7 @@ export class BlackHands {
           wantCurl = 0.5
           flat = 1
           // 止まっている（裂くチャンス）を、ゆっくりした紫の明滅で
-          glow = 0.12 + 0.12 * Math.sin(t * 7)
+          glow = 0.015 + 0.01 * Math.sin(t * 7)
         } else if (p.phase === 'recover') {
           h.tip.lerpVectors(ground, _a.copy(h.rest).add(sway), smooth(p.k))
           flat = 1 - p.k
@@ -806,6 +818,13 @@ export class BlackHands {
     if (h.state !== 'slam') h.warn.visible = false
     if (h.state === 'cut') this.poseCut(h)
     else this.pose(h, flat, t)
+    h.cutMark.visible = h.state === 'slam' && slamPhase(h.st, h.timing).phase === 'stuck'
+    if (h.cutMark.visible) {
+      h.cutMark.position.copy(h.point)
+      const tangent = _a.subVectors(h.pts[N1 + 1], h.pts[N1 - 2]).normalize()
+      h.cutMark.quaternion.setFromUnitVectors(_b.set(0, 0, 1), tangent)
+      h.cutMark.scale.setScalar(1 + 0.04 * Math.sin(t * 5))
+    }
   }
 
   /** 腕の中心線（h.pts）を計算する。g：のびた割合 */
@@ -921,15 +940,17 @@ export class BlackHands {
     }
     F.copy(_a)
     const N = h.fingerN
-    N.copy(UP).addScaledVector(F, -UP.dot(F))
+    // 最初は掌をプレイカメラ側（-Z）へ見せる。ふりおろしでは地面へ伏せる。
+    N.set(0, flat, -(1 - flat)).normalize()
+    N.addScaledVector(F, -N.dot(F))
     if (N.lengthSq() < 1e-3) N.copy(h.bend)
     N.normalize()
     const Sd = _c.crossVectors(F, N).normalize()
     N.crossVectors(Sd, F).normalize()
     const sd = Sd.clone()
     // 手のひら
-    const palmLen = 0.8 * S
-    const palmW = 0.7 * S
+    const palmLen = 1.1 * S
+    const palmW = 1.05 * S
     const basis = new THREE.Matrix4().makeBasis(sd, F, N)
     const palmC = W.clone().addScaledVector(F, palmLen * 0.36)
     _m.copy(basis).scale(_s.set(palmW * 0.5, palmLen / 3, 0.2 * S)).setPosition(palmC)
@@ -952,15 +973,15 @@ export class BlackHands {
       const off = thumb ? 0 : (f - 1.5) * palmW * 0.3
       const lenK = thumb ? 0.85 : [0.9, 1.05, 1.0, 0.8][f]
       if (thumb) {
-        p.copy(W).addScaledVector(F, palmLen * 0.3).addScaledVector(sd, palmW * 0.5)
+        p.copy(W).addScaledVector(F, palmLen * 0.3).addScaledVector(sd, (palmW * 0.5 + 0.15 * S))
         dir.copy(F).multiplyScalar(0.55).addScaledVector(sd, 0.8).addScaledVector(N, -0.25).normalize()
       } else {
-        p.copy(W).addScaledVector(F, palmLen * 0.86).addScaledVector(sd, off)
-        const spread = (f - 1.5) * 0.17 * (1 - curl * 0.7)
+        p.copy(W).addScaledVector(F, palmLen * (0.8 - 0.2 * Math.abs((f - 1.5) / 1.5))).addScaledVector(sd, off)
+        const spread = (f - 1.5) * 0.25 * (1 - curl * 0.7)
         dir.copy(F).addScaledVector(sd, Math.sin(spread)).normalize()
       }
       // 付け根のこぶ
-      _m.compose(p, _q.identity(), _s.setScalar(0.1 * S))
+      _m.compose(p, _q.setFromRotationMatrix(basis), _s.set((thumb ? 0.24 : 0.13) * S, (thumb ? 0.2 : 0.13) * S, (thumb ? 0.15 : 0.13) * S))
       this.knobMesh.setMatrixAt(ki, _m)
       this.knobFx.setXY(ki, h.glow, h.fade)
       ki++
@@ -971,7 +992,7 @@ export class BlackHands {
         dir.applyAxisAngle(sd, -bend)
         const len = fingerLen[j] * lenK * S
         q.copy(p).addScaledVector(dir, len)
-        segMatrix(p, q, (0.085 - j * 0.014) * S, _m)
+        segMatrix(p, q, (0.12 - j * 0.018) * S, _m)
         this.segMesh.setMatrixAt(si, _m)
         this.segFx.setXY(si, h.glow, h.fade)
         si++
@@ -979,7 +1000,7 @@ export class BlackHands {
       }
       // かぎ爪
       _q.setFromUnitVectors(UP, _b.copy(dir).applyAxisAngle(sd, -0.35).normalize())
-      _m.compose(p, _q, _s.set(0.05 * S, 0.2 * S, 0.05 * S))
+      _m.compose(p, _q, _s.set(0.05 * S, 0.12 * S, 0.05 * S))
       this.clawMesh.setMatrixAt(ci, _m)
       this.clawFx.setXY(ci, h.glow + 0.3, h.fade)
       ci++

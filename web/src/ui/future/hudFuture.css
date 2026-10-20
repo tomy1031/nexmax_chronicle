@@ -91,6 +91,32 @@
   --nx-tab-on: rgba(255, 162, 74, 0.2);
 }
 
+/* ---- 1186（クメールの都：砂岩の金茶＋翡翠の緑、蓮の青のさし色。七宝と青海波） */
+.nx-theme-1186 {
+  --nx-line: #e9c46a;
+  --nx-line-hi: #fff6dc;
+  --nx-line-dim: rgba(233, 196, 106, 0.42);
+  --nx-line-in: rgba(127, 216, 176, 0.32);
+  --nx-acc: #5fd6ff;
+  --nx-acc-dim: rgba(95, 214, 255, 0.5);
+  --nx-glass-a: rgba(40, 70, 52, 0.66);
+  --nx-glass-b: rgba(14, 24, 18, 0.84);
+  --nx-edge-op: 0.13;
+  --nx-deep-a: rgba(30, 50, 38, 0.93);
+  --nx-deep-b: rgba(10, 18, 14, 0.96);
+  --nx-disk-a: rgba(44, 74, 56, 0.86);
+  --nx-disk-b: rgba(12, 22, 16, 0.92);
+  --nx-sheen: #fff0c4;
+  --nx-scan: rgba(255, 236, 180, 0.045);
+  --nx-pat-ink: #e9c46a;
+  --nx-pat-fill: #0e1a12;
+  --nx-pat-op: 0.18;
+  --nx-ink: #fffaf0;
+  --nx-ink-dim: #e8d9b4;
+  --nx-glow: rgba(233, 196, 106, 0.42);
+  --nx-tab-on: rgba(233, 196, 106, 0.2);
+}
+
 /* ---- 1726（江戸の大坂：藍＋金、朱のさし色。ネクマックスの投影なので内側の線は青く光る） */
 .nx-theme-1726 {
   --nx-line: #f3c865;
@@ -179,6 +205,10 @@
 .nx-theme-1970 .nx-f-pat[data-slot='plate'],
 .nx-theme-1970 .nx-f-pat[data-slot='bar'] { fill: url(#nxp-grid); opacity: calc(var(--nx-pat-op) * 0.8); }
 .nx-theme-1970 .nx-f-flare { display: none; }
+.nx-theme-1186 .nx-f-pat[data-slot='panel'] { fill: url(#nxp-shippo); }
+.nx-theme-1186 .nx-f-pat[data-slot='band'] { fill: url(#nxp-seigaiha); opacity: calc(var(--nx-pat-op) * 1.1); }
+.nx-theme-1186 .nx-f-pat[data-slot='plate'],
+.nx-theme-1186 .nx-f-pat[data-slot='bar'] { fill: url(#nxp-shippo); opacity: calc(var(--nx-pat-op) * 0.7); }
 .nx-theme-1726 .nx-f-pat[data-slot='panel'] { fill: url(#nxp-asanoha); }
 .nx-theme-1726 .nx-f-pat[data-slot='band'] { fill: url(#nxp-seigaiha); opacity: calc(var(--nx-pat-op) * 1.15); }
 .nx-theme-1726 .nx-f-pat[data-slot='plate'],
@@ -229,6 +259,7 @@
 .nx-theme-2026 .nx-pf-frame .pf-pat { fill: url(#nxpd-grid); }
 .nx-theme-1726 .nx-pf-frame .pf-pat { fill: url(#nxpd-asanoha); }
 .nx-theme-1970 .nx-pf-frame .pf-pat { fill: url(#nxpd-shippo); }
+.nx-theme-1186 .nx-pf-frame .pf-pat { fill: url(#nxpd-shippo); }
 .nx-pf-frame .pf-scan { fill: url(#nxf-scan); }
 .nx-pf-frame .pf-rim,
 .nx-arm-svg .arm-rim { fill: url(#nxf-rim); }
@@ -255,6 +286,7 @@
 }
 .nx-theme-1726 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #6f86e6 0%, #2c3aa0 52%, #10165a 100%); }
 .nx-theme-1970 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #ffb27a 0%, #b4502e 52%, #4a1a14 100%); }
+.nx-theme-1186 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #8fd8b0 0%, #2e6e4e 52%, #0e2a1c 100%); }
 .nx-theme-2026 .nx-pf-canvas { background: radial-gradient(circle at 50% 36%, #5ac4d8 0%, #1f6e8a 52%, #0a2c3c 100%); }
 .nx-pf-canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; animation: nx-fade-in 0.5s ease-out; }
 .nx-pf-fallback { position: absolute; inset: 0; display: grid; place-items: center; }
@@ -306,6 +338,23 @@
 }
 .nx-gauge-seg { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 2.5 * var(--u)), rgba(2, 12, 34, 0.95) calc(25% - 2.5 * var(--u)) 25%); }
 .nx-energy.full .nx-gauge-fill { animation: nx-blink 1.2s ease-in-out infinite; }
+
+/* 背中の石の光のつぶ（物語 v7。体力の下。特殊エネルギーと同じ場所なので、出るのはどちらか） */
+.nx-lights { position: absolute; left: 0; top: calc(54 * var(--u)); width: calc(296 * var(--u)); height: calc(36 * var(--u)); }
+.nx-lights .nx-crystal { left: calc(44 * var(--u)); }
+.nx-lights-label { position: absolute; left: calc(78 * var(--u)); top: 50%; transform: translateY(-50%); font: 700 calc(12 * var(--u)) / 1 var(--nx-jp); letter-spacing: 0.06em; color: var(--nx-line-hi); text-shadow: var(--nx-shadow); white-space: nowrap; }
+.nx-light-row { position: absolute; left: calc(146 * var(--u)); right: calc(22 * var(--u)); top: 50%; transform: translateY(-50%); display: flex; justify-content: space-between; align-items: center; }
+.nx-light {
+  display: block; width: calc(13 * var(--u)); height: calc(13 * var(--u)); border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #ffffff 0 18%, #9fe9ff 34%, #3aa6ff 70%, #1a5fd0 100%);
+  box-shadow: 0 0 calc(7 * var(--u)) rgba(110, 220, 255, 0.95), 0 0 calc(14 * var(--u)) rgba(80, 160, 255, 0.55);
+}
+.nx-light.off { background: rgba(6, 18, 46, 0.75); box-shadow: inset 0 0 0 max(1px, calc(1 * var(--u))) var(--nx-line-dim); }
+.nx-light.lost { animation: nx-light-lost 0.9s ease-out; }
+@keyframes nx-light-lost { 0% { transform: scale(2.2); background: #ffffff; box-shadow: 0 0 calc(22 * var(--u)) #bff3ff; } 60% { transform: scale(0.6); } 100% { transform: scale(1); } }
+.nx-lights.last .nx-light:not(.off) { animation: nx-blink 1.4s ease-in-out infinite; }
+.nx-lights.spent .nx-crystal { animation: nx-heart-gain 0.6s ease-out; }
+.nx-has-lights .nx-energy { display: none; }
 
 .nx-era { position: absolute; left: calc(4 * var(--u)); top: calc(162 * var(--u)); height: calc(38 * var(--u)); padding: 0 calc(30 * var(--u)) 0 calc(28 * var(--u)); display: flex; align-items: center; }
 .nx-era-text { position: relative; font: 700 calc(18 * var(--u)) / 1 var(--nx-jp); letter-spacing: 0.08em; white-space: nowrap; text-shadow: var(--nx-shadow); }
@@ -405,6 +454,7 @@
 .nx-ret-target[data-cat='anchor'] { --rc: #4fe8ff; }
 .nx-ret-target[data-cat='mechanism'] { --rc: #7dff9a; }
 .nx-ret-target[data-cat='enemy'] { --rc: #ff5d74; }
+.nx-ret-target[data-cat='chrono'] { --rc: #9fe6ff; }
 .nx-ret-target.far { --rc: rgba(222, 234, 252, 0.62); }
 .nx-ret-shape { position: absolute; left: calc(-31 * var(--u)); top: calc(-31 * var(--u)); width: calc(62 * var(--u)); height: calc(62 * var(--u));
   filter: drop-shadow(0 0 calc(3 * var(--u)) var(--rc)) drop-shadow(0 0 1px rgba(0, 16, 40, 0.9)); }
@@ -487,6 +537,7 @@
   background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 30%, #2a64b4) 0%, #123a7a 55%, #061a40 100%);
 }
 .nx-theme-1726 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #3a4ab0) 0%, #1a2270 55%, #080c36 100%); }
+.nx-theme-1186 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #3a7e5a) 0%, #1a4430 55%, #08180e 100%); }
 .nx-theme-1970 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #c0663a) 0%, #6a2a1c 55%, #2a0c0c 100%); }
 .nx-theme-2026 .nx-face-img { background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--spk) 26%, #2a8aa0) 0%, #12465a 55%, #06202c 100%); }
 .nx-face-img::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(180, 240, 255, 0.06) 0 1px, transparent 1px 3px), linear-gradient(180deg, transparent 60%, rgba(2, 10, 30, 0.45)); }
@@ -540,6 +591,7 @@
 .nx-arm-svg .arm-pat { fill: url(#nxpd-hex); opacity: calc(var(--nx-pat-op) * 0.9); }
 .nx-theme-2026 .nx-arm-svg .arm-pat { fill: url(#nxpd-grid); }
 .nx-theme-1970 .nx-arm-svg .arm-pat { fill: url(#nxpd-shippo); }
+.nx-theme-1186 .nx-arm-svg .arm-pat { fill: url(#nxpd-shippo); }
 .nx-theme-1726 .nx-arm-svg .arm-pat { fill: url(#nxpd-shippo); opacity: calc(var(--nx-pat-op) * 1.1); }
 .nx-arm-svg .arm-scan { fill: url(#nxf-scan); }
 .nx-arm-svg .arm-inner { fill: none; stroke: var(--nx-line-in); stroke-width: 0.8; }
@@ -765,6 +817,7 @@
   background: radial-gradient(circle at 50% 42%, #0e3270 0%, #061738 55%, #020916 100%);
 }
 .nx-loading.nx-theme-2026 { background: radial-gradient(circle at 50% 42%, #0f3a4a 0%, #06202a 55%, #020c12 100%); }
+.nx-loading.nx-theme-1186 { background: radial-gradient(circle at 50% 42%, #2a4a30 0%, #10241a 55%, #040c08 100%); }
 .nx-loading.nx-theme-1970 { background: radial-gradient(circle at 50% 42%, #7a2e1c 0%, #3a1210 55%, #12060a 100%); }
 .nx-loading.nx-theme-1726 { background: radial-gradient(circle at 50% 42%, #242c86 0%, #0d1150 55%, #04061e 100%); }
 .nx-loading.done { opacity: 0; pointer-events: none; }

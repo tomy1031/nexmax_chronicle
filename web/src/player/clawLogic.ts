@@ -8,10 +8,14 @@
 import * as THREE from 'three'
 import { ClawEvent, ClawStateMachine } from '../core/clawStateMachine'
 
-export type ClawTargetType = 'pull_object' | 'pull_player' | 'swing_anchor' | 'hold_mechanism' | 'enemy_pull' | 'enemy_zip'
+/**
+ * chrono_*：物語 v7 の時空裂きのNMクロー（chronicle/chrono.ts）。ワイヤーは撃たず、J でその場に効く。
+ * chrono_freeze：動いている物を止める／chrono_seam：空中のゆらぎを裂いて裏側への切れ目をひらく／chrono_ura：裏側にしかない物（黒い手など）を裂く
+ */
+export type ClawTargetType = 'pull_object' | 'pull_player' | 'swing_anchor' | 'hold_mechanism' | 'enemy_pull' | 'enemy_zip' | 'chrono_freeze' | 'chrono_seam' | 'chrono_ura'
 
-/** 照準の見た目の分類（マニュアル §7：軽い物／固定支点／協力装置。敵は赤） */
-export type TargetCategory = 'light' | 'anchor' | 'mechanism' | 'enemy'
+/** 照準の見た目の分類（マニュアル §7：軽い物／固定支点／協力装置。敵は赤。時空裂きは青白い時計） */
+export type TargetCategory = 'light' | 'anchor' | 'mechanism' | 'enemy' | 'chrono'
 
 export const TARGET_CATEGORY: Record<ClawTargetType, TargetCategory> = {
   pull_object: 'light',
@@ -20,6 +24,14 @@ export const TARGET_CATEGORY: Record<ClawTargetType, TargetCategory> = {
   hold_mechanism: 'mechanism',
   enemy_pull: 'enemy',
   enemy_zip: 'enemy',
+  chrono_freeze: 'chrono',
+  chrono_seam: 'chrono',
+  chrono_ura: 'chrono',
+}
+
+/** 時空裂きの対象か（ワイヤーを撃たず、J でその場に効く） */
+export function isChronoTarget(t: ClawTargetType): boolean {
+  return t === 'chrono_freeze' || t === 'chrono_seam' || t === 'chrono_ura'
 }
 
 export type ClawTargetDef = {

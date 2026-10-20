@@ -2,7 +2,7 @@
 // 曲ごとに 8 小節か 16 小節をくり返す。旋律は調の音か、そのとき鳴っている和音の音だけを使う（tests/music.test.ts で確かめる）。
 import type { Track } from './theory'
 
-export type MusicId = 'title' | 'future2086' | 'night2086' | 'present2026' | 'expo1970' | 'edo1726' | 'ruins2028' | 'khmer' | 'battle' | 'boss'
+export type MusicId = 'title' | 'future2086' | 'night2086' | 'present2026' | 'expo1970' | 'edo1726' | 'ruins2028' | 'khmer' | 'ura' | 'dawn' | 'battle' | 'boss'
 
 /** bars 小節ごとに 1 回だけ鳴らす打楽器の型（頭に x） */
 function every(bars: number): string {
@@ -192,6 +192,55 @@ export const TRACKS: Readonly<Record<MusicId, Track>> = {
         notes:
           'E5:4 D5:2 C5:2 A4:8 | r:4 C5:2 D5:2 E5:4 G5:4 | A5:6 G5:2 E5:4 D5:4 | E5:12 r:4 | G5:4 E5:2 G5:2 A5:4 C6:4 | D6:6 C6:2 A5:4 G5:4 | E5:4 D5:2 E5:2 A5:4 G5:4 | E5:12 r:4 | ' +
           'A5:4 G5:2 E5:2 G5:4 A5:4 | C6:6 A5:2 G5:4 E5:4 | D5:4 E5:4 A5:4 E5:4 | C5:12 r:4 | A5:4 C6:4 E6:8 | D6:4 C6:2 A5:2 G5:8 | A5:4 G5:2 E5:2 D5:4 E5:4 | A4:12 r:4',
+      },
+    ],
+  },
+
+  // 物語 v7「この世の裏側」：時が流れない、まっくらな裏側（オルムの本体がいる所）。遠い合唱と、ふるえるテルミン、ときどき鉦。
+  ura: {
+    title: 'この世の裏側',
+    bpm: 64,
+    key: 'E minor',
+    chords: ['Em', 'Cmaj7', 'Am7', 'B7', 'Em', 'Cmaj7', 'Am7', 'B7'],
+    parts: [
+      { kind: 'pad', inst: 'choir', lo: 52, gain: 0.45, rev: 0.7 },
+      { kind: 'bass', inst: 'subbass', lo: 36, pattern: 'R---------------', gain: 0.55 },
+      { kind: 'arp', inst: 'bell', lo: 64, pattern: '0...2...1...3...', gain: 0.22, pan: 0.3, rev: 0.6, dly: 0.4 },
+      { kind: 'drum', drum: 'kane', pattern: every(2), gain: 0.22, pan: -0.3, rev: 0.7 },
+      { kind: 'drum', drum: 'taiko', pattern: 'x...............................', gain: 0.35, rev: 0.5 },
+      {
+        kind: 'melody',
+        inst: 'theremin',
+        gain: 0.55,
+        rev: 0.6,
+        dly: 0.3,
+        notes: 'B4:8 G4:4 E4:4 | E5:6 D5:2 C5:8 | A4:4 C5:4 E5:4 G5:4 | F#5:8 D#5:8 | G5:6 F#5:2 E5:8 | C5:4 E5:4 G5:4 B5:4 | A5:6 G5:2 E5:4 C5:4 | B4:12 r:4',
+      },
+    ],
+  },
+
+  // 物語 v7「明日へ」：最後の夜をこえて、10月19日の朝へ。タイトルの約束の動機（5・1・2・3）を、金管と弦で高らかに
+  dawn: {
+    title: '明日へ',
+    bpm: 92,
+    key: 'F major',
+    chords: ['F', 'C/E', 'Dm7', 'Bbmaj7', 'F/A', 'Gm7', 'Csus4 C', 'F', 'Bb', 'C', 'Am7', 'Dm7', 'Gm7', 'C', 'Bbmaj7 C', 'F'],
+    parts: [
+      { kind: 'pad', inst: 'strings', lo: 53, gain: 0.55, rev: 0.5 },
+      { kind: 'arp', inst: 'ep', lo: 57, pattern: '0.1.2.3.2.1.2.3.', gain: 0.36, pan: -0.2, rev: 0.3 },
+      { kind: 'bass', inst: 'bass', lo: 36, pattern: 'R-------F---R---', gain: 0.6 },
+      { kind: 'drum', drum: 'kick', pattern: 'x.......x.......', gain: 0.45, on: '0000000011111111' },
+      { kind: 'drum', drum: 'snare', pattern: '....x.......x...', gain: 0.3, rev: 0.3, on: '0000000011111111' },
+      { kind: 'drum', drum: 'shaker', pattern: '..x...x...x...x.', gain: 0.35, pan: 0.3 },
+      { kind: 'drum', drum: 'crash', pattern: every(8), gain: 0.4, rev: 0.4 },
+      {
+        kind: 'melody',
+        inst: 'brass',
+        gain: 0.62,
+        rev: 0.35,
+        notes:
+          'C5:2 F5:2 G5:2 A5:10 | G5:4 E5:4 C5:8 | D5:2 F5:2 A5:2 C6:10 | Bb5:6 A5:2 F5:8 | C5:2 F5:2 G5:2 A5:4 C6:2 F6:4 | E6:4 D6:4 Bb5:4 G5:4 | G5:4 F5:4 E5:8 | F5:12 r:4 | ' +
+          'D6:4 C6:4 Bb5:4 F5:4 | E5:4 G5:4 C6:8 | C6:4 E6:4 G6:4 E6:4 | F6:8 D6:4 A5:4 | Bb5:4 D6:4 G6:4 F6:4 | E6:6 D6:2 C6:8 | D6:4 C6:4 Bb5:4 G5:4 | A5:2 C6:2 F6:12',
       },
     ],
   },

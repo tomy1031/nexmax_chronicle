@@ -120,7 +120,7 @@ export const K = {
 
   // ---------------------------------------------------------------- 遠景
   /** オルムに「食べられた」森のあと（北東の遠く）：弧の中心・半径・幅・角度の範囲 */
-  SCAR: { cx: 92, cz: -60, r: 78, width: 24, a0: -2.25, a1: -1.05, depth: 2.6 },
+  SCAR: { cx: 92, cz: -46, r: 78, width: 24, a0: -2.25, a1: -1.05, depth: 2.6 },
   /** 夜の空のひび（北東の高い空） */
   SKY_CRACK: { pos: v(120, 150, -330), size: 300 },
   MOON: v(-260, 210, 240),
@@ -236,6 +236,9 @@ export const KHMER_CLAW_IDS = {
  */
 export type HookDef = { id: string; label: string; point: THREE.Vector3; landing: THREE.Vector3; via: THREE.Vector3; facing: THREE.Vector3; from: THREE.Vector3 }
 
+/** 北の塔への道の金具の射程（少しだけ長め：水の上で、ふちまで行かなくても届く） */
+export const ROUTE_RANGE = 11.5
+
 /** 家の部屋の壁から軒の金具までの張り出し・軒の高さ（床から） */
 export const EAVE = { out: 0.55, y: 1.5, wall: 1.75, overhang: 0.75 }
 
@@ -294,7 +297,7 @@ export const ELEPHANT_PATHS = {
   /** 象の道（南）：村の西から寺の南まで */
   road: { points: [v(-74, 0, 46), v(-40, 0, 46.5), v(-17, 0.5, 46), v(10, 0, 45.5), v(66, 0, 46)], speed: 1.15, wait: 5, bob: 0 },
   /** 池をわたる：寺の北の岸の象のりば → 池の中ほど（h2・h3 の近く）→ もどる */
-  baray: { points: [v(-7, 0, -36.6), v(-7, -0.6, -41.5), v(-6.6, -1.5, -48), v(-6, -1.5, -55), v(-6, -1.5, -61.6)], speed: 1.0, wait: 6, bob: 0 },
+  baray: { points: [v(-6.6, 0, -36.6), v(-6.8, -0.6, -41.5), v(-6.6, -1.5, -48), v(-6, -1.5, -55), v(-6, -1.5, -61.6)], speed: 1.0, wait: 7, bob: 0 },
 } as const
 /** 象のりば（池の象の道の、岸の端。上がって象の背中へ跳び移る） */
 export const ELEPHANT_DOCK = { x: -4.3, z: -36.6, y: 2.4, w: 2.4, d: 3.4 }
@@ -370,7 +373,7 @@ export const SPAWNS: Record<string, SpawnDef> = {
   /** 上の台（祭壇の前） */
   altar: sp(20.2, K.TOP_Y, -1.4, 26, -4, 0.12),
   /** 北の塔へ：板の道の東の端（ここからクローで小屋を飛び移る） */
-  tower_n: sp(-36.2, K.WALK_Y, -58, -11, -66, 0.08),
+  tower_n: sp(-34.6, K.WALK_Y, -58.2, -25, -64, 0.08),
   /** 北の塔の島（着いた所） */
   tower_n_top: sp(20.6, K.ISLAND.y, -66, 26, -60, 0.15),
   /** 東の塔：回る鏡の台の前 */

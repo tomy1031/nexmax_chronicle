@@ -116,10 +116,10 @@ export const KHMER_ENVIRONMENTS: Record<TimeOfDay, KhmerEnvironment> = {
     hemi: { sky: '#9aa4d8', ground: '#8a5a48', intensity: 0.55 },
     hdri: null,
     envIntensity: 0.6,
-    fog: { color: '#e8c4a4', density: 0.0026 },
+    fog: { color: '#e8c4a4', density: 0.0017 },
     grade: { exposure: 1.0, saturation: 1.25, contrast: 1.06, vignette: 0.3 },
     bloom: { intensity: 1.35, threshold: 0.88 },
-    haze: { near: '#f6d2b0', far: '#c8a8c0', density: 0.0045, start: 40, falloff: 0.028, max: 0.6 },
+    haze: { near: '#f6d2b0', far: '#c8a8c0', density: 0.0032, start: 60, falloff: 0.028, max: 0.5 },
   },
 }
 

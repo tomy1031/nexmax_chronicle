@@ -22,6 +22,7 @@ import {
   LAND_HOUSES,
   NPC,
   ROUTE_N,
+  ROUTE_RANGE,
   SMALL_TOWER,
   SPAWNS,
   TOWERS,
@@ -416,7 +417,7 @@ function buildGround(c: KCtx, ground: Batch): void {
 }
 
 /** 食べられた森のあとの範囲（地面の絵の代わりに、えぐれた地形のメッシュ） */
-const SCAR_RECT: Rect = { x0: 24, x1: 156, z0: -164, z1: -100 }
+const SCAR_RECT: Rect = { x0: 24, x1: 156, z0: -150, z1: -94 }
 
 // ------------------------------------------------------------------ 水の上の村
 
@@ -481,7 +482,7 @@ function buildRoute(c: KCtx, targets: ClawTargetDef[]): void {
     const p = hk.point
     c.b.add(new THREE.TorusGeometry(0.2, 0.045, 8, 18), c.m.hookGlow, M(p.x, p.y, p.z, 0, Math.atan2(hk.facing.x, hk.facing.z), 0), { tint: '#ffffff', cast: false })
     strut(c, v(p.x, p.y + 0.2, p.z), v(p.x, p.y + 0.62, p.z), 0.025, c.m.bronze, KC.bronze, { cast: false })
-    targets.push({ id: hk.id, type: 'pull_player', label: hk.label, point: p.clone(), radius: 0.3, enabled: true, facing: hk.facing.clone(), landing: hk.landing.clone(), via: hk.via.clone() })
+    targets.push({ id: hk.id, type: 'pull_player', label: hk.label, point: p.clone(), radius: 0.3, enabled: true, range: ROUTE_RANGE, facing: hk.facing.clone(), landing: hk.landing.clone(), via: hk.via.clone() })
   }
   // 魚をとる網の大きな木組み（h1 と h2 のあいだ）：ぶら下がってこぐ
   const S = ROUTE_N.swing
@@ -909,7 +910,7 @@ function buildPyramid(c: KCtx): void {
         const along = -t.half + 1.6 + k * 2.4
         const x = Pyr.cx + nx * (t.half - 0.06) + (nz !== 0 ? along : 0)
         const z = Pyr.cz + nz * (t.half - 0.06) + (nx !== 0 ? along : 0)
-        box(c, x, t.y0 + h * 0.5, z, nx !== 0 ? 0.14 : 1.2, h * 0.42, nz !== 0 ? 0.14 : 1.2, c.m.sandstone, { tint: shade(KC.sandDark, 0.85), cast: false })
+        box(c, x, t.y0 + h * 0.5, z, nx !== 0 ? 0.14 : 1.2, h * 0.42, nz !== 0 ? 0.14 : 1.2, c.m.sandstone, { tint: shade(KC.sandDark, 1.05), cast: false })
       }
     }
   })

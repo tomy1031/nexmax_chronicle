@@ -38,13 +38,13 @@ export const KHMER_CAMS: Record<string, CamPreset> = {
   tower_e: { pos: v(30.5, 4.6, 19.5), look: v(50, 5, -2), fov: 58, nexmax: { pos: SPAWNS.tower_e.pos, face: v(40, 0, 10) } },
   tower_n: { pos: v(-41.5, 4.4, -53), look: v(4, 3, -68), fov: 60, nexmax: { pos: SPAWNS.tower_n.pos, face: v(-25, 0, -64) } },
   tower_s: { pos: v(17.5, 3.6, 8.5), look: v(26, 5, 22), fov: 58, nexmax: { pos: SPAWNS.tower_s.pos, face: v(26, 0, 25) } },
-  stairs: { pos: v(-0.5, 2.4, 3.5), look: v(18, 9, -4), fov: 58, nexmax: { pos: SPAWNS.stairs.pos, face: v(26, 0, -4) } },
+  stairs: { pos: v(4.2, 2.2, 4.6), look: v(18, 8, -4), fov: 58, nexmax: { pos: SPAWNS.stairs.pos, face: v(26, 0, -4) } },
   village: { pos: v(-38, 3.2, 18), look: v(-58, 2.5, 3), fov: 58, nexmax: { pos: v(-47, 0, 12), face: v(-54, 0, 8) } },
-  arun: { pos: v(18.6, 11.4, -1.6), look: v(26, 11, -4), fov: 56, nexmax: { pos: SPAWNS.altar.pos, face: v(26, 0, -4) } },
-  relief: { pos: v(-4.2, 1.7, 6.5), look: v(2, 1.9, 11), fov: 60, nexmax: { pos: v(-0.4, 0.25, 7.4), face: v(2, 0, 10) } },
+  arun: { pos: v(17.9, 11.0, -4.0), look: v(26, 11.1, -4), fov: 54, nexmax: { pos: v(19.7, 9.6, -2.9), face: v(26, 0, -4) } },
+  relief: { pos: v(-1.2, 1.6, 4.2), look: v(2, 1.9, 9.5), fov: 60, nexmax: { pos: v(-0.4, 0.25, 7.4), face: v(2, 0, 10) } },
   elephant: { pos: v(-12, 3.2, -30), look: v(-6, 1.6, -44), fov: 56, nexmax: { pos: v(-4.3, 2.4, -36.2), face: v(-7, 0, -36.6) } },
   scar: { pos: v(24, 13, -9), look: v(84, 0, -126), fov: 50 },
-  night_stairs: { pos: v(-1.5, 3.2, 6), look: v(18, 10, -4), fov: 58, time: 'night', nexmax: { pos: SPAWNS.stairs.pos, face: v(26, 0, -4) } },
+  night_stairs: { pos: v(3.8, 3.0, 6.4), look: v(18, 9, -4), fov: 58, time: 'night', nexmax: { pos: SPAWNS.stairs.pos, face: v(26, 0, -4) } },
   dawn_top: { pos: v(12.6, 16, 6), look: v(26, 14, -4), fov: 60, time: 'dawn' },
 }
 

@@ -47,12 +47,19 @@ function bakeShade(color: HTMLCanvasElement, h: Float32Array, strength: number, 
   ctx.putImageData(img, 0, 0)
 }
 
-/** ぼかした図形（高さのキャンバスで、ふちをなだらかに） */
-function softFill(ctx: CanvasRenderingContext2D, blur: number, draw: () => void): void {
-  ctx.save()
-  ctx.filter = `blur(${blur}px)`
+/** 図形を描く（ふちのぼかしは、最後に blurInPlace でまとめて 1 回かける。図形ごとにぼかすと重い） */
+function softFill(_ctx: CanvasRenderingContext2D, _blur: number, draw: () => void): void {
   draw()
-  ctx.restore()
+}
+
+/** キャンバス全体を 1 回だけぼかす（高さのふちをなだらかに） */
+function blurInPlace(c: HTMLCanvasElement, px: number): void {
+  const [t, tg] = makeCanvas(c.width, c.height)
+  tg.filter = `blur(${px}px)`
+  tg.drawImage(c, 0, 0)
+  const g = c.getContext('2d') as CanvasRenderingContext2D
+  g.clearRect(0, 0, c.width, c.height)
+  g.drawImage(t, 0, 0)
 }
 
 // ------------------------------------------------------------------ 砂岩の切り石
@@ -117,8 +124,8 @@ export function paintAshlar(S = 1024, seed = 7): PaintedKhmer {
     const y0 = rng() * S
     g.fillRect(x, y0, range(rng, 6, 22), range(rng, S * 0.2, S * 0.6))
   }
+  blurInPlace(hc, 2.5)
   const H = readHeight(hc)
-  for (let i = 0; i < H.length; i++) H[i] = H[i] * 0.9 + noise.fbm((i % S) / S, Math.floor(i / S) / S, 32, 2) * 0.1
   bakeShade(c, H, 2.2, 0.28)
   return { color: c, normal: heightToNormal(H, S, S, 3.2) }
 }
@@ -164,6 +171,7 @@ export function paintLaterite(S = 512, seed = 11): PaintedKhmer {
     g.fillStyle = `rgba(255,${180 + rng() * 60},120,${range(rng, 0.04, 0.12)})`
     g.fillRect(rng() * S, rng() * S, 2, 2)
   }
+  blurInPlace(hc, 2)
   const H = readHeight(hc)
   bakeShade(c, H, 1.6, 0.2)
   return { color: c, normal: heightToNormal(H, S, S, 2.6) }
@@ -532,6 +540,7 @@ export function paintStoryRelief(W = 2048, H = 320): PaintedKhmer {
   ] as Array<[number, Pose]>)
     softFill(hg, 1.2, () => figure(hg, s3 + dx, ground, 140, pose, 1))
   // 色と陰影
+  blurInPlace(hc, 1.3)
   const Hh = readHeight(hc)
   bakeShade(c, Hh, 3.2, 0.45)
   // 顔料（青い石・黒い輪・光の扉）を重ねる
@@ -592,6 +601,7 @@ export function paintProcessionRelief(W = 1024, H = 256): PaintedKhmer {
     hg.fillRect(ex - 50, ground - 150, 90, 34)
   })
   softFill(hg, 1.1, () => figure(hg, 930, ground, 150, 'walk', -1))
+  blurInPlace(hc, 1.2)
   const Hh = readHeight(hc)
   bakeShade(c, Hh, 3.0, 0.42)
   return { color: c, normal: heightToNormal(Hh, W, H, 2.8) }
@@ -764,7 +774,7 @@ export const GROUND_AREA: Rect = { x0: -128, x1: 116, z0: -134, z1: 100 }
  * 地面の色（1 枚の大きな絵）：草のむら・赤土の道（象の道・村の小道・広場）・岸の砂・家の下の土・水田のあぜ。
  * 細かいざらつきは材質側の小さなくり返しの模様で足す（materialsKhmer の ground）
  */
-export function paintGround(S = 2048): HTMLCanvasElement {
+export function paintGround(S = 1024): HTMLCanvasElement {
   const rng = mulberry32(5)
   const [c, g] = makeCanvas(S)
   const A = GROUND_AREA
@@ -792,42 +802,40 @@ export function paintGround(S = 2048): HTMLCanvasElement {
   gg.putImageData(img, 0, 0)
   g.imageSmoothingEnabled = true
   g.drawImage(gc, 0, 0, S, S)
-  const soft = (blur: number, draw: () => void) => {
-    g.save()
-    g.filter = `blur(${blur}px)`
-    draw()
-    g.restore()
-  }
+  // 道・砂・土は、別の層にくっきり描いてから、最後に 1 回だけぼかして重ねる（図形ごとにぼかすと重い）
+  const [lc, lg] = makeCanvas(S)
+  const base = g
+  const soft = (_blur: number, draw: () => void) => draw()
   const red = '#b5643a'
   const redLight = '#c98252'
   const path = (pts: Array<[number, number]>, w: number, col: string, blur = 4) =>
     soft(blur, () => {
-      g.strokeStyle = col
-      g.lineWidth = w * sx
-      g.lineCap = 'round'
-      g.lineJoin = 'round'
-      g.beginPath()
-      g.moveTo(X(pts[0][0]), Z(pts[0][1]))
+      lg.strokeStyle = col
+      lg.lineWidth = w * sx
+      lg.lineCap = 'round'
+      lg.lineJoin = 'round'
+      lg.beginPath()
+      lg.moveTo(X(pts[0][0]), Z(pts[0][1]))
       for (let i = 1; i < pts.length - 1; i++) {
         const mx = (pts[i][0] + pts[i + 1][0]) / 2
         const mz = (pts[i][1] + pts[i + 1][1]) / 2
-        g.quadraticCurveTo(X(pts[i][0]), Z(pts[i][1]), X(mx), Z(mz))
+        lg.quadraticCurveTo(X(pts[i][0]), Z(pts[i][1]), X(mx), Z(mz))
       }
       const l = pts[pts.length - 1]
-      g.lineTo(X(l[0]), Z(l[1]))
-      g.stroke()
+      lg.lineTo(X(l[0]), Z(l[1]))
+      lg.stroke()
     })
   // 岸の砂（池の南の岸・水路の両岸）
   soft(6, () => {
-    g.fillStyle = '#cdb88a'
-    g.fillRect(X(K.BARAY.x0 - 4), Z(K.BARAY.z1 - 1), (K.BARAY.x1 - K.BARAY.x0 + 8) * sx, 5 * sz)
-    g.fillRect(X(K.CANAL.x0 - 2.5), Z(K.CANAL.z0), (K.CANAL.x1 - K.CANAL.x0 + 5) * sx, (A.z1 - K.CANAL.z0) * sz)
-    g.fillRect(X(K.BARAY.x0 - 4), Z(K.BARAY.z0 - 4), (K.BARAY.x1 - K.BARAY.x0 + 8) * sx, 5 * sz)
+    lg.fillStyle = '#cdb88a'
+    lg.fillRect(X(K.BARAY.x0 - 4), Z(K.BARAY.z1 - 1), (K.BARAY.x1 - K.BARAY.x0 + 8) * sx, 5 * sz)
+    lg.fillRect(X(K.CANAL.x0 - 2.5), Z(K.CANAL.z0), (K.CANAL.x1 - K.CANAL.x0 + 5) * sx, (A.z1 - K.CANAL.z0) * sz)
+    lg.fillRect(X(K.BARAY.x0 - 4), Z(K.BARAY.z0 - 4), (K.BARAY.x1 - K.BARAY.x0 + 8) * sx, 5 * sz)
   })
   // 象の道（まっすぐな赤土の大通り）と、わだち
   soft(5, () => {
-    g.fillStyle = red
-    g.fillRect(X(A.x0), Z(K.ROAD.z0), (A.x1 - A.x0) * sx, (K.ROAD.z1 - K.ROAD.z0) * sz)
+    lg.fillStyle = red
+    lg.fillRect(X(A.x0), Z(K.ROAD.z0), (A.x1 - A.x0) * sx, (K.ROAD.z1 - K.ROAD.z0) * sz)
   })
   for (const dz of [-1.4, 1.4]) path([[A.x0, (K.ROAD.z0 + K.ROAD.z1) / 2 + dz], [A.x1, (K.ROAD.z0 + K.ROAD.z1) / 2 + dz]], 0.9, '#9a4f2c', 3)
   // 村の小道（広場から家々へ・岸・橋・象の道へ）
@@ -850,26 +858,29 @@ export function paintGround(S = 2048): HTMLCanvasElement {
   path([[-8, -36], [-7, -20], [-6, -6]], 3, redLight)
   // 広場（踏み固めた赤土）
   soft(8, () => {
-    g.fillStyle = redLight
-    g.beginPath()
-    g.ellipse(X(P.x), Z(P.z), P.r * sx, P.r * 0.85 * sz, 0, 0, Math.PI * 2)
-    g.fill()
+    lg.fillStyle = redLight
+    lg.beginPath()
+    lg.ellipse(X(P.x), Z(P.z), P.r * sx, P.r * 0.85 * sz, 0, 0, Math.PI * 2)
+    lg.fill()
   })
   // 家の下の土
   for (const h of [...LAND_HOUSES]) {
     soft(6, () => {
-      g.fillStyle = 'rgba(150,100,60,0.85)'
-      g.beginPath()
-      g.ellipse(X(h.x), Z(h.z), (h.w / 2 + h.porch + 1.6) * sx, (h.d / 2 + h.porch + 1.6) * sz, 0, 0, Math.PI * 2)
-      g.fill()
+      lg.fillStyle = 'rgba(150,100,60,0.85)'
+      lg.beginPath()
+      lg.ellipse(X(h.x), Z(h.z), (h.w / 2 + h.porch + 1.6) * sx, (h.d / 2 + h.porch + 1.6) * sz, 0, 0, Math.PI * 2)
+      lg.fill()
     })
   }
   void WATER_HOUSES
   // 寺のまわりの乾いた草
   soft(14, () => {
-    g.fillStyle = 'rgba(176,170,96,0.5)'
-    g.fillRect(X(K.COURT.x0 - 6), Z(K.COURT.z0 - 3), (K.COURT.x1 - K.COURT.x0 + 12) * sx, (K.COURT.z1 - K.COURT.z0 + 6) * sz)
+    lg.fillStyle = 'rgba(176,170,96,0.5)'
+    lg.fillRect(X(K.COURT.x0 - 6), Z(K.COURT.z0 - 3), (K.COURT.x1 - K.COURT.x0 + 12) * sx, (K.COURT.z1 - K.COURT.z0 + 6) * sz)
   })
+  base.filter = 'blur(2.5px)'
+  base.drawImage(lc, 0, 0)
+  base.filter = 'none'
   // 水田（道の南）：明るい緑と、あぜ
   const PD = K.PADDY
   g.fillStyle = '#6fae3c'
@@ -889,7 +900,7 @@ export function paintGround(S = 2048): HTMLCanvasElement {
     g.stroke()
   }
   // 小石・落ち葉の点
-  for (let i = 0; i < 26000; i++) {
+  for (let i = 0; i < 9000; i++) {
     g.fillStyle = `rgba(${rng() < 0.5 ? '255,240,200' : '50,40,20'},${range(rng, 0.05, 0.14)})`
     g.fillRect(rng() * S, rng() * S, 2, 2)
   }

@@ -135,6 +135,21 @@ export async function startKhmerPlay(p: KhmerPlayCtx): Promise<void> {
       }
       return f?.id ?? null
     },
+    /** 描画せずに、seconds 秒ぶん歩く（テスト用。move は {x,y}、jumpAt は跳ぶ時刻（秒）の一覧） */
+    sim: (seconds: number, move = { x: 0, y: 1 }, jumpAt: number[] = [], dash = false) => {
+      const dt = 1 / 60
+      const jumps = [...jumpAt]
+      const empty = { pressed: new Set<string>(), held: new Set<string>(), move: { x: 0, y: 0 }, look: { x: 0, y: 0 } } as unknown as ReturnType<typeof resolveActions>
+      for (let t = 0; t < seconds; t += dt) {
+        const jump = jumps.length > 0 && t >= jumps[0]
+        if (jump) jumps.shift()
+        player.update(dt, { move, jump, dash }, camRig.yaw)
+        claw.update(dt, empty, camRig.yaw)
+        ks.update(dt, uTime.value, camera)
+        ks.carryPlayer(player)
+      }
+      return { pos: player.position.toArray().map((x) => +x.toFixed(2)), grounded: player.grounded }
+    },
     debug: () => ({
       player: player.position.toArray().map((x) => +x.toFixed(2)),
       grounded: player.grounded,

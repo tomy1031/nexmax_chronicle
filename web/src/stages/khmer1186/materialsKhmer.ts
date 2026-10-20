@@ -193,7 +193,7 @@ export const KC = {
   sandPink: '#d6ab94',
   sandGrey: '#a99f8e',
   sandDark: '#8f8270',
-  laterite: '#b86a48',
+  laterite: '#a8765e',
   wood: '#8a6440',
   woodDark: '#5c4128',
   thatch: '#d8b878',

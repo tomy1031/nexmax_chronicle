@@ -173,9 +173,9 @@ export class Turntable {
   /** 鏡の中心（止めるクローで狙う所） */
   readonly point: THREE.Vector3
   /** はね返した光の筋 */
-  readonly beam = new LightBeam(0.3, '#ffdc8a')
+  readonly beam = new LightBeam(0.2, '#ffdc8a', 0.55)
   /** 午後の日ざし（空 → 鏡） */
-  readonly sunRay = new LightBeam(0.7, '#ffe8b8')
+  readonly sunRay = new LightBeam(0.4, '#ffe8b8', 0.35)
   /** 光の筋が届くと光る台（東の塔の上） */
   readonly stand: MirrorStand
   private readonly spin = new THREE.Group()

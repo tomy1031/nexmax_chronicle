@@ -312,7 +312,7 @@ export class BigStairs {
       this.fallT.push(-1)
       this.fallDir.push(v(-1, 0, (rng() - 0.5) * 0.6).normalize())
       // 落ちてくる石（この区切りがくずれている間）
-      const foot = v(seg.x1, seg.y0, zc + (rng() - 0.5) * 1.6)
+      const foot = v(seg.x1, seg.y0, zc + (rng() - 0.5) * 0.8)
       const logic = new StoneFallLogic({ path: stonePath(foot, v(1, 0, 0), S.rise, S.run), speed: 1.7, wobble: 1.0, gap: 1.6, window: { y0: seg.y0 + 0.4, y1: seg.y0 + 0.9 }, half: STONE_SIZE.y / 2, delay: i * 0.7 })
       logic.active = false
       const st = new FallingStone(`stairs_${i}`, logic, stoneMat(), c.bodies, burst)

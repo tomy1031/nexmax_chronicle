@@ -108,6 +108,7 @@ uniform float uTime;
 uniform float uOn;
 uniform float uLen;
 uniform float uCore;
+uniform float uGain;
 uniform vec3 uColor;
 varying vec2 vUv;
 varying vec3 vN;
@@ -121,7 +122,7 @@ void main() {
   // 端はやわらかく
   float ends = smoothstep(0.0, 0.04, vUv.y) * smoothstep(1.0, 0.94, vUv.y);
   float a = (body * 0.75 + spark * 0.6) * ends * uOn;
-  gl_FragColor = vec4(uColor * (1.4 + spark * 2.0), a);
+  gl_FragColor = vec4(uColor * (1.0 + spark * 1.6) * uGain, a);
 }
 `
 
@@ -138,12 +139,13 @@ export class LightBeam {
   /** 1 秒あたりの、ともる・消える速さ */
   fadeSpeed = 1.6
 
-  constructor(radius = 0.35, color: THREE.ColorRepresentation = '#ffd27a') {
+  /** gain：明るさ（1 で夜明けの鏡の光。昼の小さな光は 0.5 くらい） */
+  constructor(radius = 0.35, color: THREE.ColorRepresentation = '#ffd27a', gain = 1) {
     const make = (r: number, core: number, col: THREE.ColorRepresentation) => {
       const mat = new THREE.ShaderMaterial({
         vertexShader: beamVert,
         fragmentShader: beamFrag,
-        uniforms: { uTime, uOn: { value: 0 }, uLen: { value: 10 }, uCore: { value: core }, uColor: { value: new THREE.Color(col) } },
+        uniforms: { uTime, uOn: { value: 0 }, uLen: { value: 10 }, uCore: { value: core }, uGain: { value: gain }, uColor: { value: new THREE.Color(col) } },
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,

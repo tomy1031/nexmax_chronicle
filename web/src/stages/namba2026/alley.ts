@@ -7,7 +7,13 @@ import { makeCanvas } from '../../render/textures'
 import { N } from './layout'
 import { box, boxAB, cyl, sag, type NCtx } from './kit'
 
-const A = N.ALLEY
+const A0 = N.ALLEY
+
+/**
+ * open：物語 v7（9 章）の路地。奥の塀をなくして、南の空き地（ほこらのある「路地のおく」）へ抜ける。
+ * 両側の板塀は z1（空き地の手前）までのばし、石灯籠と桶は東の塀ぎわへ移す（西の塀ぎわに石標 C を置くため）
+ */
+export type AlleyOptions = { open?: boolean; z1?: number }
 
 /** 入口の木の看板（筆文字。2026年なので左から右の横書き） */
 function signTexture(): THREE.CanvasTexture {
@@ -49,7 +55,9 @@ function paperLantern(c: NCtx, x: number, y: number, z: number, s = 1): void {
   cyl(c, x, y - 0.3 * s, y - 0.24 * s, z, 0.1 * s, c.m.paint, { tint: '#1a1410', seg: 10, cast: false })
 }
 
-export function buildAlley(c: NCtx): void {
+export function buildAlley(c: NCtx, opts: AlleyOptions = {}): void {
+  const open = !!opts.open
+  const A = { ...A0, z1: open ? (opts.z1 ?? 20) : A0.z1 }
   const cx = (A.x0 + A.x1) / 2
   const len = A.z1 - A.z0
   // 石畳（大きさの違う古い石。少し暗く、ところどころ苔の色）
@@ -86,10 +94,12 @@ export function buildAlley(c: NCtx): void {
     c.b.add(rbox(0.7, 0.08, len - 0.6, 0.02), c.m.paint, M(ex, 3.05, (A.z0 + 0.6 + A.z1) / 2, 0, 0, -dir * 0.32), { tint: '#3a3d44' })
     for (let bz = A.z0 + 0.7; bz < A.z1; bz += 0.22) c.b.add(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6, 1, false, 0, Math.PI), c.m.paint, M(ex, 3.1, bz, 0, 0, Math.PI / 2 - dir * 0.32), { tint: '#4a4e56', cast: false })
   }
-  // 奥の塀と小さな屋根
-  boxAB(c, A.x0, A.x1, 0, 3.2, A.z1 - 0.12, A.z1 + 0.1, c.m.woodPlain, { tint: '#3a2c22' })
-  c.col.box(cx, 1.6, A.z1, A.x1 - A.x0, 3.2, 0.24)
-  c.b.add(rbox(A.x1 - A.x0 + 0.2, 0.08, 0.7, 0.02), c.m.paint, M(cx, 3.25, A.z1 - 0.3, 0.3, 0, 0), { tint: '#3a3d44' })
+  // 奥の塀と小さな屋根（v7 の open では空き地へ抜けるので作らない）
+  if (!open) {
+    boxAB(c, A.x0, A.x1, 0, 3.2, A.z1 - 0.12, A.z1 + 0.1, c.m.woodPlain, { tint: '#3a2c22' })
+    c.col.box(cx, 1.6, A.z1, A.x1 - A.x0, 3.2, 0.24)
+    c.b.add(rbox(A.x1 - A.x0 + 0.2, 0.08, 0.7, 0.02), c.m.paint, M(cx, 3.25, A.z1 - 0.3, 0.3, 0, 0), { tint: '#3a3d44' })
+  }
   // 入口の梁と「うら横丁」の看板
   boxAB(c, A.x0 - 0.05, A.x1 + 0.05, 3.35, 3.55, A.z0 + 0.15, A.z0 + 0.35, c.m.woodPlain, { tint: '#3a2a1c' })
   for (const px of [A.x0 + 0.08, A.x1 - 0.08]) boxAB(c, px - 0.08, px + 0.08, 0, 3.55, A.z0 + 0.17, A.z0 + 0.33, c.m.woodPlain, { tint: '#3a2a1c' })
@@ -113,10 +123,10 @@ export function buildAlley(c: NCtx): void {
     paperLantern(c, side, 2.38, lz, 0.85)
   }
   c.lights.push({ pos: new THREE.Vector3(cx, 2.6, A.z0 + 2.5), color: '#ffb070', intensity: 2.4, dist: 6 })
-  c.lights.push({ pos: new THREE.Vector3(cx, 2.4, A.z1 - 1.6), color: '#ffa860', intensity: 2.6, dist: 6 })
-  // 苔むした石灯籠（石標の左奥）
-  const lx = A.x0 + 0.42
-  const lz = A.z1 - 0.5
+  c.lights.push({ pos: new THREE.Vector3(cx, 2.4, (open ? A0.z1 : A.z1) - 1.6), color: '#ffa860', intensity: 2.6, dist: 6 })
+  // 苔むした石灯籠（石標の左奥。open では東の塀ぎわ、空き地の手前）
+  const lx = open ? A.x1 - 0.42 : A.x0 + 0.42
+  const lz = open ? A.z1 - 0.9 : A.z1 - 0.5
   boxAB(c, lx - 0.22, lx + 0.22, 0, 0.12, lz - 0.22, lz + 0.22, c.m.stone, { tint: '#8a8a7c', texM: 0.6 })
   cyl(c, lx, 0.12, 0.72, lz, 0.08, c.m.stone, { tint: '#8c8a7e', seg: 8 })
   boxAB(c, lx - 0.2, lx + 0.2, 0.72, 0.8, lz - 0.2, lz + 0.2, c.m.stone, { tint: '#7a8070', texM: 0.6 })
@@ -124,6 +134,7 @@ export function buildAlley(c: NCtx): void {
   c.b.add(new THREE.ConeGeometry(0.3, 0.2, 4), c.m.stone, M(lx, 1.16, lz, 0, Math.PI / 4, 0), { tint: '#6e7a62', texM: 0.6 })
   c.b.add(new THREE.SphereGeometry(0.05, 8, 6), c.m.stone, M(lx, 1.29, lz), { tint: '#7a7a6c' })
   box(c, lx, 0.93, lz - 0.152, 0.14, 0.12, 0.01, c.m.lightWarm, { tint: '#ffd8a0', cast: false })
+  if (open) box(c, lx - 0.152, 0.93, lz, 0.01, 0.12, 0.14, c.m.lightWarm, { tint: '#ffd8a0', cast: false })
   c.col.box(lx, 0.6, lz, 0.44, 1.2, 0.44)
   // 植木鉢と古い桶
   for (const [px, pz, s] of [
@@ -134,7 +145,8 @@ export function buildAlley(c: NCtx): void {
     cyl(c, px, 0, 0.32 * s, pz, 0.16 * s, c.m.paint, { r1: 0.2 * s, tint: '#7a4a32', seg: 12 })
     c.b.add(new THREE.SphereGeometry(0.24 * s, 10, 8), c.m.fabric, M(px, 0.45 * s, pz, 0, 0, 0, 1, 0.8, 1), { tint: '#4a7a3a', cast: false })
   }
-  cyl(c, A.x1 - 0.35, 0, 0.38, A.z1 - 0.55, 0.2, c.m.woodPlain, { r1: 0.22, tint: '#8a6a44', seg: 14 })
+  if (open) cyl(c, A.x1 - 0.35, 0, 0.38, A.z1 - 1.7, 0.2, c.m.woodPlain, { r1: 0.22, tint: '#8a6a44', seg: 14 })
+  else cyl(c, A.x1 - 0.35, 0, 0.38, A.z1 - 0.55, 0.2, c.m.woodPlain, { r1: 0.22, tint: '#8a6a44', seg: 14 })
   // 頭上の電線と、壁の古い配電箱
   sag(c, new THREE.Vector3(A.x0 + 0.1, 3.9, A.z0 + 1.2), new THREE.Vector3(A.x1 - 0.1, 4.0, A.z0 + 3.4), 0.3, 0.012, c.m.rubber, '#1a1c20')
   sag(c, new THREE.Vector3(A.x0 + 0.1, 4.1, A.z0 + 4.0), new THREE.Vector3(A.x1 - 0.1, 3.95, A.z0 + 5.6), 0.35, 0.012, c.m.rubber, '#1a1c20')

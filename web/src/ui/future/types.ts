@@ -3,7 +3,7 @@
 
 export type HudStats = { fps: number; ms: number; calls: number; tris: number; ratio: number; quality: string; textures: number; programs: number }
 
-export type ReticleCategory = 'light' | 'anchor' | 'mechanism' | 'enemy'
+export type ReticleCategory = 'light' | 'anchor' | 'mechanism' | 'enemy' | 'chrono'
 
 export type ReticleState =
   | { mode: 'idle' }

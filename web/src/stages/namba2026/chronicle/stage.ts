@@ -31,7 +31,8 @@ import { buildChronicleNamba, type ChronicleNambaScene } from './sceneV7'
 import { AlleyTime, ALLEY_PALETTES, sunDirection } from './alleyTime'
 import { ArmorPlates, createArmorPlateObjects } from './armorPlates'
 import { KanbanSurge } from './kanbanSurge'
-import { IdoSearchPanel, SketchCloseup, recordImage } from './idoSearch'
+import { IdoSearchPanel, SketchCloseup, recordImage, setRecordArt } from './idoSearch'
+import { V7_ART, loadArtCanvas } from '../../../chronicle/art'
 import { IDO_RECORDS, SEARCH_WORDS, recordOfKanban } from './idoSearchLogic'
 import { createOfujiPlaceholder } from './ofuji'
 import { DefenseDirector } from './defenseDirector'
@@ -200,6 +201,8 @@ export class ChronicleNambaStage implements Stage {
     this.search = new IdoSearchPanel(ui)
     this.sketch = new SketchCloseup(ui)
     this.eyes = rt.nexmax.root.getObjectByName('eyeballs') ?? rt.nexmax.root.getObjectByName('head') ?? null
+    // 源兵衛の書のイラスト（読めなければ recordArt.ts のキャンバスの絵のまま）
+    void loadArtCanvas(V7_ART.bookPage1, 720).then((c) => setRecordArt('genbeiPage', c))
     this.ns.obstacles.push(rt.player.position)
     // 路地の時間（空・太陽はシェルの物を動かす）
     this.time = new AlleyTime({ scene: rt.scene, sky: rt.sky, sun: rt.sun, post: rt.post }, this.ns.glowMats)

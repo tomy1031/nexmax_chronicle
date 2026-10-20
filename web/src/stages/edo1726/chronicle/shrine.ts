@@ -445,9 +445,11 @@ export class TimeShrine {
       p.copy(b.c).applyMatrix4(this.root.matrixWorld)
       col.box(p.x, p.y, p.z, b.s.x, b.s.y, b.s.z, yaw)
     }
-    // 身舎（中には入れない）
+    // 身舎（中には入れない）と屋根（カメラが屋根の中に入らないよう）
     p.set(0, 1.2, 1.0).applyMatrix4(this.root.matrixWorld)
     col.box(p.x, p.y, p.z, 1.2, 1.4, 1.1, yaw)
+    p.set(0, 1.78, 0.8).applyMatrix4(this.root.matrixWorld)
+    col.box(p.x, p.y, p.z, 1.7, 0.45, 1.9, yaw)
   }
 
   update(dt: number): void {

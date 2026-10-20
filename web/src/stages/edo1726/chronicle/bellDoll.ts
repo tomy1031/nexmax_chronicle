@@ -1003,6 +1003,52 @@ export class TimeBellDoll {
     return this.waitState()
   }
 
+  /** 攻撃を打ち切る（歯車をつかまれて、あばれ始めたとき）。衝撃波も消える */
+  interrupt(): void {
+    this.walkTarget = null
+    this.warn.set(0, 0, 0)
+    this.waveR = -1
+    this.wave.set(this.waveCenter, 0, 0)
+    if (this.attacking || this.state === 'walk') this.enter('stand')
+  }
+
+  /** 戦いをやり直す（体力 0 から戻ったとき）：攻撃と衝撃波を消し、台座の前に立たせる。止めた歯車はそのまま */
+  resetFight(): void {
+    this.walkTarget = null
+    this.faceTarget = null
+    this.warn.set(0, 0, 0)
+    this.waveR = -1
+    this.wave.set(this.waveCenter, 0, 0)
+    this.gearStrain.fill(0)
+    this.onPedestal = false
+    const g = this.groundFront(this.tmp2)
+    this.root.position.copy(g)
+    this.root.rotation.y = this.home.x === g.x && this.home.z === g.z ? this.root.rotation.y : Math.atan2(-(g.x - this.home.x), -(g.z - this.home.z))
+    this.enter('stand')
+  }
+
+  /** 止まって影がはがれたあとの姿に、その場でする（セーブから朝で始めるとき） */
+  setDownInstant(): void {
+    this.possessed = false
+    this.possessK = 0
+    this.scale = POSSESSED_SCALE
+    this.onPedestal = false
+    this.gearStopped.fill(true)
+    this.gearStrain.fill(0)
+    this.highlight = null
+    this.warn.set(0, 0, 0)
+    this.waveR = -1
+    this.wave.set(this.waveCenter, 0, 0)
+    this.root.position.copy(this.groundFront(this.tmp2))
+    this.kneeling = 1
+    this.enter('down')
+    this.mist.lift = 1
+    // 姿勢もすぐに
+    this.step(0)
+    Object.assign(this.pose, this.want)
+    this.applyPose(0)
+  }
+
   /** ふだんの刻の鐘（鐘を持ち上げて木槌で打つ） */
   chime(): void {
     if (this.state === 'idle') this.enter('chime')

@@ -104,7 +104,7 @@ void main() {
   if (r > 1.0) discard;
   vec3 col = texture2D(map, vUv).rgb;
   // 夜は内側から灯る（暖かい白）
-  col *= mix(0.92, 2.1, uNight);
+  col *= mix(0.92, 2.8, uNight);
   float hand = min(seg(p, uHour, 0.48, 0.05), seg(p, uMin, 0.76, 0.032));
   float fill = 1.0 - smoothstep(0.0, 0.012, hand);
   float edge = 1.0 - smoothstep(0.012, 0.03, hand);
@@ -397,6 +397,28 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
   glow.renderOrder = 3
   group.add(glow)
 
+  // 夜：下から照らされた白い壁（ライトアップ）。加算の縦のグラデーションを南と西の面に重ねる
+  const washTex = canvasTexture(64, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, h, 0, 0)
+    gr.addColorStop(0, 'rgba(255,255,255,0.95)')
+    gr.addColorStop(0.45, 'rgba(255,255,255,0.35)')
+    gr.addColorStop(1, 'rgba(255,255,255,0)')
+    g.fillStyle = gr
+    g.fillRect(0, 0, w, h)
+  })
+  const washMat = additive(new THREE.Color(0.45, 0.6, 1.1), 0, washTex)
+  const washH = C.y0 - 0.8
+  for (const [px, pz, yaw, w] of [
+    [cx, T.z1 + 0.06, 0, W],
+    [T.x0 - 0.06, cz, -Math.PI / 2, D],
+  ] as const) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, washH), washMat)
+    m.position.set(px, 0.6 + washH / 2, pz)
+    m.rotation.y = yaw
+    m.renderOrder = 3
+    group.add(m)
+  }
+
   let night = false
   let flash = 0
   const parts: ClockTowerParts = {
@@ -419,6 +441,7 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
       night = on
       dialMat.uniforms.uNight.value = on ? 1 : 0
       ;(glow.material as THREE.MeshBasicMaterial).opacity = on ? 0.18 : 0
+      washMat.opacity = on ? 0.55 : 0
     },
     update(dt: number) {
       flash = Math.max(0, flash - dt * 1.6)

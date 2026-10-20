@@ -358,9 +358,12 @@ function paintStreet(g: CanvasRenderingContext2D, w: number, h: number, n: Stree
   g.textBaseline = 'middle'
   g.font = font(800, 40)
   g.fillText('NANBA TOWN NEWS', 34, 46)
-  g.fillStyle = '#ff5a6a'
-  g.font = font(800, 30)
-  g.fillText('LIVE', w - 120, 46)
+  const looping = (n.loop ?? 1) >= 2
+  if (!looping) {
+    g.fillStyle = '#ff5a6a'
+    g.font = font(800, 30)
+    g.fillText('LIVE', w - 120, 46)
+  }
   const fit = (text: string, x: number, y: number, px: number, maxW: number) => {
     let size = px
     g.font = font(800, size)
@@ -380,14 +383,14 @@ function paintStreet(g: CanvasRenderingContext2D, w: number, h: number, n: Stree
   g.fillRect(0, h - 64, w, 64)
   g.fillStyle = '#e8f0ff'
   fit(n.ticker ?? 'ソラさんの IDO 展示「時を旅する大阪」きょうお披露目 ― 体験の列はブース西側へ', 34, h - 32, 34, w - 68)
-  if ((n.loop ?? 1) >= 2) {
+  if (looping) {
     // ネクマックスの石の青：画面の上に浮かぶ印（町の人には見えていない、という見せ方）
     const text = `${n.loop}度目の ${n.loopDate ?? '10月18日'}`
     g.font = font(800, 40)
     const tw = g.measureText(text).width
     const bw = tw + 64
     const bx = w - bw - 26
-    const by = 84
+    const by = 14
     g.save()
     g.shadowColor = '#5fd8ff'
     g.shadowBlur = 26

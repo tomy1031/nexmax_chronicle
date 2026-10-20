@@ -11,6 +11,8 @@ import type { FutureScene } from '../scene'
 import type { TimeOfDay } from '../fmaterials'
 import type { ChronicleAdditions } from './additions'
 import { BENCH, KEY_STALL, SITE, TOWER, UNDER } from './layoutChronicle'
+import { YearDialLogic } from './yearDialLogic'
+import { YearDialPanel } from './yearDialPanel'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -92,9 +94,9 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
     sub: 'ネクマックスがかくれる所',
   },
   building: {
-    pos: v(-4.2, 1.7, -31.0),
-    look: v(14.0, 13.0, -46.0),
-    fov: 66,
+    pos: v(-3.4, 1.6, -40.2),
+    look: v(12.0, 15.0, -46.5),
+    fov: 72,
     variant: 'building',
     nexmax: { pos: v(2.6, 0, -39.4), face: v(SITE.kanban.pos.x, 0, SITE.kanban.pos.z) },
     sora: { pos: v(1.8, 0, -38.0), face: v(10, 0, -45) },
@@ -102,9 +104,9 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
     sub: '前に 60 年前の石のかんばん',
   },
   courtyard: {
-    pos: v(17.8, 2.4, -37.9),
-    look: v(10.0, 2.6, -46.6),
-    fov: 62,
+    pos: v(17.4, 2.1, -41.6),
+    look: v(9.6, 2.2, -46.6),
+    fov: 64,
     variant: 'courtyard',
     nexmax: { pos: v(12.0, 0, -42.4), face: SITE.shrine.pos.clone() },
     sora: { pos: v(13.4, 0, -41.2), face: SITE.shrine.pos.clone() },
@@ -144,10 +146,10 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
     title: '星のキーホルダーの屋台',
   },
   dial: {
-    pos: v(-4.6, 1.55, 1.9),
-    look: v(-7.4, 1.1, -2.0),
-    fov: 50,
-    nexmax: { pos: v(-6.0, 0.18, 0.3), face: v(-8.0, 0, -2.6) },
+    pos: v(-4.7, 1.75, 0.2),
+    look: v(-7.6, 1.55, -3.6),
+    fov: 52,
+    nexmax: { pos: v(-5.6, 0.18, -1.6), face: v(-6.9, 0, -3.4) },
     title: 'ソラのわっかの年代ダイヤル',
   },
   bench: {
@@ -175,12 +177,13 @@ export type ChroniclePreviewCtx = {
   nexmax: NexmaxCharacter
   sora: Character
   cam: ChronicleCam
+  camName: string
   street?: { setNews(n: { date?: string; headline?: string; sub?: string; ticker?: string; loop?: number }): void }
 }
 
 /** クエリに合わせて仕掛けの状態を決める。毎フレームの更新を返す */
 export function setupChroniclePreview(x: ChroniclePreviewCtx): { update(dt: number): void } {
-  const { urlp, ch, cam } = x
+  const { urlp, ch, cam, camName } = x
   if (cam.title) x.hud.setObjective(cam.title, cam.sub ?? '')
   // 時計（既定：昼 10:00、夜 20:40）
   const clock = (urlp.get('clock') ?? (cam.time === 'night' || urlp.get('time') === 'night' ? '20:40' : '10:00')).split(':').map(Number)
@@ -191,7 +194,46 @@ export function setupChroniclePreview(x: ChroniclePreviewCtx): { update(dt: numb
     const loop = Number(urlp.get('loop') ?? 0)
     if (loop || urlp.has('news')) x.street.setNews({ date: '今日は 2086年10月18日', headline: 'お祭りの一日目です', sub: '天気：一日中晴れ　☀　夜はお祭りの明かりを楽しもう', loop })
   }
+  // 跡地の姿（カメラの既定 → クエリ）。ghost=1 なら building で始めて、少ししてから courtyard へ重ねて切り替える
+  const variant = (urlp.get('variant') as 'building' | 'courtyard' | null) ?? cam.variant ?? 'building'
+  const ghost = urlp.get('ghost') === '1'
+  ch.site.setVariant(ghost ? (variant === 'building' ? 'courtyard' : 'building') : variant)
+  if (urlp.get('box') === '1') void ch.site.shrine.openBox()
+  if (urlp.has('doors')) ch.site.shrine.openDoors(Number(urlp.get('doors')))
+  if (urlp.has('pulse')) ch.site.shrine.setLockPulse(Number(urlp.get('pulse')))
+  if (urlp.has('sun')) ch.site.shrine.setSunbeam(Number(urlp.get('sun')))
+  if (urlp.has('ura')) ch.site.setUra(Number(urlp.get('ura')))
+  ch.site.setSeam(urlp.has('seam') ? Number(urlp.get('seam')) : 0.8)
+  if (urlp.get('freeze') === '1') ch.site.gear.freeze(true)
+  if (urlp.get('toolbox') === 'drop' || urlp.get('toolbox') === 'freeze') ch.site.toolbox.drop()
+  if (urlp.has('sold')) for (let i = 0; i < Number(urlp.get('sold')); i++) ch.stall.takeOne()
+  if (urlp.has('surge')) ch.site.kanban.setSurge(Number(urlp.get('surge')))
+  // 年代ダイヤル（3D と画面）
+  let panel: YearDialPanel | null = null
+  const logic = new YearDialLogic({ start: Number(urlp.get('year') ?? 2086), target: Number(urlp.get('target') ?? 2026) })
+  if (urlp.get('dial') === '1' || camName === 'dial') {
+    ch.dial.setDial(true, true)
+    ch.dial.setYear(logic.year)
+    const m = urlp.has('match') ? Number(urlp.get('match')) : logic.match
+    ch.dial.setMatch(m)
+    if (urlp.get('panel') !== '0') {
+      panel = new YearDialPanel(x.ui)
+      panel.show({ year: logic.year, sub: 'NEXTMAKE 前のかんばんの記録' })
+      panel.setMatch(m)
+      panel.setDetune(urlp.has('match') ? (1 - m) * 0.6 : logic.detune)
+    }
+  }
+  let t = 0
+  let frozeTool = false
   return {
-    update(_dt: number) {},
+    update(dt: number) {
+      t += dt
+      panel?.update(dt)
+      if (ghost && t > 1.2 && t - dt <= 1.2) void ch.site.ghostSwap(variant, Number(urlp.get('ghostSec') ?? 4))
+      if (urlp.get('toolbox') === 'freeze' && !frozeTool && t > 0.25) {
+        frozeTool = true
+        ch.site.toolbox.freeze(true)
+      }
+    },
   }
 }

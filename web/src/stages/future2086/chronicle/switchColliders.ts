@@ -13,12 +13,12 @@ type SetEntry = { boxes: BoxCollider[]; enabled: boolean; colliders: RAPIER.Coll
 export type Mover = {
   readonly id: string
   readonly half: THREE.Vector3
-  /** 箱の中心の位置と向き（Y 回り）。attach 前でも呼べる（attach のときにその位置で作る） */
-  set(center: THREE.Vector3, rotY?: number): void
+  /** 箱の中心の位置と向き（Y 回り、または quat）。attach 前でも呼べる（attach のときにその位置で作る） */
+  set(center: THREE.Vector3, rotY?: number, quat?: THREE.Quaternion): void
   enabled: boolean
 }
 
-type MoverEntry = Mover & { center: THREE.Vector3; rotY: number; body: RAPIER.RigidBody | null; collider: RAPIER.Collider | null; on: boolean }
+type MoverEntry = Mover & { center: THREE.Vector3; rot: THREE.Quaternion; body: RAPIER.RigidBody | null; collider: RAPIER.Collider | null; on: boolean }
 
 const q = new THREE.Quaternion()
 const e = new THREE.Euler()
@@ -63,7 +63,7 @@ export class SwitchColliders {
       id,
       half: half.clone(),
       center: center.clone(),
-      rotY: 0,
+      rot: new THREE.Quaternion(),
       body: null,
       collider: null,
       on: enabled,
@@ -74,13 +74,13 @@ export class SwitchColliders {
         m.on = v
         m.collider?.setEnabled(v)
       },
-      set(c: THREE.Vector3, rotY = 0) {
+      set(c: THREE.Vector3, rotY = 0, quat?: THREE.Quaternion) {
         m.center.copy(c)
-        m.rotY = rotY
+        if (quat) m.rot.copy(quat)
+        else m.rot.setFromEuler(e.set(0, rotY, 0))
         if (m.body) {
           m.body.setNextKinematicTranslation({ x: c.x, y: c.y, z: c.z })
-          q.setFromEuler(e.set(0, rotY, 0))
-          m.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+          m.body.setNextKinematicRotation({ x: m.rot.x, y: m.rot.y, z: m.rot.z, w: m.rot.w })
         }
       },
     }
@@ -126,9 +126,9 @@ export class SwitchColliders {
   private createMover(m: MoverEntry): void {
     const phys = this.phys as Physics
     const R = phys.R
-    q.setFromEuler(e.set(0, m.rotY, 0))
+    const r = m.rot
     m.body = phys.world.createRigidBody(
-      R.RigidBodyDesc.kinematicPositionBased().setTranslation(m.center.x, m.center.y, m.center.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
+      R.RigidBodyDesc.kinematicPositionBased().setTranslation(m.center.x, m.center.y, m.center.z).setRotation({ x: r.x, y: r.y, z: r.z, w: r.w }),
     )
     m.collider = phys.world.createCollider(R.ColliderDesc.cuboid(m.half.x, m.half.y, m.half.z).setFriction(0.9), m.body)
     m.collider.setEnabled(m.on)

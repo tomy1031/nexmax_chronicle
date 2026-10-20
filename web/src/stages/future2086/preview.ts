@@ -218,7 +218,7 @@ async function main(): Promise<void> {
   if (urlp.get('debris') === '1') fs.debris.setActive(true)
   if (urlp.has('label')) label.textContent = `${camName} / ${time}`
   else label.style.display = 'none'
-  const chPreview = ch && chCam ? setupChroniclePreview({ urlp, fs, ch, hud, ui, nexmax, sora: soraCh, cam: chCam, street: introProps?.street }) : null
+  const chPreview = ch && chCam ? setupChroniclePreview({ urlp, fs, ch, hud, ui, nexmax, sora: soraCh, cam: chCam, camName, street: introProps?.street }) : null
 
   // 事前コンパイル
   loading.set(0.9, 'シェーダを準備中…')

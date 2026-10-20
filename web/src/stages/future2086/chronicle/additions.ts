@@ -1,11 +1,11 @@
 // 物語 v7 の 2086年ナンバタウンの舞台（フェーズ 1：舞台と仕掛けの部品）。既存の町（buildFutureScene）の上に足す。
 //
 // 使い方（ステージの load）：
-//   const fs = buildFutureScene(mats, q, { aniso, mods: CHRONICLE_SCENE_MODS })   // 地面の穴・通りの延長・跡地の空き地
-//   const ch = buildChronicleAdditions(fs, q)                                      // 時計台・地下通路・跡地・屋台・ベンチ・ダイヤル
-//   world.claw.targets に fs.claw.targets（時計台の金具は ch が足してある）
+//   const { fs, ch } = buildChronicleFuture(mats, q, { aniso })   // = buildFutureScene(…, { mods: CHRONICLE_SCENE_MODS }) ＋ buildChronicleAdditions
+//   world.claw.targets = fs.claw.targets（時計台の金具は ch が足してある）、colliders = fs.colliders
 // begin：ch.attachPhysics(rt.phys)（出し入れする当たり判定・動く足場を作る）
 // 毎フレーム：ch.update(dt, t)。昼夜：fs.setTimeOfDay(m) のあと ch.setTimeOfDay(m)
+// 地下：プレイヤーが UNDER.region にいる間は落下の下限を下げる（chronicleKillY）
 import * as THREE from 'three'
 import type { Physics } from '../../../player/physics'
 import type { ClawTargetDef } from '../../../player/clawLogic'
@@ -13,13 +13,17 @@ import type { QualitySettings } from '../../../render/quality'
 import type { MaterialLibrary } from '../../../render/materials'
 import type { TimeOfDay } from '../fmaterials'
 import { buildFutureScene, type FutureScene, type FutureSceneMods } from '../scene'
+import { buildUnits, type Units } from '../units'
 import { buildClockTower, type ClockTowerParts } from './clockTower'
 import { buildUnderground, type UndergroundParts } from './underground'
+import { buildNextmakeSite, type NextmakeSite } from './nextmakeSite'
+import { buildBench, buildKeychainStall, type BenchParts, type KeychainStall } from './plazaProps'
+import { buildYearDial, type YearDial3D } from './yearDial'
 import { finishCtx, makeCtx } from './kitChronicle'
-import { CHRONICLE_SPOTS, CLEAR_AREAS, GROUND_HOLES, SITE, STREET_END_Z } from './layoutChronicle'
+import { CHRONICLE_SPOTS, CLEAR_AREAS, GROUND_HOLES, KEY_STALL, SITE, STREET_END_Z } from './layoutChronicle'
 import { SwitchColliders } from './switchColliders'
 
-/** buildFutureScene に渡す町の変更（地下の階段と池の穴・北の通りを跡地まで延ばす・跡地の場所を空ける・人を置かない所） */
+/** buildFutureScene に渡す町の変更（地下の階段の穴・北の通りを跡地まで延ばす・跡地の場所を空ける・人を置かない所） */
 export const CHRONICLE_SCENE_MODS: FutureSceneMods = {
   groundHoles: GROUND_HOLES,
   streetEndZ: STREET_END_Z,
@@ -31,9 +35,15 @@ export type ChronicleAdditions = {
   root: THREE.Group
   tower: ClockTowerParts
   underground: UndergroundParts
-  /** 出し入れする当たり判定（跡地の 2 つの姿・裏側の足場・つり板など） */
+  site: NextmakeSite
+  stall: KeychainStall
+  bench: BenchParts
+  dial: YearDial3D
+  /** 屋台の店番（量産型ネクマックス） */
+  stallUnit: Units
+  /** 出し入れする当たり判定（跡地の 2 つの姿・裏側の足場・歯車の歯） */
   colliders: SwitchColliders
-  /** 足したつかめる対象（時計台の金具など。fs.claw.targets にも入れてある） */
+  /** 足したつかめる対象（時計台の金具。fs.claw.targets にも入れてある） */
   clawTargets: ClawTargetDef[]
   spots: typeof CHRONICLE_SPOTS
   /** ステージの begin で 1 回（rt.phys） */
@@ -58,36 +68,53 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
   const tower = buildClockTower(c, root)
   for (const h of tower.hooks) fs.claw.targets.push(h)
   const underground = buildUnderground(c, root)
-
+  const stall = buildKeychainStall(c, root)
+  const bench = buildBench(c)
+  const dial = buildYearDial(root)
   const { holoNight } = finishCtx(c, root, 'chronicle_static')
+  const site = buildNextmakeSite(fs, quality, root, colliders)
+  const stallUnit = buildUnits(root, [
+    { id: 'unit_keychain', serial: 18, pos: new THREE.Vector3(KEY_STALL.x + 0.15, 0.38, KEY_STALL.z + 0.2), yaw: Math.PI / 2 - 0.15, pose: 'wave', nightPose: 'wave' },
+  ])
   const clawTargets: ClawTargetDef[] = [...tower.hooks]
 
   let night = false
-  const self: ChronicleAdditions = {
+  return {
     root,
     tower,
     underground,
+    site,
+    stall,
+    bench,
+    dial,
+    stallUnit,
     colliders,
     clawTargets,
     spots: CHRONICLE_SPOTS,
     attachPhysics(phys: Physics) {
       colliders.attach(phys)
+      site.setVariant(site.variant)
     },
     setTimeOfDay(mode: TimeOfDay) {
       night = mode === 'night'
       if (holoNight) holoNight.visible = night
       tower.setNight(night)
+      stallUnit.setNight(night)
     },
     update(dt: number, t: number) {
       for (const u of c.updaters) u(dt, t)
       tower.update(dt)
       underground.update(dt)
+      site.update(dt)
+      stall.update(dt)
+      dial.update(dt)
+      stallUnit.update(dt)
     },
     dispose() {
       colliders.detach()
+      stallUnit.dispose()
     },
   }
-  return self
 }
 
 /** 町と舞台をまとめて組み立てる（プレビュー・ステージの load 用） */

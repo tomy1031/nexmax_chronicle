@@ -15,9 +15,11 @@ import { KEYBOARD_BINDINGS, TOUCH_BINDINGS, resolveActions, type ActionFrame, ty
 import { shouldUseTouch } from '../player/touchLogic'
 import { TouchControls } from '../player/touchInput'
 import { ClawSystem } from '../player/clawSystem'
-import { TARGET_CATEGORY, type ClawTargetType } from '../player/clawLogic'
+import { TARGET_CATEGORY, isChronoTarget, type ClawTargetType } from '../player/clawLogic'
 import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
 import { CombatSystem } from '../combat/combatSystem'
+import { ChronoSystem } from '../chronicle/chrono'
+import { lightsLeft, riftClawUnlocked, v7Started } from '../chronicle/progress'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
 import { setOutlineViewport } from '../world/nexmax/materials'
@@ -72,6 +74,9 @@ const FIRE_VERB: Record<ClawTargetType, string> = {
   hold_mechanism: '歯車をつかむ',
   enemy_pull: '引き寄せる',
   enemy_zip: '飛び込む',
+  chrono_freeze: '止める',
+  chrono_seam: '裂く',
+  chrono_ura: '裂く',
 }
 
 /** 入力なしの軸（毎フレーム作らない） */
@@ -90,6 +95,7 @@ type Active = {
   camRig: CameraRig
   claw: ClawSystem
   combat: CombatSystem
+  chrono: ChronoSystem
   rt: StageRuntime
   /** 解放済み（古いステージの非同期の続きが、新しいステージで会話・演出を始めないように） */
   dead?: boolean
@@ -230,6 +236,12 @@ export class Game {
     this.cineMarker = new CineMarkerFx(ui)
     this.scene.add(this.cineMarker.group)
     this.objMarks = new ObjectiveMarkerFx(ui)
+    // 物語の途中で部品が変わる（物語 v7 の 10 章：時を裂く爪をはめて時空裂きのNMクローに）
+    this.story.changed.on((name) => {
+      if (name !== 'v7_rift_claw') return
+      equipFromFlags(this.equipment, (n) => this.story.get(n))
+      this.armKey = ''
+    })
     // 提灯などの点光源（近い候補へ毎回移す。ステージをまたいで使い回す）。使う数は画質で決める（見えない光は描画の計算に入らない）
     for (let i = 0; i < 6; i++) {
       const pl = new THREE.PointLight('#ffae5a', 0, 7, 2)
@@ -411,6 +423,10 @@ export class Game {
     // 戦闘（ステージが rt.combat.enabled にして敵を出す）と、物語の進み具合からの装備
     const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n) })
     this.scene.add(combat.group)
+    // 時空裂きのNMクロー（物語 v7。持つまでは「すりぬける」だけ）
+    const chrono = new ChronoSystem({ claw, toast: (t, s) => this.hud.toast(t, s), shake: (n) => this.cine.addShake(n) })
+    chrono.unlocked = riftClawUnlocked((n) => this.story.get(n))
+    this.scene.add(chrono.group)
     equipFromFlags(this.equipment, (n) => this.story.get(n))
     this.armKey = ''
     // 状態をリセット
@@ -435,7 +451,7 @@ export class Game {
     this.nexmax.setAim(null)
     this.camera.fov = 55
     this.camera.updateProjectionMatrix()
-    const a = { stage, world, env, phys, player, camRig, claw, combat } as Active
+    const a = { stage, world, env, phys, player, camRig, claw, combat, chrono } as Active
     a.rt = this.makeRuntime(a)
     claw.onEvent = (e) => {
       switch (e.kind) {
@@ -515,6 +531,8 @@ export class Game {
     this.scene.remove(a.claw.beam.group)
     disposeObject3D(a.claw.beam.group)
     a.combat.dispose()
+    this.scene.remove(a.chrono.group)
+    a.chrono.dispose()
     a.env.dispose()
     a.phys.world.free()
     for (const pl of this.lanternLights) pl.intensity = 0
@@ -559,6 +577,7 @@ export class Game {
       camRig: a.camRig,
       claw: a.claw,
       combat: a.combat,
+      chrono: a.chrono,
       phys: a.phys,
       nexmax: this.nexmax,
       sky: a.env.sky,
@@ -753,6 +772,7 @@ export class Game {
     this.nexmax.update(ndt, this.shotIndex === -1 || !shots ? player.speed : shots.nexmaxSpeed(this.shotIndex))
     stage.animate(ndt, uTime.value, rt)
     a.combat.animate(ndt * a.combat.timeScale, uTime.value)
+    a.chrono.update(ndt, this.camera)
     if (!frozen) this.tickDialogue(ndt, false)
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
@@ -771,11 +791,11 @@ export class Game {
       } else this.hud.setReticle({ mode: 'idle' })
       this.lastLocked = u.locked
       const active = u.phase !== 'idle'
-      const key = `${u.holdingLabel ?? ''}|${this.equipment.selected}|${active ? 1 : 0}|${this.equipment.left ?? ''}`
+      const key = `${u.holdingLabel ?? ''}|${this.equipment.selected}|${active ? 1 : 0}|${this.equipment.left ?? ''}|${this.equipment.right ?? ''}`
       if (key !== this.armKey) {
         this.armKey = key
         this.hud.setArms({
-          right: { name: PART_NAMES.grapple_claw, holding: u.holdingLabel, selected: this.equipment.selected === 'right', active },
+          right: { name: PART_NAMES[this.equipment.right ?? 'grapple_claw'], holding: u.holdingLabel, selected: this.equipment.selected === 'right', active },
           left: { name: this.equipment.left ? PART_NAMES[this.equipment.left] : null, selected: this.equipment.selected === 'left' },
         })
       }
@@ -895,7 +915,17 @@ export class Game {
     // 左腕を選んでいても、金具・結び目など敵でない対象を狙っているとき・ワイヤーがつながっているときはクローを使う
     const impactArm = this.impactInUse(claw)
     if (!locked && impactArm && frame.pressed.has('claw_fire') && combat.impact()) hud.pulseArm(this.equipment.selected)
-    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && clawArm(this.equipment) !== null, this.camera)
+    // 時空裂き（物語 v7）：照準が止める・裂く対象なら、ワイヤーは撃たずにその場に効かせる
+    const f = (n: string) => this.story.get(n)
+    a.chrono.unlocked = riftClawUnlocked(f)
+    const sel = claw.selectedTarget
+    const chronoSel = !impactArm && !!sel && isChronoTarget(sel.type) && claw.wire.phase === 'idle'
+    if (!locked && chronoSel && sel && frame.pressed.has('claw_fire') && clawArm(this.equipment) !== null && a.chrono.act(sel)) {
+      this.fireTimer = 0.3
+      player.turnToward(sel.point.x - player.position.x, sel.point.z - player.position.z, 1, 99)
+      hud.pulseArm('right')
+    }
+    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && !chronoSel && clawArm(this.equipment) !== null, this.camera)
     const ms = combat.moveScale
     const move = locked ? ZERO_AXIS : ms < 1 ? { x: frame.move.x * ms, y: frame.move.y * ms } : frame.move
     player.update(dt, { move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed && !combat.downed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
@@ -948,6 +978,8 @@ export class Game {
       hud.setHints(v.hud)
       this.clawLabel = v.claw
     } else hud.setHints(hints)
+    // 背中の石の光のつぶ（物語 v7 を始めてから）
+    hud.setLights(v7Started(f) ? lightsLeft(f) : null)
     const o = stage.objective(rt)
     hud.setObjective(o.title, o.sub)
     hud.setCompass(camRig.yaw, stage.objectiveTarget?.(rt) ?? null, player.position)
@@ -1085,7 +1117,9 @@ export class Game {
     if (impactArm) return [{ key: 'J', label: 'はじく' }, ...fight, { key: 'E', label: '右腕へ' }]
     const sel = claw.selectedTarget
     if (sel) {
-      const list: Hint[] = [{ key: 'J', label: FIRE_VERB[sel.type] }, ...fight]
+      // まだ時空裂きを持っていないとき、裏側の物（黒い手など）にはふつうにクローを撃つつもりになる
+      const verb = sel.type === 'chrono_ura' && !a.chrono.unlocked ? 'つかむ' : FIRE_VERB[sel.type]
+      const list: Hint[] = [{ key: 'J', label: verb }, ...fight]
       if (claw.candidateCount > 1) list.push({ key: 'R', label: '対象を切替' })
       return list
     }

@@ -118,7 +118,7 @@ function reticle(kind: string): void {
     return
   }
   const cat: ReticleCategory = kind === 'anchor' ? 'anchor' : kind === 'light' ? 'light' : 'mechanism'
-  const labels: Record<ReticleCategory, string> = { light: '木箱', anchor: '屋根の金具', mechanism: '大歯車', enemy: '欠け虫' }
+  const labels: Record<ReticleCategory, string> = { light: '木箱', anchor: '屋根の金具', mechanism: '大歯車', enemy: '欠け虫', chrono: '回る歯車' }
   hud.setReticle({
     mode: kind === 'far' ? 'far' : 'target',
     x: cx + (kind === 'far' ? 120 : 8),

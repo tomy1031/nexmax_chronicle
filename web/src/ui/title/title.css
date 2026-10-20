@@ -6,6 +6,7 @@
   --t-night-2: #17306a;
   --t-holo: #5ee6ff;
   --t-gold: #ffd23f;
+  --t-khmer: #e8c25a;
   --t-edo: #f4a54e;
   --t-expo: #ff8a5c;
   --t-now: #4ee6dc;
@@ -98,6 +99,9 @@
 }
 .nt-era {
   --c: var(--t-holo);
+}
+.nt-era.khmer {
+  --c: var(--t-khmer);
 }
 .nt-era.edo {
   --c: var(--t-edo);

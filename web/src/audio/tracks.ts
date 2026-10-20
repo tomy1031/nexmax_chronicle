@@ -276,7 +276,8 @@ export const TRACKS: Readonly<Record<MusicId, Track>> = {
 }
 
 /** 時代の曲（ステージが指定しないとき） */
-export const STAGE_MUSIC: Readonly<Record<'1726' | '1970' | '2026' | '2086', MusicId>> = {
+export const STAGE_MUSIC: Readonly<Record<'1186' | '1726' | '1970' | '2026' | '2086', MusicId>> = {
+  '1186': 'khmer',
   '1726': 'edo1726',
   '1970': 'expo1970',
   '2026': 'present2026',

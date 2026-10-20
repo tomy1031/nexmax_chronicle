@@ -110,8 +110,8 @@ registerView('slit', (c: ViewCtx) => {
   const toCam = v3(0, 0, -1)
   let seam: Slit = fx.seam(v3(-3.2, 1.6, 0), { normal: toCam, width: 1.0, height: 2.4 })
   let rift: Slit = fx.open(v3(-1.1, 1.6, 0), toCam, 1.1, 2.6)
-  const bill: Slit = fx.open(v3(1.0, 1.5, 0.5), null, 0.7, 2.0)
-  let dawn: Slit = fx.dawnDoor(v3(3.6, 2.2, 1), toCam, 2.0, 4.0)
+  fx.open(v3(1.0, 1.5, 0.5), null, 0.7, 2.0)
+  fx.dawnDoor(v3(3.6, 2.2, 1), toCam, 2.0, 4.0)
   c.tag(v3(-3.2, 3.0, 0), 'ゆらぎ（seam）')
   c.tag(v3(-1.1, 3.1, 0), '切れ目（open）')
   c.tag(v3(1.0, 2.7, 0.5), 'カメラを向く切れ目')
@@ -138,12 +138,10 @@ registerView('slit', (c: ViewCtx) => {
       again: () => {
         seam = fx.seam(v3(-3.2, 1.6, 0), { normal: toCam, width: 1.0, height: 2.4 })
         rift = fx.open(v3(-1.1, 1.6, 0), toCam, 1.1, 2.6)
-        dawn = fx.dawnDoor(v3(3.6, 2.2, 1), toCam, 2.0, 4.0)
+        fx.dawnDoor(v3(3.6, 2.2, 1), toCam, 2.0, 4.0)
       },
     },
   }
-  void bill
-  void dawn
 })
 
 // ------------------------------------------------------------------ fx（止める・裂く）

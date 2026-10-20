@@ -308,7 +308,9 @@ export class ChronoSystem {
   act(def: ClawTargetDef): boolean {
     const id = def.id.startsWith('chrono:') ? def.id.slice(7) : def.id
     const e = this.entries.get(id)
-    if (!e || !e.def.enabled) return false
+    if (!e) return false
+    this.syncDef(e.t, e.def)
+    if (!e.def.enabled) return false
     const t = e.t
     if (t.kind === 'ura' && !this.unlocked) {
       // すりぬける：手応えだけ残す

@@ -1169,6 +1169,15 @@ export class Game {
       get equipment() {
         return g.equipment
       },
+      get chrono() {
+        return g.active?.chrono
+      },
+      get combat() {
+        return g.active?.combat
+      },
+      get rt() {
+        return g.active?.rt
+      },
       story: g.story,
       /** 開発用：画質・フレームレート・音楽の音量を変える（例 graphics({ quality: 'low', fps: 30, music: 2 })）。いまの設定を返す */
       graphics: (p?: Partial<GraphicsPrefs>) => {

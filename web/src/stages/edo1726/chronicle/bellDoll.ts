@@ -779,7 +779,7 @@ export class TimeBellDoll {
       this.eyes.push(eye)
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlowTexture(), color: '#ff3cd0', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, toneMapped: false }))
       glow.position.set(e * 0.3, 0.95, -0.95)
-      glow.scale.setScalar(0.9)
+      glow.scale.setScalar(1.5)
       this.head.add(glow)
       this.eyeGlow.push(glow)
     }
@@ -1049,7 +1049,7 @@ export class TimeBellDoll {
       const stopped = this.gearStopped[i] ? 1 : 0
       const rm = this.gearRings[i].material as THREE.MeshBasicMaterial
       rm.opacity = Math.max(hl, stopped * 0.7, this.gearStrain[i] * 0.9)
-      rm.color.setRGB(stopped ? 0.6 : 2.4, stopped ? 1.4 : 1.9 - this.gearStrain[i] * 0.8, stopped ? 2.6 : 0.6)
+      rm.color.setRGB(stopped ? 0.35 : 2.4, stopped ? 1.1 : 1.9 - this.gearStrain[i] * 0.8, stopped ? 2.8 : 0.6)
       this.gearRings[i].rotation.z = this.t * (stopped ? 0 : 1.5)
       ;(this.gearGlow[i].material as THREE.SpriteMaterial).opacity = hl * 0.6 + this.gearStrain[i] * 0.5
       const gm = this.mats.gears[i]
@@ -1061,7 +1061,7 @@ export class TimeBellDoll {
     // のりうつり：色を暗く、ひびをすみれ色に、目を光らせる、もや
     const pk = this.possessK
     const pulse = 0.65 + 0.35 * Math.sin(this.t * 3.1)
-    const dark = 1 - 0.55 * pk
+    const dark = 1 - 0.32 * pk
     for (const m of [this.mats.kimono, this.mats.hakama, this.mats.skin, this.mats.lacquer, this.mats.wood, this.mats.gold, this.mats.bronze, this.mats.white]) {
       m.color.setRGB(dark, dark * (1 - 0.12 * pk), dark * (1 + 0.05 * pk))
       m.emissive.setRGB(0.55, 0.12, 1.0).multiplyScalar(pk * pulse * 1.1)

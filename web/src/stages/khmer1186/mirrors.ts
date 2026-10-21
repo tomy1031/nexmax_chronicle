@@ -165,7 +165,7 @@ export class MirrorStand {
 }
 
 /** 回る鏡の台の速さ（rad/s）と、正しい向きとみなす幅（±度） */
-export const TURNTABLE_TUNING = { speed: 0.36, toleranceDeg: 18 }
+export const TURNTABLE_TUNING = { speed: 0.45, toleranceDeg: 22 }
 
 /** 回る鏡の台（東の塔の仕掛け） */
 export class Turntable {
@@ -206,7 +206,8 @@ export class Turntable {
     this.elev = Math.atan2(to.y, horiz)
     this.reach = to.length()
     const correct = Math.atan2(-to.z, to.x)
-    // 正しい向きの幅は ±18°・速さ 0.36 rad/s：台が光ってから J まで 1.7 秒ほど間に合う（±8°・0.42 では 0.67 秒）
+    // 正しい向きの幅は ±22°・速さ 0.45 rad/s：台が光ってから J まで 1.7 秒ほど間に合う（±8°・0.42 では 0.67 秒）。
+    // 1 回りは 14 秒（止めそこねても、次に光るまで長く待たない）
     this.logic = new TurntableLogic(correct, { start: correct + 2.4, speed: TURNTABLE_TUNING.speed, tolerance: (TURNTABLE_TUNING.toleranceDeg * Math.PI) / 180 })
     // 台：石の太鼓（静的な物は scene 側の Batch。ここは回る上の部分）
     const bronze = new THREE.MeshStandardMaterial({ color: KC.bronze, roughness: 0.32, metalness: 0.85 })
@@ -265,6 +266,9 @@ export class Turntable {
     this.frozenRing.visible = on
     if (on && this.logic.aligned && !this.solved) {
       this.solved = true
+      // 正しい向きの幅は広いので、止まった所からぴたりと正しい向きへ（光の筋がまっすぐ台へとどく）
+      this.logic.angle = this.logic.correct
+      this.applyAngle()
       this.stand.setLit(1)
       this.onSolved?.()
     } else if (on && !this.solved) this.onMissed?.()

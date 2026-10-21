@@ -810,11 +810,21 @@ export class KhmerStage implements Stage {
   }
 
   private towerNear(p: THREE.Vector3): TowerId | null {
+    // 回る鏡の台のそば（南の塔の階段の下の円とも重なるので、先に見る。でないと台の前で「南の塔」の目標が出る）
+    if (Math.hypot(p.x - K.TURNTABLE.x, p.z - K.TURNTABLE.z) < 7) return 'e'
+    // いちばん近い塔（塔の中心から 12m・階段の下から 9m の中）
+    let best: TowerId | null = null
+    let bd = 0
     for (const id of TOWER_IDS) {
       const t = TOWERS[id]
       const base = towerPoint(t, SMALL_TOWER.tiers[2].half + SMALL_TOWER.stairs.run * SMALL_TOWER.stairs.segs, 0, 0)
-      if (Math.hypot(p.x - t.x, p.z - t.z) < 12 || Math.hypot(p.x - base.x, p.z - base.z) < 9) return id
+      const d = Math.min(Math.hypot(p.x - t.x, p.z - t.z) - 12, Math.hypot(p.x - base.x, p.z - base.z) - 9)
+      if (d < bd) {
+        best = id
+        bd = d
+      }
     }
+    if (best) return best
     // 北の塔：水の上の村の東・象のりば・池の中
     if (p.z < -45 && p.x > -42) return 'n'
     if (Math.hypot(p.x - K.TURNTABLE.x, p.z - K.TURNTABLE.z) < 9) return 'e'

@@ -50,6 +50,11 @@ export type ClawTargetDef = {
   noLineOfSight?: boolean
   /** 射程の上書き（m） */
   range?: number
+  /**
+   * 自動照準の優先度（スコアから引く）。0.3 で「少しまん中からはずれていても先に選ぶ」、1 で「見えていればほぼ必ず選ぶ」。
+   * ステージが、いま狙ってほしい物（次の歯車など）に付ける。R の切りかえの順にも効く
+   */
+  priority?: number
   /** pull_player：着地点（足元） */
   landing?: THREE.Vector3
   /** pull_player：途中で必ず通る点（手すりや屋根を越えるため） */
@@ -148,7 +153,7 @@ export function evaluateTarget(
   }
   const visible = inCone && inRange && facingOk && (def.noLineOfSight ? true : los(def, distance))
   const valid = inCone && inRange && facingOk && visible
-  const score = ell * tuning.centerWeight + (distance / range) * tuning.distanceWeight
+  const score = ell * tuning.centerWeight + (distance / range) * tuning.distanceWeight - (def.priority ?? 0)
   return { def, ndcX: v.x, ndcY: v.y, distance, inCone, inRange, facingOk, visible, valid, score }
 }
 

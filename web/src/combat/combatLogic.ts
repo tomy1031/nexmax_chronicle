@@ -278,11 +278,11 @@ export type EnemyStats = {
 
 export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
   // 欠け虫：小さく素早い。跳びかかって体当たり。クローで引き寄せると気絶
-  mite: { name: '欠け虫', hp: 2, speed: 3.6, sight: 11, lose: 18, reach: 2.4, windup: 0.45, active: 0.32, recover: 0.6, damage: 1, knock: 5, hitRange: 1.0, hitArc: 1.2, leap: 6.5, radius: 0.38, height: 0.55, mass: 'light', guards: false },
+  mite: { name: '欠け虫', hp: 2, speed: 3.6, sight: 11, lose: 18, reach: 2.4, windup: 1.2, active: 0.32, recover: 0.6, damage: 1, knock: 5, hitRange: 1.0, hitArc: 1.2, leap: 6.5, radius: 0.38, height: 0.55, mass: 'light', guards: false },
   // 欠け盾：盾で正面を守る。クローで盾をはがすと無防備
-  shield: { name: '欠け盾', hp: 4, speed: 2.3, sight: 12, lose: 18, reach: 1.9, windup: 0.6, active: 0.2, recover: 0.7, damage: 1, knock: 6, hitRange: 2.0, hitArc: 0.9, leap: 1.5, radius: 0.5, height: 1.55, mass: 'light', guards: true },
+  shield: { name: '欠け盾', hp: 4, speed: 2.3, sight: 12, lose: 18, reach: 1.9, windup: 1.2, active: 0.2, recover: 0.7, damage: 1, knock: 6, hitRange: 2.0, hitArc: 0.9, leap: 1.5, radius: 0.5, height: 1.55, mass: 'light', guards: true },
   // 欠け重：大きく硬い。溜めの長い叩きつけ。はじくでよろけ、クローで飛び込んで蹴る
-  brute: { name: '欠け重', hp: 9, speed: 1.7, sight: 13, lose: 20, reach: 2.6, windup: 0.95, active: 0.24, recover: 1.1, damage: 2, knock: 9, hitRange: 3.0, hitArc: 1.3, leap: 0, radius: 0.85, height: 2.3, mass: 'heavy', guards: false },
+  brute: { name: '欠け重', hp: 9, speed: 1.7, sight: 13, lose: 20, reach: 2.6, windup: 1.3, active: 0.24, recover: 1.1, damage: 1, knock: 9, hitRange: 3.0, hitArc: 1.3, leap: 0, radius: 0.85, height: 2.3, mass: 'heavy', guards: false },
 }
 
 export type BrainState = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'stagger' | 'stunned' | 'dead'
@@ -323,9 +323,9 @@ export class EnemyBrain {
   /** 次に攻撃できるまで（秒。群れで一斉に襲わないよう、出てくるときに少しずらす） */
   cooldown: number
 
-  constructor(kind: EnemyKind, seed = 0) {
+  constructor(kind: EnemyKind, seed = 0, override?: Partial<EnemyStats>) {
     this.kind = kind
-    this.stats = ENEMY_STATS[kind]
+    this.stats = override ? { ...ENEMY_STATS[kind], ...override } : ENEMY_STATS[kind]
     this.hp = this.stats.hp
     this.shield = this.stats.guards
     this.cooldown = 0.4 + (seed % 7) * 0.13

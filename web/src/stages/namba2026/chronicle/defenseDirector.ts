@@ -173,7 +173,7 @@ export class DefenseDirector {
   startBig(): EnemyHandle {
     this.bigCorner = 0
     const at = DEFENSE.darkCorners[1].clone()
-    const h = kidEnemy(this.rt.combat.spawn('brute', at, { tag: 'big', style: BIG_SHADE_STYLE, hp: 12, scale: 1.65, leash: 1.6, yaw: 0, hidden: true }) as EnemyInner)
+    const h = kidEnemy(this.rt.combat.spawn('brute', at, { tag: 'big', style: BIG_SHADE_STYLE, hp: 12, keepHpOnRespawn: true, scale: 1.65, leash: 1.6, yaw: 0, hidden: true }) as EnemyInner)
     softenEnemy(h, { windup: 1.35 })
     this.rt.combat.appear(h)
     this.big = h

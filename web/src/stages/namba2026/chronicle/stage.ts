@@ -293,7 +293,7 @@ export class ChronicleNambaStage implements Stage {
     const plateObjs = createArmorPlateObjects()
     for (const p of plateObjs) p.visible = false
     const yaw = Math.atan2(-(rt.player.position.x - center.x), -(rt.player.position.z - center.z))
-    const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: BEAST.hp, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
+    const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: BEAST.hp, keepHpOnRespawn: true, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
     softenEnemy(h, { windup: BEAST.windup, damage: BEAST.damage })
     rt.combat.appear(h)
     h.brain.stun(6)

@@ -1015,9 +1015,10 @@ export class TimeBellDoll {
     return this.gearStopped[i]
   }
 
-  /** 次につかむ歯車を光らせる（null で消す） */
+  /** 次につかむ歯車を光らせる（null で消す）。照準もその歯車に合いやすくする（ほかの歯車にはまず吸いつかない） */
   setGearHighlight(i: number | null): void {
     this.highlight = i
+    this.targets.forEach((t, k) => (t.priority = k === i ? 1 : 0))
   }
 
   /** つかまれて保持されている歯車の力み（0〜1）。人形があばれる */

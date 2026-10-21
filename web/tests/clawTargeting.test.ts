@@ -132,3 +132,15 @@ describe("clawTargeting: 自動照準とロック", () => {
     expect(TARGET_CATEGORY.hold_mechanism).toBe("mechanism");
   });
 });
+
+describe("clawTargeting: ステージが付ける優先度", () => {
+  it("優先度の付いた対象は、まん中から少しはずれていても先に選ばれる", () => {
+    const center = target("center", v(0, 1, -6));
+    const side = target("side", v(0.6, 1, -6));
+    const plain = rankTargets([evaluateTarget(center, basis(), chest), evaluateTarget(side, basis(), chest)]);
+    expect(chooseTarget(plain, null)?.def.id).toBe("center");
+    side.priority = 0.6;
+    const ranked = rankTargets([evaluateTarget(center, basis(), chest), evaluateTarget(side, basis(), chest)]);
+    expect(chooseTarget(ranked, null)?.def.id).toBe("side");
+  });
+});

@@ -11,7 +11,10 @@ import type { PlayerController } from '../player/controller'
 import type { ClawSystem } from '../player/clawSystem'
 import type { ClawTargetDef, WireEvent } from '../player/clawLogic'
 import type { Hud } from '../ui/hud'
-import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind } from './combatLogic'
+import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind, type EnemyStats } from './combatLogic'
+
+/** やられて戻ったあと、敵が襲ってこない時間（秒） */
+const RESPAWN_GRACE = 2.2
 import { EnemyModel, type EnemyStyle } from './enemyModels'
 import './combat.css'
 
@@ -30,6 +33,10 @@ export type SpawnOptions = {
   style?: EnemyStyle
   /** 体力の上書き（ボスなど） */
   hp?: number
+  /** この敵だけの数値の上書き（溜めの長さ・当たりの強さなど） */
+  stats?: Partial<EnemyStats>
+  /** やられて戻ったときも、この敵の体力を満タンに戻さない（ボス：けずった分を残す） */
+  keepHpOnRespawn?: boolean
   /** 大きさの倍率（見た目と当たり） */
   scale?: number
   /** 出てくるまで隠す（appear() で出す） */
@@ -95,6 +102,8 @@ type Enemy = EnemyHandle & {
   dyingT: number
   hidden: boolean
   removed: boolean
+  /** やられて戻ったときも体力を残す */
+  keepHp: boolean
 }
 
 /** 小さな破片・火花（使い回し） */
@@ -185,6 +194,8 @@ export class CombatSystem {
   enabled = false
   /** 敵が襲ってこない（会話・演出の間。ステージが切り替える） */
   passive = false
+  /** やられて戻ったあと、敵が襲ってこない残りの秒数 */
+  private graceT = 0
   readonly group = new THREE.Group()
   readonly health = new PlayerHealth()
   /** 体力 0 のときに戻る場所（ステージが設定。無ければ到着地点） */
@@ -242,7 +253,7 @@ export class CombatSystem {
   /** 敵を出す */
   spawn(kind: EnemyKind, pos: THREE.Vector3, o: SpawnOptions = {}): EnemyHandle {
     const id = `kake_${kind}_${++this.seq}`
-    const brain = new EnemyBrain(kind, this.seq)
+    const brain = new EnemyBrain(kind, this.seq, o.stats)
     if (o.hp) brain.hp = o.hp
     const model = new EnemyModel(kind, o.style)
     const scale = o.scale ?? 1
@@ -281,6 +292,7 @@ export class CombatSystem {
       model,
       pos: model.root.position,
       maxHp: brain.hp,
+      keepHp: o.keepHpOnRespawn ?? false,
       get yaw() {
         return model.root.rotation.y
       },
@@ -554,6 +566,7 @@ export class CombatSystem {
     this.clock += dt
     this.health.tick(dt)
     this.dodgeState.tick(dt)
+    this.graceT = Math.max(0, this.graceT - dt)
     this.hurtT = Math.max(0, this.hurtT - dt)
     this.impactCd = Math.max(0, this.impactCd - dt)
     // 体力 0 → 暗転して戻る
@@ -819,7 +832,7 @@ export class CombatSystem {
     const dist = Math.hypot(dx, dz)
     if (dist > FAR_HIDE && e.brain.state === 'idle' && !e.yank && e.knock.lengthSq() < 1e-4) return
     const leashed = e.pos.distanceTo(e.home) < e.leash
-    const out = e.brain.update(dt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown })
+    const out = e.brain.update(dt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown || this.graceT > 0 })
     if (e.brain.state === 'windup' && e.brain.t <= dt + 1e-6) e.struck = false
     if (out.face && dist > 0.05) this.turn(e, dx, dz, dt, st.mass === 'heavy' ? 4 : 9)
     // 動き
@@ -978,11 +991,13 @@ export class CombatSystem {
       e.yaw = e.homeYaw
       e.knock.set(0, 0, 0)
       e.yank = null
-      e.brain.hp = e.maxHp
+      if (!e.keepHp) e.brain.hp = e.maxHp
       e.brain.state = 'idle'
       e.brain.t = 0
       if (e.brain.armored) e.brain.setArmored(true)
     }
+    // 戻ってすぐは襲わない（子どもが立て直せるように）
+    this.graceT = RESPAWN_GRACE
     this.onRespawn?.()
   }
 

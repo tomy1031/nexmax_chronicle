@@ -15,7 +15,6 @@ import type { ClawTargetDef, WireEvent } from '../../../player/clawLogic'
 import type { Character } from '../../../world/characters'
 import type { Hint } from '../../../ui/hud'
 import type { EnemyHandle } from '../../../combat/combatSystem'
-import type { EnemyStats } from '../../../combat/combatLogic'
 import type { MusicId } from '../../../audio/tracks'
 import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from '../../../game/stage'
 import { SceneClock } from '../../../chronicle/kit/clock'
@@ -37,20 +36,12 @@ import { V7_ART, loadArtCanvas } from '../../../chronicle/art'
 import { IDO_RECORDS, SEARCH_WORDS, recordOfKanban } from './idoSearchLogic'
 import { createOfujiPlaceholder } from './ofuji'
 import { DefenseDirector } from './defenseDirector'
+import { softenEnemy } from './softEnemy'
 import { ARMOR_SOURCES, KANBAN, LAB, SHRINE, SPOTS_V7, V7_SPAWNS, type KanbanId } from './layoutV7'
 import { KANBAN_RECORD, STEP_SPAWN, STEP_TIME, combatStep, nambaV7Objective, nambaV7Step, stepMusic, type NambaV7Ctx, type NambaV7Step } from './storyNamba'
 
 const lines = new DialogueDB(linesData)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
-
-/**
- * この敵だけの攻撃の数値を変える（共有の ENEMY_STATS はそのまま）。子ども向けに、構え（溜め）を 1.2 秒より長く・
- * 当たりを軽くする。欠け重の溜めは 0.95 秒で、ハート 5 つのうち 2 つ減る
- */
-export function softenEnemy(h: EnemyHandle, o: Partial<EnemyStats>): void {
-  const b = h.brain as unknown as { stats: EnemyStats }
-  b.stats = { ...b.stats, ...o }
-}
 
 /** よろいの影獣（6 章）：体力・溜め・当たり。体力 0 で戻るときのやり直しの位置（獣の住みかから 4m はなれた、遊歩道の東） */
 const BEAST = { hp: 10, windup: 1.3, damage: 1, firstStun: 1.8, firstGrab: 5.0, retry: v(-1.2, 0, 9.0) }

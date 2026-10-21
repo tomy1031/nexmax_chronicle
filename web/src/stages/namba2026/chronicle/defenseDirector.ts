@@ -16,6 +16,7 @@ import { SHADE_STYLE, BIG_SHADE_STYLE } from '../../../chronicle/visuals/shade'
 import { DEFENSE, SHRINE } from './layoutV7'
 import { DEFENSE_WAVES, SHRINE_HITS, ShrineGuard, dueSpawns, guardLevel, type DefenseDir } from './shrineGuard'
 import type { ChronicleNambaScene } from './sceneV7'
+import { kidEnemy, softenEnemy } from './softEnemy'
 
 export type DefensePhase = 'wait' | 'wave1' | 'wave2' | 'projection' | 'big_dark' | 'big_lit' | 'won'
 
@@ -68,6 +69,7 @@ export class DefenseDirector {
   private bigLastHp = 0
   private aimCd = 0
   private lowSaid = false
+  private shieldSaid = false
   private seq = 0
   private readonly tmp = new THREE.Vector3()
 
@@ -111,10 +113,15 @@ export class DefenseDirector {
     const pts = dir === 'north' ? DEFENSE.spawns.north : DEFENSE.spawns.south
     const p = pts[this.seq % pts.length].clone()
     p.x += (Math.random() - 0.5) * 0.6
-    const h = this.rt.combat.spawn(kind, p, { tag: 'def', style: SHADE_STYLE, leash: 4.2, yaw: dir === 'north' ? Math.PI : 0, hidden: true }) as EnemyInner
+    const h = kidEnemy(this.rt.combat.spawn(kind, p, { tag: 'def', style: SHADE_STYLE, leash: 4.2, yaw: dir === 'north' ? Math.PI : 0, hidden: true }) as EnemyInner)
     h.home.copy(HOMES[this.seq % HOMES.length])
     this.seq++
     this.rt.combat.appear(h)
+    // 盾の影は、正面からの K をはじく：はじめて出たとき、はがし方を教える
+    if (kind === 'shield' && !this.shieldSaid) {
+      this.shieldSaid = true
+      this.say?.('shield_hint')
+    }
   }
 
   private spawnClimber(): void {
@@ -166,7 +173,8 @@ export class DefenseDirector {
   startBig(): EnemyHandle {
     this.bigCorner = 0
     const at = DEFENSE.darkCorners[1].clone()
-    const h = this.rt.combat.spawn('brute', at, { tag: 'big', style: BIG_SHADE_STYLE, hp: 12, scale: 1.65, leash: 1.6, yaw: 0, hidden: true }) as EnemyInner
+    const h = kidEnemy(this.rt.combat.spawn('brute', at, { tag: 'big', style: BIG_SHADE_STYLE, hp: 12, scale: 1.65, leash: 1.6, yaw: 0, hidden: true }) as EnemyInner)
+    softenEnemy(h, { windup: 1.35 })
     this.rt.combat.appear(h)
     this.big = h
     this.bigDarkHp = h.brain.hp
@@ -343,7 +351,7 @@ export class DefenseDirector {
         // 地面の影（戦闘の欠け虫）になる
         const at = hop.to.clone().setY(0)
         this.removeClimber(c)
-        const h = this.rt.combat.spawn('mite', at, { tag: 'def', style: SHADE_STYLE, leash: 4.2, hidden: true }) as EnemyInner
+        const h = kidEnemy(this.rt.combat.spawn('mite', at, { tag: 'def', style: SHADE_STYLE, leash: 4.2, hidden: true }) as EnemyInner)
         h.home.copy(HOMES[this.seq++ % HOMES.length])
         this.rt.combat.appear(h)
         h.brain.stun(1.6)

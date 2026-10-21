@@ -11,8 +11,10 @@ import {
   fellBelow,
   insideDoor,
   isPlayStep,
+  kidPlatforms,
   nextStep,
   pathProgress,
+  stoneGaps,
   uraObjective,
   veinsNeeded,
   veinsStepDone,
@@ -135,5 +137,24 @@ describe('目標と台詞', () => {
     expect(all).toContain('レンズが、もう、もたない')
     expect(all).toContain('扉が閉じる前に帰る')
     expect(all).toContain('佐伯のおばあちゃんも、こうやって、お前を守ったのか')
+  })
+})
+
+describe('子ども向けの飛び石', () => {
+  it('入口から広場まで、すき間はどれも 0.9m 以下（既定より小さい）', async () => {
+    const { URA_DEFAULT_PLATFORMS } = await import('../src/chronicle/visuals/ura')
+    const kid = stoneGaps(kidPlatforms(URA_DEFAULT_PLATFORMS))
+    const def = stoneGaps(URA_DEFAULT_PLATFORMS)
+    expect(kid.length).toBe(4)
+    for (const g of kid) {
+      expect(g).toBeGreaterThan(0.5)
+      expect(g).toBeLessThanOrEqual(0.9)
+    }
+    expect(Math.max(...kid)).toBeLessThan(Math.max(...def))
+  })
+  it('飛び石のほかの足場（入口・広場・横と奥）は既定のまま', async () => {
+    const { URA_DEFAULT_PLATFORMS } = await import('../src/chronicle/visuals/ura')
+    const kid = kidPlatforms(URA_DEFAULT_PLATFORMS)
+    for (const p of URA_DEFAULT_PLATFORMS) if (!/^step/.test(p.id)) expect(kid.find((k) => k.id === p.id)).toEqual(p)
   })
 })

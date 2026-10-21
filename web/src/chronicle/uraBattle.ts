@@ -28,7 +28,7 @@ import type { QualitySettings } from '../render/quality'
 import { SceneClock } from './kit/clock'
 import { Curtain } from './kit/curtain'
 import { ChoiceBox } from './kit/choice'
-import { buildUraArena, UraEnvSwitch, type UraArena } from './visuals/ura'
+import { buildUraArena, URA_DEFAULT_PLATFORMS, UraEnvSwitch, type UraArena } from './visuals/ura'
 import { OrmHeart } from './visuals/heart'
 import { BlackHands } from './visuals/hands'
 import { SlitFx, type Slit } from './visuals/slit'
@@ -39,7 +39,7 @@ import { ShadeWisps, SHADE_STYLE, BIG_SHADE_STYLE } from './visuals/shade'
 import type { PersonCharacter, PersonPose } from './visuals/person'
 import { faceYaw } from './kit/walker'
 import linesJson from './ura_lines.json'
-import { doorLeft, doorWidthK, escortCanMove, fellBelow, insideDoor, isPlayStep, nextStep, uraObjective, veinsStepDone, URA_STEPS, type UraLineKey, type UraScenario, type UraStep } from './uraBattleLogic'
+import { doorLeft, doorWidthK, escortCanMove, fellBelow, insideDoor, isPlayStep, kidPlatforms, nextStep, uraObjective, veinsStepDone, URA_STEPS, type UraLineKey, type UraScenario, type UraStep } from './uraBattleLogic'
 
 export type { UraScenario, UraStep } from './uraBattleLogic'
 
@@ -170,7 +170,8 @@ export class UraBattle {
     this.group.name = `ura_${o.scenario}`
     o.root.add(this.group)
     const q = typeof o.quality === 'string' ? o.quality : (o.quality?.level ?? 'medium')
-    this.arena = buildUraArena(this.group, o.colliders, this.origin, { quality: q })
+    // 飛び石は子ども向けに（すき間 0.85m ほど。扉へもどる道で、とびそこねて扉にまにあわない、をへらす）
+    this.arena = buildUraArena(this.group, o.colliders, this.origin, { quality: q, platforms: kidPlatforms(URA_DEFAULT_PLATFORMS) })
     const entry = this.arena.platforms.find((p) => p.id === 'entry') ?? this.arena.platforms[0]
     const field = this.arena.platforms.find((p) => p.id === 'arena') ?? this.arena.platforms[0]
     this.doorPos.set(entry.center.x - entry.w * 0.5 + 0.9, entry.center.y + 2.2, entry.center.z + entry.d * 0.5 - 1.0)
@@ -630,9 +631,8 @@ export class UraBattle {
     const A = this.arena
     this.escaped = false
     this.killShades(false)
-    // 道をふさぐ影：広場の出口と、入口の足場（扉の前）に 1 匹ずつ。せまい飛び石の上には置かない
-    // （とびのった所で押し落とされると、子どもには何がおきたかわからない）
-    this.spawnShade('mite', A.center.clone().add(new THREE.Vector3(-2.6, 0, 4.2)))
+    // 道をふさぐ影：入口の足場（扉の前の広い所）に 1 匹。せまい飛び石の上と、広場の出口には置かない
+    // （とびのる所で押し落とされたり、とぶ前にかまれたりすると、子どもには何がおきたかわからず、扉にまにあわない）
     this.spawnShade('shield', A.entry.clone().add(new THREE.Vector3(1.6, 0, -1.2)))
     // 扉の方へカメラを向ける（心臓の前からふり返る）
     rt.camRig.turnTo(Math.atan2(rt.player.position.x - this.doorPos.x, rt.player.position.z - this.doorPos.z), 0.3)
@@ -735,10 +735,17 @@ export class UraBattle {
     const busy = !isPlayStep(step) || rt.inCinematic
     rt.combat.passive = busy || rt.talking
     const P = rt.player.position
-    // 落ちた：killY で足場へ戻ったら、体力を 1 へらす（0 にはしない）
+    // 落ちた：いちばん近い足場のまん中へもどして、体力を 1 へらす（0 にはしない）。
+    // （killY の「最後に立っていた所」は足場のふちのことがあり、もどったとたんに、またすべり落ちつづけることがある）
     const lowest = Math.min(...this.arena.platforms.map((p) => p.center.y))
-    if (fellBelow(P.y, lowest)) this.falling = true
-    else if (this.falling && P.y > lowest - 0.3) {
+    if (fellBelow(P.y, lowest)) {
+      if (!this.falling && !rt.player.isExternal) {
+        const top = this.arena.nearestTop(P, this.tmp2)
+        rt.claw.reset()
+        rt.player.teleport(top.clone().add(UP.clone().multiplyScalar(0.2)), rt.player.facing)
+      }
+      this.falling = true
+    } else if (this.falling && P.y > lowest - 0.3) {
       this.falling = false
       const h = rt.combat.health
       if (h.hp > 1) h.damage(1)
@@ -1074,16 +1081,15 @@ export class UraBattle {
 
   private spawnWave(i: number): void {
     const P = (id: string) => this.arena.platforms.find((p) => p.id === id)?.center ?? this.arena.center
+    // 影は 1 → 2 → 2 匹（前は 2 → 2 → 3。子どもにはチャンダを守りながらの数が多すぎた）
     if (i === 0) {
       this.spawnShade('mite', P('step2').clone().add(new THREE.Vector3(0.6, 0, 0.3)))
-      this.spawnShade('mite', P('step2').clone().add(new THREE.Vector3(-0.6, 0, -0.4)))
     } else if (i === 1) {
       this.spawnShade('shield', P('step3').clone().add(new THREE.Vector3(0.6, 0, 0)))
       this.spawnShade('mite', this.arena.center.clone().add(new THREE.Vector3(-1.5, 0, 4)))
     } else {
       this.spawnShade('mite', this.arena.center.clone().add(new THREE.Vector3(2, 0, -1)))
-      this.spawnShade('mite', this.arena.center.clone().add(new THREE.Vector3(-2.2, 0, -2)))
-      this.spawnShade('shield', this.arena.center.clone().add(new THREE.Vector3(0, 0, -3), ), true)
+      this.spawnShade('shield', this.arena.center.clone().add(new THREE.Vector3(0, 0, -3)), true)
     }
   }
 

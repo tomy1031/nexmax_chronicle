@@ -372,13 +372,13 @@ export class TimeShrine {
     this.boxSpot.add(this.box.root)
     // ------------------------------------------------ 朝日：丸窓と格子戸からの光の筋・中の明るさ
     this.rayMat = new THREE.MeshBasicMaterial({ map: rayTexture(), color: '#ffd8a0', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false })
+    // 光の筋は丸窓の 2 本だけ・各 1 枚（重ねると白い板になって、窓や錠前の細部を隠す）。
+    // 板は立てて、ななめ前から見たときに細い帯に見えるように
     for (const [x, y, w, len] of [
-      [-0.3, 1.43, 0.2, 3.4],
-      [0.3, 1.43, 0.2, 3.4],
-      [-0.22, 0.98, 0.34, 3.2],
-      [0.22, 0.98, 0.34, 3.2],
+      [-0.3, 1.43, 0.2, 2.2],
+      [0.3, 1.43, 0.2, 2.2],
     ] as const) {
-      for (const twist of [0, Math.PI / 2]) {
+      for (const twist of [Math.PI / 2]) {
         const g = new THREE.PlaneGeometry(w, len)
         // 窓から外（-Z）へ、上へ（朝日の方）。帯の濃い端が窓
         g.translate(0, -len / 2, 0)
@@ -459,7 +459,7 @@ export class TimeShrine {
     this.light += (this.lightWant - this.light) * Math.min(1, dt * 1.5)
     const on = this.light > 0.01
     for (const r of this.rays) r.visible = on
-    this.rayMat.opacity = this.light * (0.32 + 0.06 * Math.sin(this.t * 1.3))
+    this.rayMat.opacity = this.light * (0.26 + 0.04 * Math.sin(this.t * 1.3))
     ;(this.innerGlow.material as THREE.SpriteMaterial).opacity = this.light * 0.8
     this.box.setSunlit(this.light)
     if (this.bellSwing > 0) {

@@ -439,7 +439,7 @@ export class TimeBellDoll {
   /** 怒り（順番をまちがえたとき）：攻撃が速くなる 1〜1.6 */
   rage = 1
   /** 顔の前を照らす暖色の補助灯（町の点光源の候補。のりうつっている間だけ点く。人形について動く） */
-  readonly faceLight: LightSpot = { pos: new THREE.Vector3(), color: '#ffe0b5', intensity: 0, dist: 16 }
+  readonly faceLight: LightSpot = { pos: new THREE.Vector3(), color: '#ffe0b5', intensity: 0, dist: 16, priority: true }
   /** カメラの側からの暖色の明かり（材質の中。のりうつっている間だけ） */
   private readonly fill = { value: 0 }
 

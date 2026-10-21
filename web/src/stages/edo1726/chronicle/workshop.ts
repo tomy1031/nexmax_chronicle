@@ -336,7 +336,7 @@ function buildInterior(c: Ctx): void {
     c.b.add(new THREE.TorusGeometry(0.012, 0.003, 4, 8, Math.PI * 1.4), c.m.wood, M(B.x0 + 0.75 + range(lr, -0.25, 0.25), B.y + 0.006, bz + range(lr, -0.3, 0.3), Math.PI / 2, 0, range(lr, 0, 6)), { tint: WOOD.fresh, cast: false })
   }
   // 作業台の上の補助灯（源兵衛の顔と、台の上のからくりを同じ明かりで見せる）
-  c.lights.push({ pos: new THREE.Vector3(-17.2, 2.4, 17.6), color: '#ffe6be', intensity: 2.4, dist: 5 })
+  c.lights.push({ pos: new THREE.Vector3(-17.2, 2.4, 17.6), color: '#ffe6be', intensity: 2.4, dist: 5, priority: true })
   // 腰かけ
   woodBox(c, bx - 0.4, 0.22, B.z1 + 0.55, 0.42, 0.06, 0.32, { tint: WOOD.warm })
   for (const dx of [-0.16, 0.16]) woodBox(c, bx - 0.4 + dx, 0.11, B.z1 + 0.55, 0.06, 0.22, 0.28, { tint: WOOD.dark })

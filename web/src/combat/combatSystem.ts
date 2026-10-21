@@ -935,7 +935,8 @@ export class CombatSystem {
     e.yaw = e.yaw + d * Math.min(1, rate * dt)
   }
 
-  private hurtPlayer(damage: number, dir: THREE.Vector3, knock: number): void {
+  /** プレイヤーが攻撃を受けた（無敵時間・回避・体力 0 の暗転までまとめて）。敵でないボスの攻撃からも呼べる */
+  hurtPlayer(damage: number, dir: THREE.Vector3, knock: number): void {
     const pl = this.host.player
     if (this.dodgeState.invulnerable || this.health.invuln > 0) return
     const res = this.health.damage(damage)

@@ -24,7 +24,7 @@ export function preloadStage(key: StageKey): Promise<unknown> {
     case '1186':
       return import('../stages/khmer1186/stage')
     case '1726':
-      return import('../stages/edo1726/stage')
+      return import('../stages/edo1726/chronicle/stage')
     case '1970':
       return import('../stages/expo1970/stage')
     case '2026':
@@ -41,8 +41,9 @@ export async function createStage(key: StageKey): Promise<Stage> {
       return new m.KhmerStage()
     }
     case '1726': {
-      const m = await import('../stages/edo1726/stage')
-      return new m.EdoStage()
+      // 物語 v7 の 7 章（旧版の導入編は stages/edo1726/stage.ts の EdoStage に残してある）
+      const m = await import('../stages/edo1726/chronicle/stage')
+      return new m.ChronicleEdoStage()
     }
     case '1970': {
       const m = await import('../stages/expo1970/stage')

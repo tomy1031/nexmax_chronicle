@@ -2,6 +2,7 @@ Yuji Boku / Yuji Syuku (c) 2021 The Yuji Project Authors (https://github.com/Kin
 License: SIL Open Font License 1.1 (OFL-YujiBoku.txt / OFL-YujiSyuku.txt)
 Source: Google Fonts (fonts.googleapis.com css2 API, text= subset), downloaded 2026-10-17
 Files: YujiBoku-subset.woff2, YujiSyuku-subset.woff2 (subset of the characters below; other glyphs fall back to the serif font)
+Also: YujiBoku-edo7.woff2, YujiSyuku-edo7.woff2 (物語 v7 の 7 章で足した字だけの小さなサブセット：裂・爪・鐘 など。same source, same license)
 To add characters, re-download with the css2 API: https://fonts.googleapis.com/css2?family=Yuji+Boku&text=<characters>
 
 Characters:

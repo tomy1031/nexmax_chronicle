@@ -703,8 +703,13 @@ export class Game {
     dist.length = L.length
     for (let i = 0; i < L.length; i++) {
       order[i] = i
-      // 消えている明かり（強さ 0）は割り当てない
-      dist[i] = L[i].intensity > 0.01 ? L[i].pos.distanceToSquared(center) : Infinity
+      // 小さいほど先に枠をもらう。消えている明かり（強さ 0）と、届く範囲から遠く外れた明かりは割り当てない。
+      // 近さだけでなく強さも見る（明るい提灯が、暗い飾りの灯に枠を取られないように）。補助灯（priority）は先に
+      const s = L[i]
+      const d2 = s.pos.distanceToSquared(center)
+      const reach = s.dist > 0 ? s.dist + 6 : Infinity
+      if (s.intensity <= 0.01 || d2 > reach * reach) dist[i] = Infinity
+      else dist[i] = -(s.intensity / (1 + d2 * 0.04)) * (s.priority ? 8 : 1)
     }
     order.sort((x, y) => dist[x] - dist[y])
     for (let i = 0; i < this.lanternLights.length; i++) {

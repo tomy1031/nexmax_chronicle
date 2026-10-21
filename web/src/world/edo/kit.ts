@@ -8,7 +8,8 @@ import { range, type Rng } from '../../render/noise'
 import type { ColliderList } from '../colliders'
 import type { QualitySettings } from '../../render/quality'
 
-export type LightSpot = { pos: THREE.Vector3; color: string; intensity: number; dist: number }
+/** 点光源の候補。priority は顔・次の操作対象を照らす補助灯（近くの提灯より先に枠をもらう） */
+export type LightSpot = { pos: THREE.Vector3; color: string; intensity: number; dist: number; priority?: boolean }
 
 export type Ctx = {
   b: Batch

@@ -187,7 +187,7 @@ export class ChronicleNambaStage implements Stage {
       case 'return':
         this.place(this.matsui, S.matsuiShrine)
         this.place(this.saeki, S.saekiShrine)
-        this.place(this.ofuji, { pos: v(14.6, 0, 24.9), face: SHRINE.pos })
+        this.place(this.ofuji, { pos: v(14.4, 0, 24.45), face: SHRINE.pos })
         break
     }
   }
@@ -287,6 +287,7 @@ export class ChronicleNambaStage implements Stage {
     const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: 12, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
     rt.combat.appear(h)
     h.brain.stun(6)
+    void this.walker.walkTo(this.matsui, [SPOTS_V7.matsuiFight.pos], 2.4, center)
     await rt.dialogue(L.slice(2))
     // まわりの看板・鉄板が飛んできて、よろいになる
     const fx = this.armorFx as ArmorPlates
@@ -305,6 +306,11 @@ export class ChronicleNambaStage implements Stage {
     fx.attach(null)
     for (const p of plateObjs) p.visible = true
     await rt.dialogue(lines.lines('beast_armor'))
+    // 戦いのカメラ：獣に向き、遊歩道の東から斜めに見る（ビルの壁にカメラがめりこまない側）
+    const pp = rt.player.position
+    rt.player.teleport(pp, Math.atan2(-(center.x - pp.x), -(center.z - pp.z)))
+    rt.camRig.yaw = 1.05
+    rt.camRig.pitch = 0.3
     rt.endCinematic()
     // 戦い
     rt.combat.enabled = true
@@ -314,7 +320,6 @@ export class ChronicleNambaStage implements Stage {
     rt.claw.targets.push(armDef)
     this.fight = { h, plates: plateObjs.length, grab: null, grabs: 0, nextGrab: 3.0, armDef }
     h.brain.stun(0.6)
-    void this.walker.walkTo(this.matsui, [SPOTS_V7.matsuiFight.pos], 2.4, center)
     this.busy = false
     rt.setControlLocked(false)
     void rt.dialogue(lines.lines('beast_hint'))
@@ -629,11 +634,21 @@ export class ChronicleNambaStage implements Stage {
     this.surgeC?.setLevel(0)
     rt.player.turnToward(this.matsui.root.position.x - rt.player.position.x, this.matsui.root.position.z - rt.player.position.z, 1, 1)
     await rt.dialogue(lines.lines('arrive9'))
-    await rt.dialogue(lines.lines('land_plan'))
+    const LP = lines.lines('land_plan')
+    await rt.dialogue(LP.slice(0, -1))
+    // 佐伯さん「ほこらへ、行ってみましょう」：二人が先に路地のおくへ。ネクマックスの背中ごしに見送る
+    void this.walker.walkTo(this.matsui, [v(17.65, 0, 15.2), v(17.35, 0, 19.4), SPOTS_V7.matsuiShrine.pos], 1.8, SHRINE.pos)
+    void this.clock.wait(0.7).then(() => this.walker.walkTo(this.saeki, [v(17.6, 0, 14.6), v(17.6, 0, 16.4), v(16.9, 0, 19.6), SPOTS_V7.saekiShrine.pos], 1.7, SHRINE.pos))
+    const pp = rt.player.position
+    rt.player.teleport(pp, Math.atan2(-(16.9 - pp.x), -(21 - pp.z)))
+    // 向きが逆のショットなので、寄らずに切りかえる
+    void rt.cinematic({ look: v(16.9, 1.0, 20.2), from: v(16.6, 2.3, 12.2), hold: Infinity, inSec: 0.05, fov: 54, arc: 0 })
+    await rt.dialogue(LP.slice(-1))
+    await this.clock.wait(1.2)
+    rt.camRig.yaw = Math.PI
+    rt.camRig.pitch = 0.3
     rt.endCinematic()
     this.toShrine = true
-    void this.walker.walkTo(this.matsui, [v(16.8, 0, 19.6), SPOTS_V7.matsuiShrine.pos], 1.7, SHRINE.pos)
-    void this.walker.walkTo(this.saeki, [v(16.4, 0, 19.6), SPOTS_V7.saekiShrine.pos], 1.6, SHRINE.pos)
     this.busy = false
     rt.setControlLocked(false)
   }
@@ -651,16 +666,23 @@ export class ChronicleNambaStage implements Stage {
     sh.setKey(true)
     sh.setGlow(0.5)
     this.ofuji.setPose('crank')
-    void rt.cinematic({ look: v(13.6, 1.05, 23.7), from: v(16.2, 1.6, 22.0), hold: Infinity, inSec: 1.3, fov: 44 })
+    const ns = SPOTS_V7.nexmaxShrine
+    rt.player.teleport(ns.pos, Math.atan2(-(ns.face.x - ns.pos.x), -(ns.face.z - ns.pos.z)))
+    void rt.cinematic({ look: v(13.6, 1.0, 23.4), from: v(17.7, 1.75, 24.55), hold: Infinity, inSec: 1.3, fov: 52 })
     const L = lines.lines('shrine_meet')
     await rt.dialogue(L.slice(0, 2))
     this.ofuji.setPose('idle')
     sh.setKey(false)
     this.walker.face(this.ofuji, rt.player.position)
     await rt.dialogue(L.slice(2, 5))
-    void rt.cinematic({ look: sh.lockPoint(this.tmp).clone(), from: v(15.0, 1.4, 23.2), hold: Infinity, inSec: 1.0, fov: 34, arc: 0 })
+    // 錠前を見せる：おふじさんは少しわきへ
+    void this.walker.walkTo(this.ofuji, [v(14.4, 0, 24.45)], 1.0, ns.pos)
+    void rt.cinematic({ look: sh.lockPoint(this.tmp).clone(), from: v(14.95, 1.35, 23.3), hold: Infinity, inSec: 1.0, fov: 34, arc: 0 })
     await rt.dialogue(L.slice(5, 6))
-    void rt.cinematic({ look: v(14.6, 1.2, 24.4), from: v(16.6, 1.6, 23.0), hold: Infinity, inSec: 1.0, fov: 44 })
+    // 佐伯さんとおふじさん
+    this.walker.face(this.ofuji, this.saeki.root.position)
+    this.walker.face(this.saeki, this.ofuji.root.position)
+    void rt.cinematic({ look: v(14.65, 1.25, 24.95), from: v(17.2, 1.65, 23.6), hold: Infinity, inSec: 1.0, fov: 46 })
     await rt.dialogue(L.slice(6))
     rt.endCinematic()
     rt.story.set('v7_shrine_talk', true)
@@ -775,15 +797,17 @@ export class ChronicleNambaStage implements Stage {
     }
     this.place(this.matsui, SPOTS_V7.matsuiShrine)
     this.place(this.saeki, SPOTS_V7.saekiShrine)
-    this.place(this.ofuji, { pos: v(14.6, 0, 24.9), face: SHRINE.pos })
+    this.place(this.ofuji, { pos: v(14.4, 0, 24.45), face: SHRINE.pos })
+    const nx = SPOTS_V7.nexmaxShrine
+    rt.player.teleport(nx.pos, Math.atan2(-(nx.face.x - nx.pos.x), -(nx.face.z - nx.pos.z)))
     const sh = this.ns.shrine
-    void rt.cinematic({ look: v(12.9, 1.4, 23.6), from: v(16.4, 1.7, 22.2), hold: Infinity, inSec: 1.6, fov: 46 })
+    void rt.cinematic({ look: v(12.9, 1.45, 23.5), from: v(17.4, 1.6, 23.9), hold: Infinity, inSec: 1.6, fov: 48 })
     for (let i = 0; i <= 10; i++) {
       sh.setSun(i / 10)
       await this.clock.wait(0.15)
     }
     await rt.dialogue(lines.lines('dawn'))
-    void rt.cinematic({ look: v(15.3, 1.5, 22.5), from: v(15.7, 1.6, 24.6), hold: Infinity, inSec: 1.2, fov: 44 })
+    void rt.cinematic({ look: v(15.05, 1.45, 21.9), from: v(15.75, 1.6, 24.3), hold: Infinity, inSec: 1.2, fov: 44 })
     this.walker.face(this.matsui, sh.root.position)
     await rt.dialogue(lines.lines('decision').slice(0, 1))
     this.walker.face(this.matsui, rt.player.position)

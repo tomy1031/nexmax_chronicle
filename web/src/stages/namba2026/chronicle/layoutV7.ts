@@ -87,11 +87,13 @@ export const SPOTS_V7 = {
   /** 9 章：おふじさん（ほこらの前でぜんまいを巻く。防衛戦のあいだは路地の口へ下がる） */
   ofujiWind: { pos: v(14.28, 0, 23.72), face: SHRINE.pos.clone() },
   ofujiSafe: { pos: v(16.2, 0, 19.0), face: SHRINE.pos.clone() },
-  /** 9 章：社長と佐伯さん（ほこらのそば） */
-  matsuiShrine: { pos: v(15.3, 0, 22.5), face: SHRINE.pos.clone() },
-  saekiShrine: { pos: v(14.4, 0, 25.0), face: SHRINE.pos.clone() },
+  /** 9 章：社長と佐伯さん（ほこらの前の両わき。献灯の外側に立ち、正面のおふじさんとカメラのあいだをあける） */
+  matsuiShrine: { pos: v(15.05, 0, 21.75), face: v(14.28, 0, 23.72) },
+  saekiShrine: { pos: v(15.0, 0, 25.45), face: v(14.28, 0, 23.72) },
+  /** 9 章：ほこらで話すあいだのネクマックスの立ち位置（会話のカメラに入らない） */
+  nexmaxShrine: { pos: v(16.75, 0, 22.55), face: v(14.28, 0, 23.72) },
   /** 9 章の防衛戦：社長が路地のかんばんへかけよる道と、映し出すときに立つ位置 */
-  matsuiToKanban: [v(15.3, 0, 22.5), v(16.4, 0, 20.4), v(16.6, 0, 18.0), v(16.75, 0, 16.6)],
+  matsuiToKanban: [v(15.05, 0, 21.75), v(16.4, 0, 20.4), v(16.6, 0, 18.0), v(16.75, 0, 16.6)],
   matsuiProject: { pos: v(16.75, 0, 16.6), face: v(15.68, 0, 16.6) },
   /** 6 章：影獣と戦うあいだ（NEXTMAKE の入口の前へ下がる）・佐伯さんがにげる先 */
   matsuiFight: { pos: v(-9.4, 0, 9.9), face: v(-4.6, 0, 7.4) },

@@ -1066,7 +1066,7 @@ export class Game {
     if (len > 0.8) {
       dir.divideScalar(len)
       const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
-      const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
+      const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, 'camera')
       // 0 に近い当たりは、見る点が当たり判定の中にあるとき（石・地面など）。そのときは寄せない
       if (hit !== null && hit > 0.05) cam.copy(start).addScaledVector(dir, Math.max(0.5, hit - 0.4))
     }
@@ -1111,7 +1111,7 @@ export class Game {
     if (len < 0.9) return
     dir.divideScalar(len)
     const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
-    const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
+    const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, 'camera')
     if (hit !== null && hit > 0.05) this.camera.position.copy(start).addScaledVector(dir, Math.max(0.4, hit - 0.25))
   }
 

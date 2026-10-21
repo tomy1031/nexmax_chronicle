@@ -88,12 +88,12 @@ export class CameraRig {
   /** 壁に入らない距離：まん中と、画面の四隅に当たる 4 本のレイのうち、いちばん近い当たり */
   private safeDistance(): number {
     const len = this.distance + 0.3
-    let best = this.phys.raycast(this.smoothTarget, this.dir, len, this.exclude, true) ?? Infinity
+    let best = this.phys.raycast(this.smoothTarget, this.dir, len, this.exclude, 'camera') ?? Infinity
     this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw))
     this.upv.crossVectors(this.right, this.dir).normalize()
     for (const [sx, sy] of CORNERS) {
       this.origin.copy(this.smoothTarget).addScaledVector(this.right, sx).addScaledVector(this.upv, sy)
-      const h = this.phys.raycast(this.origin, this.dir, len, this.exclude, true)
+      const h = this.phys.raycast(this.origin, this.dir, len, this.exclude, 'camera')
       if (h !== null && h < best) best = h
     }
     return best === Infinity ? this.distance : Math.max(0.35, best - 0.25)

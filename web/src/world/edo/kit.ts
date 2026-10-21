@@ -193,7 +193,7 @@ export function railing(
       c.b.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.025, 6), c.m.rope, undefined, { uv: 'scale', uvScale: [6, 1] })
     }
   }
-  if (o.collider ?? true) c.col.box(mx, y + 0.6, mz, len, 1.2, 0.2, rot)
+  if (o.collider ?? true) c.col.box(mx, y + 0.6, mz, len, 1.2, 0.2, rot).camPass = true
 }
 
 // ------------------------------------------------------------------ 提灯

@@ -487,7 +487,7 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
     const railEnd = 18.1
     woodBox(cc, (BL.x0 + railEnd) / 2, BL.y + 0.85, BL.z1 - 0.06, railEnd - BL.x0, 0.08, 0.08, { tint: WOOD.dark })
     for (let x = BL.x0 + 0.3; x <= railEnd; x += 0.9) woodBox(cc, x, BL.y + 0.42, BL.z1 - 0.06, 0.06, 0.84, 0.06, { tint: WOOD.dark })
-    cc.col.box((BL.x0 + railEnd) / 2, BL.y + 0.5, BL.z1 - 0.06, railEnd - BL.x0, 1.0, 0.14)
+    cc.col.box((BL.x0 + railEnd) / 2, BL.y + 0.5, BL.z1 - 0.06, railEnd - BL.x0, 1.0, 0.14).camPass = true
     // 縁側の上の提灯の列
     for (let x = BL.x0 + 1; x < BL.x1; x += 1.8) chochin(cc, x, BL.y + 2.1, BL.z1 - 0.3, x % 3.6 < 1.8 ? 'red' : 'white', 0.7, { light: Math.round(x) % 4 === 0 })
   }

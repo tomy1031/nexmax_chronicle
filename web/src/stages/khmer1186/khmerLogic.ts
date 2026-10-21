@@ -88,6 +88,11 @@ export type StoneFallOptions = {
   loop?: boolean
   /** 始まりの遅れ（秒）。複数の石をずらす */
   delay?: number
+  /**
+   * 下に着いた所（道すじの 2 つめの点）で止まっている秒数。足場にちょうどいい高さで少し休むので、
+   * 子どもでも止める（J）のが間に合う。0 なら休まずに転がり落ちる
+   */
+  rest?: number
 }
 
 export class StoneFallLogic {
@@ -99,6 +104,7 @@ export class StoneFallLogic {
   window: { y0: number; y1: number } | null
   half: number
   loop: boolean
+  rest: number
   phase: StonePhase = 'hidden'
   /** 今の段階の経過秒 */
   t = 0
@@ -110,6 +116,9 @@ export class StoneFallLogic {
   readonly pos = new THREE.Vector3()
   private readonly lengths: number[] = []
   readonly total: number
+  /** 下で休んでいる残りの秒（休みは 1 回の落下で 1 度だけ） */
+  private restLeft = 0
+  private rested = false
 
   constructor(o: StoneFallOptions) {
     this.path = o.path.map((p) => p.clone())
@@ -120,6 +129,7 @@ export class StoneFallLogic {
     this.window = o.window ?? null
     this.half = o.half ?? 0.32
     this.loop = o.loop ?? true
+    this.rest = o.rest ?? 0
     let total = 0
     for (let i = 0; i < this.path.length - 1; i++) {
       const l = this.path[i].distanceTo(this.path[i + 1])
@@ -159,11 +169,18 @@ export class StoneFallLogic {
     return y >= this.window.y0 && y <= this.window.y1
   }
 
+  /** 下で休んでいるか */
+  get resting(): boolean {
+    return this.restLeft > 0
+  }
+
   /** 最初から（上でゆれるところから）やり直す */
   restart(delay = 0): void {
     this.phase = 'hidden'
     this.t = -delay
     this.s = 0
+    this.restLeft = 0
+    this.rested = false
     this.frozen = false
     this.active = true
     this.pos.copy(this.path[0])
@@ -187,9 +204,22 @@ export class StoneFallLogic {
         if (this.t >= this.wobble) this.enter('fall')
         break
       case 'fall': {
+        if (this.restLeft > 0) {
+          this.restLeft = Math.max(0, this.restLeft - dt)
+          break
+        }
         // 落ちはじめはゆっくり（足場にしやすい）
         const k = Math.min(1, this.t / 0.6)
+        const s0 = this.s
         this.s += this.speed * (0.35 + 0.65 * k) * dt
+        // 下に着いたら、少し休む
+        const at = this.lengths[0] ?? 0
+        if (this.rest > 0 && !this.rested && s0 < at && this.s >= at) {
+          this.s = at
+          this.rested = true
+          this.restLeft = this.rest
+          break
+        }
         if (this.s >= this.total) {
           this.s = this.total
           this.enter('fade')
@@ -202,6 +232,7 @@ export class StoneFallLogic {
             this.phase = 'hidden'
             this.t = -this.gap
             this.s = 0
+            this.rested = false
           } else {
             this.active = false
           }

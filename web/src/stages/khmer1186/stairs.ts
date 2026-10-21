@@ -110,6 +110,11 @@ export class PartMesh {
 // ------------------------------------------------------------------ 落ちてくる石
 
 const STONE_SIZE = v(0.92, 0.62, 0.92)
+/**
+ * 落ちてきた石が、くずれた所の床（上の壁の前）で休む秒数。足場にちょうどいい高さはそこだけで、
+ * 休まないと 0.5 秒ほどで転がり落ちる（子どもには J が間に合わない）
+ */
+export const STONE_REST = 2.2
 
 export class FallingStone {
   readonly id: string
@@ -313,7 +318,7 @@ export class BigStairs {
       this.fallDir.push(v(-1, 0, (rng() - 0.5) * 0.6).normalize())
       // 落ちてくる石（この区切りがくずれている間）
       const foot = v(seg.x1, seg.y0, zc + (rng() - 0.5) * 0.8)
-      const logic = new StoneFallLogic({ path: stonePath(foot, v(1, 0, 0), S.rise, S.run), speed: 1.7, wobble: 1.0, gap: 1.6, window: { y0: seg.y0 + 0.4, y1: seg.y0 + 0.9 }, half: STONE_SIZE.y / 2, delay: i * 0.7 })
+      const logic = new StoneFallLogic({ path: stonePath(foot, v(1, 0, 0), S.rise, S.run), speed: 1.7, wobble: 1.4, gap: 1.6, window: { y0: seg.y0 + 0.4, y1: seg.y0 + 0.9 }, half: STONE_SIZE.y / 2, delay: i * 0.7, rest: STONE_REST })
       logic.active = false
       const st = new FallingStone(`stairs_${i}`, logic, stoneMat(), c.bodies, burst)
       this.stones.push(st)

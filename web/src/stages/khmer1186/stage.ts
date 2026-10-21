@@ -14,6 +14,7 @@ import type { WireEvent } from '../../player/clawLogic'
 import type { Hint } from '../../ui/hud'
 import type { MusicId } from '../../audio/tracks'
 import type { EnemyHandle } from '../../combat/combatSystem'
+import type { EnemyStats } from '../../combat/combatLogic'
 import { SceneClock } from '../../chronicle/kit/clock'
 import { Walker } from '../../chronicle/kit/walker'
 import { Curtain } from '../../chronicle/kit/curtain'
@@ -30,6 +31,15 @@ import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
 
 const DB = new DialogueDB(data)
+
+/**
+ * 夜の影の攻撃を、子ども向けにゆるめる（共有の ENEMY_STATS はそのまま、この敵だけ）：
+ * 構え（溜め）が見えてから当たるまで 1.2 秒より長く（欠け虫は 0.45 秒・欠け盾は 0.6 秒）・当たりはハート 1 つ
+ */
+function kidEnemy(h: EnemyHandle): void {
+  const b = h.brain as unknown as { stats: EnemyStats }
+  b.stats = { ...b.stats, windup: Math.max(1.25, b.stats.windup), damage: Math.min(1, b.stats.damage) }
+}
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 /** 帰りの光の輪（上の台の西のふち） */
@@ -499,6 +509,7 @@ export class KhmerStage implements Stage {
     kinds.forEach((kind, i) => {
       const at = TOP_SPAWNS[(i + w * 2) % TOP_SPAWNS.length]
       const h = rt.combat.spawn(kind, at.clone(), { tag: 'night', style: SHADE_STYLE, leash: 16, hidden: true })
+      kidEnemy(h)
       void this.clock.wait(i * 0.45).then(() => {
         if (h.alive && !this.clock.dead) rt.combat.appear(h)
       })

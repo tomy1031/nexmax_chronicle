@@ -6,7 +6,7 @@
 // ------------------------------------------------------------------ 黒い手のふりおろし
 
 /** ふりおろしの時間割（秒）。windup：手を上げて地面に予告の円 / strike：ふりおろし / stuck：地面で止まる（裂くチャンス） / recover：もどる */
-export const SLAM_TIMING = { windup: 0.95, strike: 0.18, stuck: 1.8, recover: 0.7 } as const
+export const SLAM_TIMING = { windup: 1.2, strike: 0.22, stuck: 2.2, recover: 0.7 } as const
 export type SlamTiming = { windup: number; strike: number; stuck: number; recover: number }
 export type SlamPhase = 'windup' | 'strike' | 'stuck' | 'recover' | 'done'
 

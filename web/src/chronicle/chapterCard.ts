@@ -98,7 +98,7 @@ export class ChapterCard {
     void el.offsetWidth
     el.classList.add('on')
     this.el = el
-    this.t = 0
+    this.t = performance.now()
     this.dur = seconds
     this.closing = false
     return new Promise((r) => (this.resolve = r))
@@ -106,13 +106,17 @@ export class ChapterCard {
 
   /** 早送り（出てすぐは効かない） */
   skip(): void {
-    if (this.el && this.t > 0.8) this.close()
+    if (this.el && this.elapsed() > 0.8) this.close()
   }
 
-  update(dt: number): void {
+  /** 毎フレーム。時間は実時間で数える（重い端末でフレームが落ちても、決まった秒数で閉じる） */
+  update(): void {
     if (!this.el) return
-    this.t += dt
-    if (!this.closing && this.t >= this.dur) this.close()
+    if (!this.closing && this.elapsed() >= this.dur) this.close()
+  }
+
+  private elapsed(): number {
+    return (performance.now() - this.t) / 1000
   }
 
   private close(): void {

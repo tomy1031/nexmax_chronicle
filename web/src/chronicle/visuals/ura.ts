@@ -201,14 +201,14 @@ function roundRect(w: number, d: number, r: number, n: number): THREE.Vector2[] 
 function platformGeometry(w: number, d: number, rnd: () => number): { body: THREE.BufferGeometry; rim: THREE.BufferGeometry; cracks: THREE.BufferGeometry } {
   const per = roundRect(w, d, Math.min(0.6, Math.min(w, d) * 0.2), 28)
   const n = per.length
-  const top = new THREE.Color('#d2def4')
-  const side = new THREE.Color('#a6b6d6')
-  const under = new THREE.Color('#4a5684')
+  const top = new THREE.Color('#b7c9dd')
+  const side = new THREE.Color('#6d7e9f')
+  const under = new THREE.Color('#35425e')
   // 上面（扇）
   const tp: number[] = [0, 0, 0]
   const tc: number[] = [top.r, top.g, top.b]
   for (const p of per) {
-    tp.push(p.x, 0, p.y)
+    tp.push(p.x * Math.max(0.5, 1 - 0.16 / w), 0, p.y * Math.max(0.5, 1 - 0.16 / d))
     tc.push(top.r, top.g, top.b)
   }
   const ti: number[] = []
@@ -219,22 +219,28 @@ function platformGeometry(w: number, d: number, rnd: () => number): { body: THRE
   cap.setIndex(ti)
   cap.computeVertexNormals()
   // 側面と下：輪を重ねて先へしぼる
-  const depth = 1.8 + Math.max(w, d) * 0.28
+  const depth = 0.9 + Math.max(w, d) * 0.18
   const rings: { y: number; s: number; c: THREE.Color; j: number }[] = [
-    { y: -0.02, s: 1.0, c: side, j: 0 },
+    { y: 0, s: 1.0, c: top, j: 0 },
+    { y: -0.08, s: 1.0, c: side, j: 0 },
     { y: -0.42, s: 1.0, c: side, j: 0.04 },
-    { y: -0.9, s: 0.82, c: side.clone().lerp(under, 0.4), j: 0.12 },
-    { y: -depth * 0.6, s: 0.48, c: under, j: 0.18 },
+    { y: -depth * 0.5, s: 0.82, c: side.clone().lerp(under, 0.4), j: 0.12 },
+    { y: -depth * 0.82, s: 0.48, c: under, j: 0.18 },
+    { y: -depth, s: 0.19, c: under, j: 0.12 },
   ]
   const bp: number[] = []
   const bc: number[] = []
-  for (const rg of rings) {
-    for (const p of per) {
-      const jit = 1 + (rnd() - 0.5) * rg.j * 2
-      bp.push(p.x * rg.s * jit, rg.y + (rnd() - 0.5) * rg.j, p.y * rg.s * jit)
+  // 元の4断面分だけ乱数を消費し、足場の改修で背景遺構の配置まで変わらないようにする。
+  const jitter = Array.from({ length: 4 }, () => per.map(() => [rnd() - 0.5, rnd() - 0.5]))
+  const sourceRing = [0, 0, 1, 2, 3, 3]
+  rings.forEach((rg, ringIndex) => {
+    per.forEach((p, i) => {
+      const [jx, jy] = jitter[sourceRing[ringIndex]][i]
+      const jit = 1 + jx * rg.j * 2
+      bp.push(p.x * rg.s * jit * (rg.y === 0 ? Math.max(0.5, 1 - 0.16 / w) : 1), rg.y + jy * rg.j, p.y * rg.s * jit * (rg.y === 0 ? Math.max(0.5, 1 - 0.16 / d) : 1))
       bc.push(rg.c.r, rg.c.g, rg.c.b)
-    }
-  }
+    })
+  })
   const tip = rings.length * n
   bp.push((rnd() - 0.5) * 0.4, -depth, (rnd() - 0.5) * 0.4)
   bc.push(under.r * 0.7, under.g * 0.7, under.b * 0.7)
@@ -266,9 +272,8 @@ function platformGeometry(w: number, d: number, rnd: () => number): { body: THRE
   const ri: number[] = []
   for (let i = 0; i < n; i++) {
     const p = per[i]
-    const len = Math.hypot(p.x, p.y)
-    const o = (len + 0.05) / len
-    rp.push(p.x * 0.995, 0.012, p.y * 0.995, p.x * o, 0.012, p.y * o)
+    const o = 0.995
+    rp.push(p.x * Math.max(0.5, 1 - 0.16 / w), 0.012, p.y * Math.max(0.5, 1 - 0.16 / d), p.x * o, -0.06, p.y * o)
   }
   for (let i = 0; i < n; i++) {
     const a = i * 2
@@ -406,9 +411,9 @@ export function buildUraArena(root: THREE.Object3D, colliders: ColliderList, ori
 
   // 足場
   const defs = opts.platforms ?? URA_DEFAULT_PLATFORMS
-  const stoneMat = createToonMaterial({ line: '#141a3a', selfLight: 0.42, rim: '#8fb4ff', rimK: 0.45 })
-  const rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#9fd8ff').multiplyScalar(1.6), toneMapped: false, side: THREE.DoubleSide })
-  const crackMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#8fc8ff').multiplyScalar(1.2), toneMapped: false, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })
+  const stoneMat = createToonMaterial({ line: '#141a3a', selfLight: 0.22, rim: '#8fb4ff', rimK: 0.2 })
+  const rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#9fd8ff').multiplyScalar(0.85), toneMapped: false, side: THREE.DoubleSide })
+  const crackMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#8fc8ff').multiplyScalar(1.2), toneMapped: false, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide })
   mats.push(stoneMat, rimMat, crackMat)
   const bodies: THREE.BufferGeometry[] = []
   const rims: THREE.BufferGeometry[] = []
@@ -418,6 +423,20 @@ export function buildUraArena(root: THREE.Object3D, colliders: ColliderList, ori
     const pg = platformGeometry(def.w, def.d, rnd)
     const m = new THREE.Matrix4().compose(new THREE.Vector3(def.x, def.top, def.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), def.rotY ?? 0), new THREE.Vector3(1, 1, 1))
     bodies.push(pg.body.applyMatrix4(m))
+    // 最初の着地点にだけ二つの山形。足場の縁と同じ材質へまとめ、描画は増やさない。
+    if (def.id === 'step1') {
+      const guidePos: number[] = [], guideIx: number[] = []
+      for (let i = 0; i < 2; i++) {
+        const z = (i - 0.5) * 0.48
+        const base = guidePos.length / 3
+        guidePos.push(-0.15, 0.018, z + 0.12, 0, 0.018, z - 0.03, 0.15, 0.018, z + 0.12, 0.15, 0.018, z + 0.19, 0, 0.018, z + 0.04, -0.15, 0.018, z + 0.19)
+        guideIx.push(base, base + 1, base + 4, base, base + 4, base + 5, base + 1, base + 2, base + 3, base + 1, base + 3, base + 4)
+      }
+      const guide = new THREE.BufferGeometry()
+      guide.setAttribute('position', new THREE.Float32BufferAttribute(guidePos, 3))
+      guide.setIndex(guideIx)
+      rims.push(guide.applyMatrix4(m))
+    }
     rims.push(pg.rim.applyMatrix4(m))
     cracks.push(pg.cracks.applyMatrix4(m))
     const center = new THREE.Vector3(origin.x + def.x, origin.y + def.top, origin.z + def.z)

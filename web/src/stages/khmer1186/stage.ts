@@ -236,7 +236,8 @@ export class KhmerStage implements Stage {
         point: fz.point,
         radius: fz.radius,
         enabled: false,
-        seconds: 4,
+        // 落ちる石は、止めたあとに 2 回とびのる時間がいるので長めに（子どもが間に合うように）。回る鏡の台はふつう
+        seconds: fz.id === 'khmer_turntable' ? 4 : 6.5,
         range: fz.id === 'khmer_turntable' ? 14 : 12,
         onAct: () => {
           // 落ちる石を、足場にならない高さで止めた：2 回目から、止めどきを教える（そのあとも 3 回ごとに）

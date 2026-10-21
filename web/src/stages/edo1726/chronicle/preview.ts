@@ -349,6 +349,7 @@ async function main(): Promise<void> {
     genbei.update(dt, 0)
     oharu.update(dt, 0)
     w.update(dt, uTime.value, camera)
+    w.workshop.setNight(cycle.night)
     rig.follow(focus)
     sky.position.copy(camera.position)
     post.render(dt)

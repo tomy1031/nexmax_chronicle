@@ -340,6 +340,11 @@ export class EdoSkyCycle {
   private lanternK = 1
   private nightK = 0
 
+  /** 夜のぐあい（0 = 昼、1 = 夜） */
+  get night(): number {
+    return this.nightK
+  }
+
   private col(a: string, b: string, k: number, out: THREE.Color): THREE.Color {
     return out.copy(this.tmpA.set(a)).lerp(this.tmpB.set(b), k)
   }

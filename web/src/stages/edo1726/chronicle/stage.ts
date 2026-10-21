@@ -986,6 +986,7 @@ export class ChronicleEdoStage implements Stage {
     this.genbei.update(dt, this.walker.speedOf(this.genbei))
     this.oharu.update(dt, this.walker.speedOf(this.oharu))
     this.w.update(dt, t, rt.camera)
+    this.w.workshop.setNight(this.sky?.night ?? 0)
     this.folk.update(dt)
     this.box.update(dt)
     this.wave?.update(dt)

@@ -45,8 +45,13 @@ export type WorkshopParts = {
   backDoor: THREE.Vector3
   /** 中にいるか（x,z） */
   inside(p: THREE.Vector3): boolean
+  /** 夜のぐあい（0〜1）。夜は行灯の色を中の漆喰と床にのせる（夜の空の青い環境光で、壁が紫に見えないように） */
+  setNight(k: number): void
   update(dt: number, t: number, camera: THREE.Camera): void
 }
+
+/** 夜の行灯の照り返しの色 */
+const NIGHT_GLOW = new THREE.Color('#ffb066')
 
 // ---------------------------------------------------------------- 建物（静的）
 
@@ -68,6 +73,10 @@ export function buildWorkshop(c: Ctx, root: THREE.Group): WorkshopParts {
     frontDoor: v((W.door.x0 + W.door.x1) / 2, 0, Z0),
     backDoor: v((W.backDoor.x0 + W.backDoor.x1) / 2, 0, Z1),
     inside: (p) => p.x > X0 && p.x < X1 && p.z > Z0 && p.z < Z1,
+    setNight(k) {
+      wm.plaster.emissive.copy(NIGHT_GLOW).multiplyScalar(0.11 * k)
+      wm.floor.emissive.copy(NIGHT_GLOW).multiplyScalar(0.04 * k)
+    },
     update(dt, t, camera) {
       book.update(dt)
       box.update(dt, t)

@@ -337,6 +337,7 @@ export class HudFuture {
   private toastTimer = 0
   private bannerTimer = 0
   private eraCardTimer = 0
+  private eraCardEnd = 0
   private armKey = ''
   private leftPart: string | null = null
   private rightPart = 'つかむNMClaw'
@@ -1412,7 +1413,9 @@ export class HudFuture {
     this.eraCard.hidden = false
     this.eraCard.classList.remove('out')
     this.retrigger(this.eraCard, 'show')
+    // 実時間で数える（重い端末でフレームが落ちても、決まった秒数で消える）
     this.eraCardTimer = seconds
+    this.eraCardEnd = performance.now() + seconds * 1000
   }
 
   /** IDO の歴史案内パネルを出す */
@@ -1452,7 +1455,7 @@ export class HudFuture {
   /** 毎フレーム：お知らせ・演出の時間切れ、表情の時間 */
   tick(dt: number): void {
     if (this.eraCardTimer > 0) {
-      this.eraCardTimer -= dt
+      this.eraCardTimer = Math.max(0, (this.eraCardEnd - performance.now()) / 1000)
       if (this.eraCardTimer <= 0) {
         this.eraCard.classList.add('out')
         setTimeout(() => {

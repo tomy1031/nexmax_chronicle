@@ -373,6 +373,8 @@ export class ChronicleFutureStage implements Stage {
     this.towa.root.rotation.y = faceYaw(pos, face)
     this.towa.setPose(pose)
     this.towa.setMask(mask)
+    // 仮面を外したあと（結末・おわりに）は、台詞の顔も素顔に
+    if (!mask) this.rt?.hud.setSpeakerIcon('トワ', TOWA_UNMASKED)
   }
 
   // ================================================================== 待つ・F・カメラ
@@ -401,7 +403,15 @@ export class ChronicleFutureStage implements Stage {
   private waitNear(rt: StageRuntime, pos: THREE.Vector3, r: number, ySpan = 3): Promise<void> {
     return this.until(
       () => Math.hypot(rt.player.position.x - pos.x, rt.player.position.z - pos.z) < r && Math.abs(rt.player.position.y - pos.y) < ySpan,
-      () => this.teleport(rt, pos, faceYaw(pos, this.sora.root.position)),
+      () => {
+        // 目的の点の少し手前（来た方向）へ。人の上に重ならないように
+        const p = rt.player.position
+        const d = new THREE.Vector3(p.x - pos.x, 0, p.z - pos.z)
+        if (d.lengthSq() < 1e-4) d.set(0, 0, 1)
+        d.setLength(Math.min(r * 0.6, 1.3))
+        const to = pos.clone().add(d)
+        this.teleport(rt, to, faceYaw(to, pos))
+      },
     )
   }
 
@@ -1050,6 +1060,9 @@ export class ChronicleFutureStage implements Stage {
     await this.fade(false, 1.0)
     void rt.cinematic({ look: TOWER.towa.pos.clone().add(v(0, 1, 0)), hold: 2.2, inSec: 1.2, fov: 38, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
     await this.talk(rt, 'ch4_climb')
+    // 見上げる（最初の金具が見えるように）
+    rt.camRig.yaw = faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz))
+    rt.camRig.pitch = -0.32
     this.lock(rt, false)
     // のぼる（黒い手が壁をなでる）
     this.handsMode = 'climb'
@@ -1337,7 +1350,7 @@ export class ChronicleFutureStage implements Stage {
     // 1. 工具箱を止める
     this.placeSora(SITE.toolbox.hand.clone().setY(SITE.toolbox.deck.h).add(v(0.45, 0, 0)), -Math.PI / 2)
     this.setPhase('toolbox', [{ pos: SITE.toolbox.hand.clone().add(v(0, 1.0, 0)), label: '工具箱' }])
-    if (rt.player.position.distanceTo(SITE.toolbox.hand) > 7) this.teleport(rt, v(15.6, 0, -41.4), -Math.PI / 2 * -1 + Math.PI)
+    if (rt.player.position.distanceTo(SITE.toolbox.hand) > 7) this.teleport(rt, v(15.6, 0, -41.4), faceYaw(v(15.6, 0, -41.4), SITE.toolbox.hand))
     let stopped = false
     rt.chrono.add({
       id: 'chrono_toolbox',
@@ -1368,7 +1381,6 @@ export class ChronicleFutureStage implements Stage {
       await this.talk(rt, 'ch10_toolbox_again')
       await this.wait(0.6)
     }
-    // 工具箱の点は毎フレーム動くので、更新して渡し続ける（point は getter のコピー）
     this.lock(rt, true)
     void rt.cinematic({ look: site.toolbox.point.clone(), hold: Infinity, inSec: 0.7, fov: 36 })
     await this.talk(rt, 'ch10_toolbox_ok')
@@ -1912,12 +1924,8 @@ export class ChronicleFutureStage implements Stage {
     this.updateDuel(dt, rt)
     this.updateBalloon(rt)
     if (!this.duel) rt.combat.passive = this.busy || rt.talking || rt.inCinematic
-    if (this.ura.active) this.ura.update(dt, frame, rt)
-    // F 待ちの的が遠いときの案内（目印は scene が出す）
-    if (this.fWait && this.fWait.reach < 900) {
-      const d = Math.hypot(rt.player.position.x - this.fWait.pos.x, rt.player.position.z - this.fWait.pos.z)
-      if (d < this.fWait.reach) rt.hud.setClawPrompt?.('', false)
-    }
+    // 裏側（UraBattle）は出たあとも自分の時計で暗転を明けるので、active でなくても毎フレーム回す
+    this.ura.update(dt, frame, rt)
   }
 
   /** 時計台：黒い手が壁をなでる（予告の帯 → なでる）。当たったら一つ下の足場へ */
@@ -1992,8 +2000,8 @@ export class ChronicleFutureStage implements Stage {
     this.flash?.update(dt)
     if (this.rt) this.updateSora(dt, rt)
     // 裏側の間は、トワとランプの update を UraBattle がする（二重にしない）
-    if (this.ura.active) this.ura.animate(dt, t)
-    else {
+    this.ura.animate(dt, t)
+    if (!this.ura.active) {
       this.lamp.update(dt, t)
       if (this.towa.root.visible) this.towa.update(dt, 0)
     }

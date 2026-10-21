@@ -88,6 +88,38 @@ export const FUTURE_ENVIRONMENTS: Record<TimeOfDay, FutureEnvironment> = {
   },
 }
 
+/** 夕方（10 章の中庭の決闘・12 章のはじめ）の空。西の低い空がオレンジ、上は紫がかった青 */
+export const FUTURE_EVENING_SKY: SkyPalette = {
+  zenith: '#28408e',
+  upper: '#5d64b8',
+  horizon: '#ffb98a',
+  warm: '#ff8f62',
+  ground: '#6a5560',
+  haze: '#f1b796',
+  cloudLit: '#ffd6b0',
+  cloudShade: '#8d6f9e',
+}
+
+/**
+ * 夕方。店の明かり・提灯は夜のまま灯す（素材は夜）が、空と光は夕焼けの明るさにして、人物の顔と足場が読めるようにする。
+ * 環境マップは昼のもの（timeOfDay: 'morning' で選ぶ）を弱めて使う。影の向きは朝・夜と同じ
+ */
+export const FUTURE_EVENING: FutureEnvironment = {
+  timeOfDay: 'morning',
+  sky: FUTURE_EVENING_SKY,
+  sunDir: FUTURE_SUN_DIR.clone(),
+  sunColor: '#ffbf8c',
+  sunIntensity: 2.1,
+  skySunStrength: 0,
+  hemi: { sky: '#aab4ee', ground: '#a3806c', intensity: 0.85 },
+  hdri: null,
+  envIntensity: 0.5,
+  fog: { color: '#c9a3a8', density: 0.0016 },
+  grade: { exposure: 1.0, saturation: 1.22, contrast: 1.08, vignette: 0.3 },
+  bloom: { intensity: 1.2, threshold: 0.92 },
+  haze: { near: '#f0c8ae', far: '#9b8fd0', density: 0.003, start: 60, falloff: 0.025, max: 0.45 },
+}
+
 /** 切り替える相手（どれも任意。持っているものだけ変える） */
 export type EnvTargets = {
   scene?: THREE.Scene

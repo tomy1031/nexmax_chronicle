@@ -1,7 +1,8 @@
 // future-preview.html の chronicle=1（物語 v7 の舞台の確認）：固定カメラと、仕掛けの状態をクエリで決める。
 //   cam=clocktower|clocknight|climb|clocktop|under_entrance|underground|under_room|building|courtyard|shrine|course|site_top|stall|dial|bench|street
 //   variant=building|courtyard   ghost=1（変わる瞬間の重ね：building → courtyard）   box=1（箱が開く）
-//   clock=20:40（文字盤）  sweep=0..4（黒い手の予告の帯）  loop=2（街頭ビジョンの何度目）
+//   clock=20:40（文字盤）  sweep=0..4（黒い手の予告の帯）  hook=0..5（次につかむ金具。climb の既定は 2）  skyseam=1（12 章の空のゆらぎ）
+//   loop=2（街頭ビジョンの何度目）
 //   ura=1（裏側の足場）  freeze=1（大歯車を止める）  toolbox=drop|freeze  dial=1&year=2026&match=0..1&panel=1（年代ダイヤル）
 import * as THREE from 'three'
 import type { Hud } from '../../../ui/hud'
@@ -53,7 +54,8 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
     pos: v(-0.4, 3.0, -27.4),
     look: v(5.6, 9.6, -21.4),
     fov: 64,
-    nexmax: { pos: v(4.95, 6.8, -22.4), face: v(9, 6.8, -22.4) },
+    // 2 段目の足場（上面 y=7.4）に立つ
+    nexmax: { pos: v(4.95, 7.4, -22.4), face: v(9, 7.4, -22.4) },
     sora: null,
     title: '時計台をのぼる',
     sub: '西の壁の金具 6 個と、とちゅうの足場',
@@ -147,7 +149,8 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
   },
   dial: {
     pos: v(-4.7, 1.75, 0.2),
-    look: v(-7.6, 1.55, -3.6),
+    // ダイヤルの実際の位置のあたり（リングの開口と操作部をいっしょに）
+    look: v(-6.88, 1.4, -3.38),
     fov: 52,
     nexmax: { pos: v(-5.6, 0.18, -1.6), face: v(-6.9, 0, -3.4) },
     title: 'ソラのわっかの年代ダイヤル',
@@ -189,6 +192,8 @@ export function setupChroniclePreview(x: ChroniclePreviewCtx): { update(dt: numb
   const clock = (urlp.get('clock') ?? (cam.time === 'night' || urlp.get('time') === 'night' ? '20:40' : '10:00')).split(':').map(Number)
   ch.tower.setTime(clock[0] ?? 10, clock[1] ?? 0)
   if (urlp.has('sweep')) ch.tower.setSweepWarn(Number(urlp.get('sweep')), 1)
+  ch.tower.setNextHook(urlp.has('hook') ? Number(urlp.get('hook')) : camName === 'climb' ? 2 : null)
+  if (urlp.has('skyseam')) ch.tower.setSkySeam(Number(urlp.get('skyseam')))
   if (urlp.has('breach')) ch.underground.breach(Number(urlp.get('breach')))
   if (x.street) {
     const loop = Number(urlp.get('loop') ?? 0)

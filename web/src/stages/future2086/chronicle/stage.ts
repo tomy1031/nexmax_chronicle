@@ -10,6 +10,7 @@ import { ERA_FUTURE } from '../../../core/eras'
 import { DialogueDB } from '../../../core/dialogue'
 import { skyEnvironment, type EnvTexture } from '../../../game/env'
 import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from '../../../game/stage'
+import { autoFramePosition, type CineShot } from '../../../game/cinematic'
 import type { ActionFrame } from '../../../player/inputActions'
 import type { WireEvent } from '../../../player/clawLogic'
 import type { Hint } from '../../../ui/hud'
@@ -23,7 +24,7 @@ import { lightsLeft, type Flags } from '../../../chronicle/progress'
 import { V7_ART, TOWA_UNMASKED, loadArtCanvas } from '../../../chronicle/art'
 import { BlackHands, Lamp, SHADE_STYLE, createPerson, type PersonCharacter } from '../../../chronicle/visuals'
 import { preloadFutureAssets } from '../fmaterials'
-import { FUTURE_ENVIRONMENTS, applyTimeOfDay, type TimeOfDay } from '../environment'
+import { FUTURE_ENVIRONMENTS, FUTURE_EVENING, applyTimeOfDay, type TimeOfDay } from '../environment'
 import type { FutureScene } from '../scene'
 import { buildIntroProps, type IntroProps } from '../introProps2086'
 import { LoopFx } from '../loopFx'
@@ -265,6 +266,8 @@ export class ChronicleFutureStage implements Stage {
     const day = Math.max(1, morningOf(step, this.f) || 1)
     this.props.street.setNews(step === 'epilogue' || step === 'done' ? this.newsEpilogue() : this.newsFor(day))
     this.ch.tower.setTime(part === 'morning' ? 10 : part === 'evening' ? 17 : 20, part === 'night' ? 40 : 30)
+    this.ch.tower.setNextHook(null)
+    this.ch.tower.setSkySeam(0)
   }
 
   private newsFor(day: number) {
@@ -281,12 +284,16 @@ export class ChronicleFutureStage implements Stage {
     this.part = part
     const mode: TimeOfDay = part === 'morning' ? 'morning' : 'night'
     if (mode === 'morning') this.sky.reset()
+    this.fs.setAction(false)
     this.fs.setTimeOfDay(mode)
     this.ch.setTimeOfDay(mode)
     const maps: Partial<Record<TimeOfDay, THREE.Texture>> = {}
     if (this.dayEnv) maps.morning = this.dayEnv
     if (this.nightEnv) maps.night = this.nightEnv.texture
-    applyTimeOfDay(this.fs.environment, { scene: rt.scene, sky: rt.sky, sun: rt.sun.sun, hemi: rt.sun.hemi, post: rt.post, envMaps: maps })
+    // 夕方：店の明かりは夜のまま、空と光は夕焼け（夜の環境だと中庭の決闘が暗すぎる）
+    const env = part === 'evening' ? FUTURE_EVENING : this.fs.environment
+    applyTimeOfDay(env, { scene: rt.scene, sky: rt.sky, sun: rt.sun.sun, hemi: rt.sun.hemi, post: rt.post, envMaps: maps })
+    if (part === 'evening') this.fs.setStars(false)
     this.fs.setOrum({ show: 0, tomorrow: 1, dissolve: 0, swallow: 0 })
     if (orum && part === 'night') this.sky.finish(rt)
     // 夕方：夜の環境で、人出はそのまま（夜の人出にしない）
@@ -436,9 +443,28 @@ export class ChronicleFutureStage implements Stage {
     return rt.dialogue(this.L(key))
   }
 
+  /**
+   * 演出のカメラ（rt.cinematic）。見る点が建物・ほこらなどの当たり判定の中にあると、シェルの壁よけ（見る点からカメラへのレイ）が
+   * その場で当たって、カメラが見る点のすぐそば（＝建物の中）まで寄ってしまう。そのときは見る点を、カメラから見た面の手前へ出す（向きは同じ）
+   */
+  private cine(rt: StageRuntime, shot: CineShot): Promise<void> {
+    const look = shot.look
+    const from = shot.from ?? autoFramePosition(rt.player.position, look, new THREE.Vector3())
+    const dir = from.clone().sub(look)
+    const len = dir.length()
+    if (len > 1) {
+      dir.divideScalar(len)
+      const inside = (rt.phys.raycast(look.clone().addScaledVector(dir, 0.35), dir, 0.05, rt.player.collider, true) ?? 1) < 0.001
+      const back = dir.negate()
+      const hit = inside ? rt.phys.raycast(from, back, len, rt.player.collider, true) : null
+      if (hit !== null && hit > 0.8) shot = { ...shot, from, look: from.clone().addScaledVector(back, hit - 0.3) }
+    }
+    return rt.cinematic(shot)
+  }
+
   /** カメラで見せながら会話（終わったら戻す） */
   private async talkShot(rt: StageRuntime, key: string, look: THREE.Vector3, from?: THREE.Vector3, o: { fov?: number; label?: string } = {}): Promise<void> {
-    void rt.cinematic({ look, from, hold: Infinity, inSec: 1.4, outSec: 1.2, fov: o.fov, marker: o.label ? { pos: look, label: o.label } : undefined })
+    void this.cine(rt, { look, from, hold: Infinity, inSec: 1.4, outSec: 1.2, fov: o.fov, marker: o.label ? { pos: look, label: o.label } : undefined })
     await this.talk(rt, key)
     rt.endCinematic()
     await this.wait(0.4)
@@ -581,13 +607,13 @@ export class ChronicleFutureStage implements Stage {
     const vision = this.props.street.center
     this.teleportSpawn(rt, 'loop_morning')
     await this.fade(false, 0.8)
-    void rt.cinematic({ look: vision, from: vision.clone().add(v(1.6, -1.2, 4.4)), hold: Infinity, inSec: 1.2, fov: 48 })
+    void this.cine(rt, { look: vision, from: vision.clone().add(v(1.6, -1.2, 4.4)), hold: Infinity, inSec: 1.2, fov: 48 })
     await this.talk(rt, day >= 2 ? (day >= 4 ? 'morning4' : `morning${day}`) : 'morning1')
     rt.endCinematic()
     // 風船：子どもの手からはなれて、毎朝同じ電灯に引っかかる
     this.props.balloon.play()
     await this.wait(0.6)
-    void rt.cinematic({ look: v(-2.8, 4.2, 9.6), hold: 2.6, inSec: 1.0, outSec: 1.0 })
+    void this.cine(rt, { look: v(-2.8, 4.2, 9.6), hold: 2.6, inSec: 1.0, outSec: 1.0 })
     await this.talk(rt, 'balloon_up')
     await this.wait(2.2)
     this.props.balloon.def.enabled = true
@@ -684,7 +710,7 @@ export class ChronicleFutureStage implements Stage {
     stall.takeOne()
     stall.takeOne()
     this.boughtToday = true
-    void rt.cinematic({ look: stall.showcase, hold: Infinity, inSec: 1.0, fov: 40 })
+    void this.cine(rt, { look: stall.showcase, hold: Infinity, inSec: 1.0, fov: 40 })
     this.showKeychain(rt, true)
     await this.talk(rt, 'ch1_buy')
     rt.endCinematic()
@@ -726,19 +752,20 @@ export class ChronicleFutureStage implements Stage {
     const top = TOWER.towa.pos
     this.showTowa(top, v(1.5, 0, 6), 'idle')
     this.towa.setRim('#b08cff', 0.9)
-    void rt.cinematic({ look: top.clone().add(v(0, 1.1, 0)), from: v(1.6, 2.0, 1.0), hold: Infinity, inSec: 1.6, fov: 34, marker: { pos: top.clone().add(v(0, 2.3, 0)), label: '時計台' } })
+    void this.cine(rt, { look: top.clone().add(v(0, 1.1, 0)), from: v(1.6, 2.0, 1.0), hold: Infinity, inSec: 1.6, fov: 34, marker: { pos: top.clone().add(v(0, 2.3, 0)), label: '時計台' } })
     await this.talk(rt, 'ch2_towa')
     // ランプを空へ → 空のひび → 黒い輪
     this.towa.setPose('raiseLamp')
     this.sky.start(1.15)
     rt.endCinematic(true)
-    void rt.cinematic({ look: this.fs.orum.center.clone(), from: v(0.6, 1.6, 9.0), hold: Infinity, inSec: 1.4, fov: 60 })
+    void this.cine(rt, { look: this.fs.orum.center.clone(), from: v(0.6, 1.6, 9.0), hold: Infinity, inSec: 1.4, fov: 60 })
     await this.until(() => this.sky.done || !this.sky.running)
     await this.talk(rt, 'ch2_tear')
     rt.endCinematic()
     await this.wait(0.6)
-    // 黒い手 3 本
+    // 黒い手 3 本（にげる間は祭りの光を一段落とす）
     this.startHands(rt, 'escape')
+    this.fs.setAction(true)
     await this.talk(rt, 'ch2_hands')
     this.lock(rt, false)
     this.soraMode = 'spot'
@@ -774,7 +801,7 @@ export class ChronicleFutureStage implements Stage {
       this.hands.reachTo('touch', ore, 1.2)
     }
     this.handsMode = 'none'
-    void rt.cinematic({ look: ore, hold: Infinity, inSec: 0.8, fov: 42 })
+    void this.cine(rt, { look: ore, hold: Infinity, inSec: 0.8, fov: 42 })
     await this.talk(rt, lineKey)
     rt.oreGlow(2.4)
     await this.loop(rt, flag)
@@ -939,7 +966,7 @@ export class ChronicleFutureStage implements Stage {
     if (!this.alive) return
     this.lock(rt, true)
     this.showKeychain(rt, true)
-    void rt.cinematic({ look: rt.player.position.clone().add(v(0, 0.7, 0)), hold: 2.6, inSec: 0.8, fov: 36 })
+    void this.cine(rt, { look: rt.player.position.clone().add(v(0, 0.7, 0)), hold: 2.6, inSec: 0.8, fov: 36 })
     await this.talk(rt, 'ch3_pocket')
     await this.talkShot(rt, 'ch3_pocket', this.ch.stall.showcase, undefined, { fov: 38, label: '屋台の星のキーホルダー' }).catch(() => undefined)
     this.showKeychain(rt, false)
@@ -996,7 +1023,7 @@ export class ChronicleFutureStage implements Stage {
     await this.wait(0.8)
     this.hands.reachTo('cellar', this.sora.root.position.clone().add(v(0, 1.0, 0)), 0.8)
     this.sora.setPose('hold')
-    void rt.cinematic({ look: this.sora.root.position.clone().add(v(0, 1.2, 0)), hold: 2.2, inSec: 0.7, fov: 50 })
+    void this.cine(rt, { look: this.sora.root.position.clone().add(v(0, 1.2, 0)), hold: 2.2, inSec: 0.7, fov: 50 })
     await this.talk(rt, 'ch4_grab')
     this.addHandTarget(rt, 'cellar')
     this.lock(rt, false)
@@ -1058,25 +1085,50 @@ export class ChronicleFutureStage implements Stage {
     this.sky.finish(rt)
     await this.wait(0.4)
     await this.fade(false, 1.0)
-    void rt.cinematic({ look: TOWER.towa.pos.clone().add(v(0, 1, 0)), from: TOWER.foot.clone().add(v(-3.2, 1.4, 3.6)), hold: 2.2, inSec: 1.2, fov: 40, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
+    // てっぺんのトワ：塔の真下からだと屋上の床に隠れるので、南の広場の側から見上げる
+    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(5.2, 1.6, -4.0), hold: Infinity, inSec: 1.2, fov: 34, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
+    await this.wait(2.6)
+    // のぼる道すじ：通りから西の壁を見上げて、金具 1〜4 と、金色に光る最初の金具を見せる
+    this.ch.tower.setNextHook(0)
+    void this.cine(rt, { look: v(5.4, 9.5, -22.2), from: v(-1.8, 1.8, -27.5), hold: Infinity, inSec: 1.1, fov: 58, marker: { pos: TOWER.hooks[0].point.clone().add(v(0, 0.6, 0)), label: '金具' } })
     await this.talk(rt, 'ch4_climb')
-    // 見上げる（最初の金具が見えるように）
+    rt.endCinematic()
+    // 見上げる（最初の金具が見えるように。下げすぎると、カメラが地面すれすれで壁に寄る）
     rt.camRig.yaw = faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz))
-    rt.camRig.pitch = -0.32
+    rt.camRig.pitch = -0.38
     this.lock(rt, false)
-    // のぼる（黒い手が壁をなでる）
+    // のぼる（黒い手が壁をなでる）。町の光は一段落として、塔の足場と金具を目立たせる
+    this.fs.setAction(true)
     this.handsMode = 'climb'
     this.handT = 0
     for (const h of this.ch.tower.hooks) h.enabled = true
     this.setPhase('tower_climb', [{ pos: this.ch.tower.hooks[0].point.clone(), label: '金具' }])
+    this.ch.tower.setNextHook(0)
+    let shown = 0
     await this.until(
       () => {
-        const next = this.ch.tower.hooks.find((h) => (h.landing?.y ?? 0) > rt.player.position.y + 0.3)
+        const hooks = this.ch.tower.hooks
+        const i = hooks.findIndex((h) => (h.landing?.y ?? 0) > rt.player.position.y + 0.3)
+        const next = i >= 0 ? hooks[i] : null
         this.marks = next ? [{ pos: next.point.clone().add(v(0, 0.4, 0)), label: next.id === 'clock_hook_top' ? 'てっぺん' : '金具' }] : []
+        // 次につかむ金具だけを金色にして、ねらえるのもその 1 個だけ（いま立っている足場の金具に J が向かないように）。
+        // ワイヤーでつながっている間は、いまの金具のまま
+        if (!rt.claw.wire.isConnected()) {
+          this.ch.tower.setNextHook(i >= 0 ? i : null)
+          hooks.forEach((h, k) => (h.enabled = k === i))
+          // 足場に着いたら、次の金具の方を見上げる（方向キーで取り消せる）
+          if (i >= 0 && i !== shown && rt.player.grounded) {
+            shown = i
+            rt.camRig.turnTo(faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz)), -0.36)
+          }
+        }
         return rt.player.position.y > TOWER.deckY - 0.5
       },
       () => this.teleport(rt, TOWER.hooks[TOWER.hooks.length - 1].landing.clone(), Math.PI),
     )
+    this.ch.tower.setNextHook(null)
+    for (const h of this.ch.tower.hooks) h.enabled = true
+    this.fs.setAction(false)
     this.handsMode = 'none'
     for (let i = 0; i < TOWER.sweeps.length; i++) this.ch.tower.setSweepWarn(i, 0)
     this.hands.clear()
@@ -1084,7 +1136,7 @@ export class ChronicleFutureStage implements Stage {
     // てっぺん：トワと話す
     this.lock(rt, true)
     this.showTowa(v(8.6, TOWER.deckY, -20.4), rt.player.position, 'idle')
-    void rt.cinematic({ look: this.towa.root.position.clone().add(v(0, 1.4, 0)), hold: Infinity, inSec: 1.2, fov: 44 })
+    void this.cine(rt, { look: this.towa.root.position.clone().add(v(0, 1.4, 0)), hold: Infinity, inSec: 1.2, fov: 44 })
     await this.talk(rt, 'ch4_towa')
     rt.endCinematic()
     await this.talk(rt, 'ch4_ring_hint')
@@ -1126,7 +1178,7 @@ export class ChronicleFutureStage implements Stage {
     const fwd = b.front.clone().sub(b.seat.pos).setY(0).normalize()
     const side = v(-fwd.z, 0, fwd.x)
     const benchCam = b.seat.pos.clone().addScaledVector(fwd, 1.5).addScaledVector(side, 2.0).setY(b.seat.pos.y + 1.0)
-    void rt.cinematic({ look: b.seat.pos.clone().add(v(0, 0.35, 0)), from: benchCam, hold: Infinity, inSec: 1.2, fov: 40 })
+    void this.cine(rt, { look: b.seat.pos.clone().add(v(0, 0.35, 0)), from: benchCam, hold: Infinity, inSec: 1.2, fov: 40 })
     await this.talk(rt, 'ch4_bench')
     rt.endCinematic()
     rt.setPlayerPose(null)
@@ -1157,7 +1209,7 @@ export class ChronicleFutureStage implements Stage {
     if (!this.alive) return
     this.lock(rt, true)
     this.showKeychain(rt, true)
-    void rt.cinematic({ look: rt.player.position.clone().add(v(0, 0.8, 0)), hold: Infinity, inSec: 0.9, fov: 40 })
+    void this.cine(rt, { look: rt.player.position.clone().add(v(0, 0.8, 0)), hold: Infinity, inSec: 0.9, fov: 40 })
     await this.talk(rt, 'ch5_show')
     rt.endCinematic()
     this.showKeychain(rt, false)
@@ -1177,7 +1229,7 @@ export class ChronicleFutureStage implements Stage {
     this.teleport(rt, front, faceYaw(front, v(F.PORTAL.x, 0, F.PORTAL.z)))
     const ringC = v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z)
     this.ring.showUrl(V7_ART.recordNextmake, 2.2)
-    void rt.cinematic({ look: ringC, hold: Infinity, inSec: 1.2, fov: 50 })
+    void this.cine(rt, { look: ringC, hold: Infinity, inSec: 1.2, fov: 50 })
     for (let i = 0; i < 6; i++) {
       rt.oreGlow(1.2 + i * 0.2)
       await this.wait(0.35)
@@ -1215,7 +1267,8 @@ export class ChronicleFutureStage implements Stage {
     await this.waitNear(rt, kb.stand, 4.5)
     if (!this.alive) return
     this.lock(rt, true)
-    void rt.cinematic({ look: v(17, 16, -46), from: v(0.5, 1.6, -38), hold: 2.6, inSec: 1.4, fov: 62 })
+    // 通りの西の端から、新館のビルと上の大きな看板を見上げる（見る点はビルの手前の面）
+    void this.cine(rt, { look: v(6.4, 13.5, -45.5), from: v(-4.2, 1.4, -38.5), hold: 2.6, inSec: 1.4, fov: 66 })
     await this.talk(rt, 'ch8_building')
     kb.setSurge(1)
     await this.showRecord(rt, '2027年の記録', 'NEXTMAKE 前のかんばん', '古いほこらを取りこわし、NEXTMAKE の新しいビルを建てる。ほこらの中の古い箱は、ゆくえ不明。', V7_ART.record2027, 'ch8_record')
@@ -1235,7 +1288,7 @@ export class ChronicleFutureStage implements Stage {
     this.placeSora('exhibit')
     this.teleport(rt, front, faceYaw(front, v(F.PORTAL.x, 0, F.PORTAL.z)))
     this.ch.dial.setDial(true)
-    void rt.cinematic({ look: this.ch.dial.center.clone(), hold: Infinity, inSec: 1.2, fov: 40, marker: { pos: this.ch.dial.center.clone().add(v(0, 0.6, 0)), label: '年代ダイヤル' } })
+    void this.cine(rt, { look: this.ch.dial.center.clone(), hold: Infinity, inSec: 1.2, fov: 40, marker: { pos: this.ch.dial.center.clone().add(v(0, 0.6, 0)), label: '年代ダイヤル' } })
     await this.talk(rt, 'ch8_dial')
     rt.endCinematic()
     this.lock(rt, false)
@@ -1309,7 +1362,7 @@ export class ChronicleFutureStage implements Stage {
     if (!this.alive) return
     this.lock(rt, true)
     // 景色が変わる（前の景色を重ねる。覚えているのはネクマックスだけ）
-    void rt.cinematic({ look: v(14, 6, -45), from: v(1.0, 2.2, -36.5), hold: Infinity, inSec: 1.0, fov: 64 })
+    void this.cine(rt, { look: v(14, 6, -45), from: v(1.0, 2.2, -36.5), hold: Infinity, inSec: 1.0, fov: 64 })
     await this.wait(0.8)
     rt.oreGlow(2)
     await site.ghostSwap('courtyard', 3.4)
@@ -1325,7 +1378,7 @@ export class ChronicleFutureStage implements Stage {
     if (!this.alive) return
     this.lock(rt, true)
     this.teleport(rt, site.shrine.front, faceYaw(site.shrine.front, SITE.shrine.pos))
-    void rt.cinematic({ look: site.shrine.boxPos.clone(), from: site.shrine.boxPos.clone().add(v(1.9, 0.5, 0.5)), hold: Infinity, inSec: 1.0, fov: 40 })
+    void this.cine(rt, { look: site.shrine.boxPos.clone(), from: site.shrine.boxPos.clone().add(v(1.9, 0.5, 0.5)), hold: Infinity, inSec: 1.0, fov: 40 })
     site.shrine.setLockPulse(1)
     for (let i = 0; i < 4; i++) {
       rt.oreGlow(1.4)
@@ -1390,7 +1443,7 @@ export class ChronicleFutureStage implements Stage {
       await this.wait(0.6)
     }
     this.lock(rt, true)
-    void rt.cinematic({ look: site.toolbox.point.clone(), hold: Infinity, inSec: 0.7, fov: 36 })
+    void this.cine(rt, { look: site.toolbox.point.clone(), hold: Infinity, inSec: 0.7, fov: 36 })
     await this.talk(rt, 'ch10_toolbox_ok')
     rt.endCinematic()
     rt.chrono.remove('chrono_toolbox')
@@ -1496,7 +1549,7 @@ export class ChronicleFutureStage implements Stage {
     // 佐伯さんの声（ふたの裏の小さな板が光る）
     this.teleport(rt, site.shrine.front, faceYaw(site.shrine.front, SITE.shrine.pos))
     site.shrine.setPlateGlow(1)
-    void rt.cinematic({ look: site.shrine.boxPos.clone(), from: site.shrine.boxPos.clone().add(v(1.6, 0.6, 0.4)), hold: Infinity, inSec: 1.0, fov: 40 })
+    void this.cine(rt, { look: site.shrine.boxPos.clone(), from: site.shrine.boxPos.clone().add(v(1.6, 0.6, 0.4)), hold: Infinity, inSec: 1.0, fov: 40 })
     await this.talk(rt, 'ch10_saeki')
     rt.endCinematic()
     site.shrine.setPlateGlow(0)
@@ -1512,7 +1565,7 @@ export class ChronicleFutureStage implements Stage {
     await this.fade(true, 0.8)
     this.setPart('evening', rt, false)
     this.ch.tower.setTime(17, 40)
-    this.teleport(rt, v(13.4, 0, -40.0), faceYaw(v(13.4, 0, -40), v(13.4, 0, -46)))
+    this.teleport(rt, v(13.4, 0, -40.8), faceYaw(v(13.4, 0, -40.8), v(13.4, 0, -46)))
     this.placeSora(v(15.6, 0, -38.4), faceYaw(v(15.6, 0, -38.4), v(13, 0, -45)))
     await this.wait(0.3)
     await this.fade(false, 0.8)
@@ -1522,13 +1575,14 @@ export class ChronicleFutureStage implements Stage {
     slit.setOpen(1)
     this.showTowa(towaAt, rt.player.position, 'idle')
     rt.shake(0.4)
-    void rt.cinematic({ look: towaAt.clone().add(v(0, 1.3, 0)), hold: Infinity, inSec: 1.2, fov: 46, marker: { pos: towaAt.clone().add(v(0, 2.4, 0)), label: 'トワ' } })
+    // ネクマックスの左うしろから、ひびの前に浮かぶトワを見上げる（中庭の南の壁ぎわにカメラが押しこまれないように、位置を決める）
+    void this.cine(rt, { look: v(13.4, 2.4, -45.0), from: v(12.0, 1.7, -38.4), hold: Infinity, inSec: 1.2, fov: 54, marker: { pos: towaAt.clone().add(v(0, 2.4, 0)), label: 'トワ' } })
     await this.talk(rt, 'ch10_towa')
     rt.endCinematic()
     this.lock(rt, false)
     // 戦い：影（K で切れる）・影の弾（J で止める）・ランプの黒い糸（光ったら J で裂く、3 回）
     rt.combat.enabled = true
-    rt.combat.setCheckpoint(v(13.4, 0, -40.0), Math.PI)
+    rt.combat.setCheckpoint(v(13.4, 0, -40.8), Math.PI)
     this.duel = { thread: 0, window: 0, shots: [], fireT: 2.5, wave: 0 }
     rt.combat.showBossBar('トワ', 1)
     this.spawnShades(rt, 3)
@@ -1577,7 +1631,7 @@ export class ChronicleFutureStage implements Stage {
     rt.combat.showBossBar(null)
     if (!this.alive) return
     this.lock(rt, true)
-    void rt.cinematic({ look: this.towa.root.position.clone().add(v(0, 1.3, 0)), hold: Infinity, inSec: 1.0, fov: 44 })
+    void this.cine(rt, { look: this.towa.root.position.clone().add(v(0, 1.3, 0)), hold: Infinity, inSec: 1.0, fov: 44 })
     await this.talk(rt, 'ch10_towa_leave')
     rt.endCinematic()
     this.hideTowa()
@@ -1760,12 +1814,13 @@ export class ChronicleFutureStage implements Stage {
     await this.wait(0.3)
     await this.fade(false, 0.8)
     this.sky.start(1.3)
-    void rt.cinematic({ look: TOWER.towa.pos.clone().add(v(0, 1.2, 0)), from: v(1.2, 1.6, 4.0), hold: Infinity, inSec: 1.2, fov: 40, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
+    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.2, 0)), from: v(1.2, 1.6, 4.0), hold: Infinity, inSec: 1.2, fov: 40, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
     await this.until(() => this.sky.done)
     await this.talk(rt, 'ch12_towa')
     rt.endCinematic()
-    // 黒い手 3 本：ふりおろして止まったところを裂く
+    // 黒い手 3 本：ふりおろして止まったところを裂く（空を裂くまで、祭りの光は一段落とす）
     this.startHands(rt, 'cut')
+    this.fs.setAction(true)
     rt.combat.enabled = true
     this.lock(rt, false)
     this.setPhase('hands')
@@ -1787,10 +1842,20 @@ export class ChronicleFutureStage implements Stage {
 
   private async sceneCh12Ura(rt: StageRuntime): Promise<void> {
     if (this.part !== 'night') this.setPart('night', rt, true)
+    this.fs.setAction(true)
     this.showTowa(TOWER.towa.pos, v(1.5, 0, 6), 'raiseLamp')
     this.placeSora(v(-1.0, 0, 8.2), faceYaw(v(-1, 0, 8.2), v(TOWER.cx, 0, TOWER.cz)))
     this.lock(rt, true)
+    // ソラとならんで、時計台の上の大きなゆらぎを見上げる（2 人のうしろから。ゆらぎは画面の上に）
+    await this.fade(true, 0.35)
+    this.teleportSpawn(rt, 'night_plaza')
+    this.ch.tower.setSkySeam(1)
+    void this.cine(rt, { look: v(1.93, 4.15, 0.91), from: v(2.2, 1.45, 12.6), hold: Infinity, inSec: 0.3, fov: 64 })
+    await this.fade(false, 0.35)
     await this.talk(rt, 'ch12_now')
+    rt.endCinematic()
+    // 操作にもどったら、ゆらぎの方を見上げる
+    rt.camRig.turnTo(rt.player.facing, -0.42)
     this.lock(rt, false)
     let opened = false
     const seam = TOWER.seamTop
@@ -1806,7 +1871,9 @@ export class ChronicleFutureStage implements Stage {
       onAct: () => (opened = true),
     })
     this.setPhase('sky_seam', [{ pos: seam.clone().add(v(0, 2, 0)), label: '大きなゆらぎ' }])
+    this.ch.tower.setSkySeam(1)
     await this.until(() => opened, () => (opened = true))
+    this.ch.tower.setSkySeam(0)
     rt.chrono.remove('chrono_sky')
     if (!this.alive) return
     this.lock(rt, true)
@@ -1814,7 +1881,7 @@ export class ChronicleFutureStage implements Stage {
     door.setOpen(1)
     this.lens.set(true, true)
     rt.shake(0.6)
-    void rt.cinematic({ look: seam.clone(), hold: 2.4, inSec: 1.2, fov: 56 })
+    void this.cine(rt, { look: seam.clone(), hold: 2.4, inSec: 1.2, fov: 56 })
     await this.wait(2.6)
     this.lock(rt, false)
     this.setPhase('ura')
@@ -1845,7 +1912,7 @@ export class ChronicleFutureStage implements Stage {
     await this.wait(0.6)
     this.towa.setMask(false)
     rt.hud.setSpeakerIcon('トワ', TOWA_UNMASKED)
-    void rt.cinematic({ look: this.towa.root.position.clone().add(v(0, 0.8, 0)), hold: Infinity, inSec: 1.2, fov: 42 })
+    void this.cine(rt, { look: this.towa.root.position.clone().add(v(0, 0.8, 0)), hold: Infinity, inSec: 1.2, fov: 42 })
     await this.talk(rt, 'ch12_ending')
     rt.endCinematic()
     await this.talk(rt, 'ch12_festival')
@@ -1873,7 +1940,7 @@ export class ChronicleFutureStage implements Stage {
     this.props.street.pulse()
     await this.fade(false, 1.0)
     const vision = this.props.street.center
-    void rt.cinematic({ look: vision, from: vision.clone().add(v(1.6, -1.2, 4.4)), hold: Infinity, inSec: 1.2, fov: 48 })
+    void this.cine(rt, { look: vision, from: vision.clone().add(v(1.6, -1.2, 4.4)), hold: Infinity, inSec: 1.2, fov: 48 })
     // 風船は今朝は引っかからずに空へ
     this.props.balloon.play()
     this.balloonFree = 0
@@ -1893,7 +1960,7 @@ export class ChronicleFutureStage implements Stage {
     this.lock(rt, true)
     this.walker.face(this.towa, rt.player.position)
     this.towa.setPose('wave')
-    void rt.cinematic({ look: this.towa.root.position.clone().add(v(0, 1.2, 0)), hold: Infinity, inSec: 1.0, fov: 46 })
+    void this.cine(rt, { look: this.towa.root.position.clone().add(v(0, 1.2, 0)), hold: Infinity, inSec: 1.0, fov: 46 })
     await this.talk(rt, 'epi_towa')
     rt.endCinematic()
     await this.playFlashback([{ speaker: 'ソラ', text: 'まずは、今日の思い出から！' }], V7_ART.epilogueMorning, ['おわり', 'ネクマックスと、時を裂く爪'])

@@ -92,6 +92,8 @@ export class KhmerStage implements Stage {
   private towaFloat = 0
   private towaShown = false
   private readonly marks: ObjectiveMark[] = []
+  /** 落ちる石を、足場にならない高さで止めた回数（ヒント用） */
+  private stoneMiss = 0
   /** rt.chrono に渡した止める対象（enabled を毎フレーム切りかえる） */
   private readonly fzTargets: { fz: Freezable; t: ChronoTarget }[] = []
 
@@ -186,6 +188,12 @@ export class KhmerStage implements Stage {
         void this.talkOnce(rt, 'tower_e_solved')
       }
     }
+    // ちがう向きで 2 回止めたら、止めるタイミングを教える（そのあとも 3 回ごとに）
+    let missed = 0
+    this.sc.turntable.onMissed = () => {
+      missed++
+      if (this.step(rt) === 'mirrors' && missed >= 2 && missed % 3 === 2) void rt.dialogue(this.lines('tower_e_hint'))
+    }
     // 時空裂きで止められる物
     this.addFreezables(rt)
     this.placeForStep(step)
@@ -230,7 +238,14 @@ export class KhmerStage implements Stage {
         enabled: false,
         seconds: 4,
         range: fz.id === 'khmer_turntable' ? 14 : 12,
-        onAct: () => fz.setFrozen(true),
+        onAct: () => {
+          // 落ちる石を、足場にならない高さで止めた：2 回目から、止めどきを教える（そのあとも 3 回ごとに）
+          if (fz.goodNow && !fz.goodNow()) {
+            this.stoneMiss++
+            if (this.stoneMiss >= 2 && this.stoneMiss % 3 === 2) void rt.dialogue(this.lines('stone_hint'))
+          }
+          fz.setFrozen(true)
+        },
         onThaw: () => fz.setFrozen(false),
       }
       rt.chrono.add(t)

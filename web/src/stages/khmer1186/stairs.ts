@@ -241,6 +241,7 @@ export class FallingStone {
       canFreeze: () => this.logic.catchable,
       setFrozen: (on) => this.setFrozen(on),
       isFrozen: () => this.logic.frozen,
+      goodNow: () => this.logic.inWindow,
     }
   }
 }

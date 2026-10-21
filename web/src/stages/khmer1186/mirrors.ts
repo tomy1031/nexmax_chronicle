@@ -164,6 +164,9 @@ export class MirrorStand {
   }
 }
 
+/** 回る鏡の台の速さ（rad/s）と、正しい向きとみなす幅（±度） */
+export const TURNTABLE_TUNING = { speed: 0.36, toleranceDeg: 18 }
+
 /** 回る鏡の台（東の塔の仕掛け） */
 export class Turntable {
   readonly group = new THREE.Group()
@@ -188,6 +191,8 @@ export class Turntable {
   solved = false
   /** 正しい向きで止まった瞬間 */
   onSolved: (() => void) | null = null
+  /** ちがう向きで止めた（ヒント用） */
+  onMissed: (() => void) | null = null
   private readonly tmp = new THREE.Vector3()
   private readonly dir = new THREE.Vector3()
 
@@ -201,7 +206,8 @@ export class Turntable {
     this.elev = Math.atan2(to.y, horiz)
     this.reach = to.length()
     const correct = Math.atan2(-to.z, to.x)
-    this.logic = new TurntableLogic(correct, { start: correct + 2.4, speed: 0.42, tolerance: (8 * Math.PI) / 180 })
+    // 正しい向きの幅は ±18°・速さ 0.36 rad/s：台が光ってから J まで 1.7 秒ほど間に合う（±8°・0.42 では 0.67 秒）
+    this.logic = new TurntableLogic(correct, { start: correct + 2.4, speed: TURNTABLE_TUNING.speed, tolerance: (TURNTABLE_TUNING.toleranceDeg * Math.PI) / 180 })
     // 台：石の太鼓（静的な物は scene 側の Batch。ここは回る上の部分）
     const bronze = new THREE.MeshStandardMaterial({ color: KC.bronze, roughness: 0.32, metalness: 0.85 })
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.3, 0.16, 32), bronze)
@@ -261,7 +267,7 @@ export class Turntable {
       this.solved = true
       this.stand.setLit(1)
       this.onSolved?.()
-    }
+    } else if (on && !this.solved) this.onMissed?.()
   }
 
   /** 解けた状態にする（セーブから再開したとき） */
@@ -340,5 +346,7 @@ export type Freezable = {
   canFreeze(): boolean
   setFrozen(on: boolean): void
   isFrozen(): boolean
+  /** 今止めれば、ちょうどいい（落ちる石：足場の高さ）。止めたあとのヒントに使う */
+  goodNow?(): boolean
 }
 

@@ -630,10 +630,10 @@ export class UraBattle {
     const A = this.arena
     this.escaped = false
     this.killShades(false)
-    // 道をふさぐ影（飛び石の上は 1 匹だけ。着く所から少しはずす：とびのった所で押し落とされないように）
-    const step2 = this.arena.platforms.find((p) => p.id === 'step2')?.center ?? A.entry
-    this.spawnShade('mite', step2.clone().add(new THREE.Vector3(1.0, 0, 0.6)))
-    this.spawnShade('shield', A.center.clone().add(new THREE.Vector3(2.4, 0, 4.0)))
+    // 道をふさぐ影：広場の出口と、入口の足場（扉の前）に 1 匹ずつ。せまい飛び石の上には置かない
+    // （とびのった所で押し落とされると、子どもには何がおきたかわからない）
+    this.spawnShade('mite', A.center.clone().add(new THREE.Vector3(-2.6, 0, 4.2)))
+    this.spawnShade('shield', A.entry.clone().add(new THREE.Vector3(1.6, 0, -1.2)))
     // 扉の方へカメラを向ける（心臓の前からふり返る）
     rt.camRig.turnTo(Math.atan2(rt.player.position.x - this.doorPos.x, rt.player.position.z - this.doorPos.z), 0.3)
     if (this.scenario === 'khmer') this.allyMode = 'follow'

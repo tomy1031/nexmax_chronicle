@@ -119,7 +119,7 @@ export function uraObjective(sc: UraScenario, s: UraStep, ctx: { left?: number; 
     case 'grabTowa':
       return { title: 'トワをつかむ', sub: 'トワに近づいて J' }
     case 'escape':
-      return { title: sc === 'final' ? 'トワといっしょに、扉へ' : '扉が閉じる前に帰る', sub: sec ? `光の扉へ走ろう（${sec}）` : '光の扉へ走ろう' }
+      return { title: sc === 'final' ? 'トワといっしょに、扉へ' : '扉が閉じる前に帰る', sub: sec ? `来た道をもどって、光の扉へ（${sec}）` : '来た道をもどって、光の扉へ' }
     case 'exit':
       return { title: '扉の外へ', sub: '' }
     default:

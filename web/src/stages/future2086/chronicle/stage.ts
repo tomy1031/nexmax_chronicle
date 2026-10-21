@@ -123,6 +123,8 @@ export class ChronicleFutureStage implements Stage {
   private handT = 0
   private handHits = 0
   private handsCut = 0
+  /** 4 章：時計台で着いたことのあるいちばん上の足場（金具の番号。落ちたらここへもどす） */
+  private climbBest = -1
   /** 12 章：まだ止まっていない手に J をした回数（ヒント用） */
   private handPass = 0
   private readonly handClock: Record<string, number> = {}
@@ -1125,10 +1127,22 @@ export class ChronicleFutureStage implements Stage {
     this.setPhase('tower_climb', [{ pos: this.ch.tower.hooks[0].point.clone(), label: '金具' }])
     this.ch.tower.setNextHook(0)
     let shown = 0
+    this.climbBest = -1
     await this.until(
       () => {
         const hooks = this.ch.tower.hooks
+        // 足場から落ちた（着いたことのある足場より 2m 以上下で着地）：その足場へもどす
+        const best = this.climbBest >= 0 ? TOWER.hooks[this.climbBest].landing : null
+        if (best && rt.player.grounded && rt.player.position.y < best.y - 2 && !rt.claw.wire.isConnected()) {
+          this.teleport(rt, best.clone())
+          rt.hud.toast('おっと！ さっきの足場へもどったよ', 2.4)
+        }
         const i = hooks.findIndex((h) => (h.landing?.y ?? 0) > rt.player.position.y + 0.3)
+        // 着いた足場を覚える（いまいる足場の 1 つ前の金具）
+        if (rt.player.grounded && !rt.claw.wire.isConnected()) {
+          const on = (i >= 0 ? i : hooks.length) - 1
+          if (on >= 0 && rt.player.position.y > TOWER.hooks[on].landing.y - 0.4) this.climbBest = Math.max(this.climbBest, on)
+        }
         const next = i >= 0 ? hooks[i] : null
         this.marks = next ? [{ pos: next.point.clone().add(v(0, 0.4, 0)), label: next.id === 'clock_hook_top' ? 'てっぺん' : '金具' }] : []
         // 次につかむ金具だけを金色にして、ねらえるのもその 1 個だけ（いま立っている足場の金具に J が向かないように）。
@@ -1654,7 +1668,8 @@ export class ChronicleFutureStage implements Stage {
     rt.combat.setCheckpoint(v(13.4, 0, -40.8), Math.PI)
     this.duel = { thread: 0, window: 0, shots: [], fireT: 2.5, wave: 0 }
     rt.combat.showBossBar('トワ', 1)
-    this.spawnShades(rt, 3)
+    // 影は 2 → 2 → 3 匹（前は 3 → 3 → 4。子どもには影の数が多く、やられてばかりになる）
+    this.spawnShades(rt, 2)
     this.setPhase('duel', [{ pos: towaAt.clone().add(v(0, 2.4, 0)), label: 'トワ' }])
     void this.talk(rt, 'ch10_duel_cut')
     const thread: ChronoTarget = {
@@ -1674,7 +1689,7 @@ export class ChronicleFutureStage implements Stage {
         rt.hud.flash('success')
         rt.combat.setBossBar(1 - d.thread / 3)
         this.lamp.setDark(d.thread < 3)
-        if (d.thread < 3) this.spawnShades(rt, 2 + d.thread)
+        if (d.thread < 3) this.spawnShades(rt, 1 + d.thread)
       },
     }
     this.threadTarget = thread
@@ -1745,7 +1760,7 @@ export class ChronicleFutureStage implements Stage {
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 0.15, 0.9), toneMapped: false }))
       mesh.position.copy(this.lamp.center(new THREE.Vector3()))
       this.fs.root.add(mesh)
-      const vel = rt.player.position.clone().add(v(0, 0.7, 0)).sub(mesh.position).normalize().multiplyScalar(4.2)
+      const vel = rt.player.position.clone().add(v(0, 0.7, 0)).sub(mesh.position).normalize().multiplyScalar(SHOT_SPEED)
       const id = `shot_${Math.round(this.clock.time * 100)}`
       const shot = { mesh, vel, frozen: false, id, life: 6 }
       d.shots.push(shot)
@@ -2117,8 +2132,9 @@ export class ChronicleFutureStage implements Stage {
       if (Math.abs(p.y + 0.6 - s.y) < 1.1 && p.x < T.x0 + 0.4 && p.x > T.x0 - 2.5 && Math.abs(p.z - zz) < 1.2 && !rt.claw.wire.isConnected()) {
         this.handClock.climbHit = 1
         this.knock(rt, v(s.x - 0.6, s.y, zz))
-        // 一つ下の足場へ
+        // 一つ下の足場へ（落ちたときにもどす足場も、そこまで下げる）
         const below = [...T.hooks].reverse().find((h) => h.landing.y < p.y - 0.5)
+        this.climbBest = below ? T.hooks.indexOf(below) : -1
         this.teleport(rt, (below ? below.landing : T.foot).clone())
       }
     }
@@ -2321,6 +2337,9 @@ const MISS_HINTS: Record<string, string> = {
   hands: '手が地面にささって止まっている間に、その手をねらって J',
   sky_seam: '↑ キーで時計台の上の大きなゆらぎを見上げて J',
 }
+
+/** 10 章の決闘：影の弾の速さ（m/s）。ランプから 5m ほどの所で、当たるまで約 1.4 秒 */
+const SHOT_SPEED = 3.6
 
 /** 10 章の練習：ゆらぎを裂いたとき、裏側の足場が見えている秒数 */
 const URA_STEP_SEC = 12

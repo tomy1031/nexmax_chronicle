@@ -168,10 +168,16 @@ type Bucket = { line: THREE.BufferGeometry[]; flat: THREE.BufferGeometry[] }
  */
 export class PartSet {
   private readonly buckets = new Map<THREE.Object3D, Bucket>()
+  /** 軽い形（遠くの村人など）：よく使う原型（SHAPES）を、分割の少ない形に置きかえる */
+  private readonly lite: boolean
+
+  constructor(lite = false) {
+    this.lite = lite
+  }
 
   /** joint の中に形を置く。line=false なら輪郭線をつけない（目・細かい飾り・裏地） */
   add(joint: THREE.Object3D, geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, matrix?: THREE.Matrix4, line = true): void {
-    let g = geo.clone()
+    let g = (this.lite ? LITE_SHAPES.get(geo) : undefined)?.clone() ?? geo.clone()
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k)
     g.morphAttributes = {}
     if (!g.index) {
@@ -228,6 +234,16 @@ const proto = {
   torus: new THREE.TorusGeometry(1, 0.18, 8, 24),
 }
 export const SHAPES = proto
+
+/** 軽い形の原型（同じ大きさで、分割を減らした物。三角形はおよそ 3 分の 1） */
+const LITE_SHAPES = new Map<THREE.BufferGeometry, THREE.BufferGeometry>([
+  [proto.sphere, new THREE.SphereGeometry(1, 10, 7)],
+  [proto.sphereHi, new THREE.SphereGeometry(1, 14, 10)],
+  [proto.capsule, new THREE.CapsuleGeometry(1, 1, 2, 8)],
+  [proto.cyl, new THREE.CylinderGeometry(1, 1, 1, 8)],
+  [proto.cone, new THREE.ConeGeometry(1, 1, 8)],
+  [proto.torus, new THREE.TorusGeometry(1, 0.18, 5, 14)],
+])
 
 const tq = new THREE.Quaternion()
 const te = new THREE.Euler()

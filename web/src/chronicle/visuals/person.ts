@@ -1203,7 +1203,7 @@ export function createPerson(preset: PersonPreset, opts: PersonOpts = {}): Perso
   const lite = opts.lite ?? false
   const mats: THREE.Material[] = []
   const geos: THREE.BufferGeometry[] = []
-  const ps = new PartSet()
+  const ps = new PartSet(lite)
   const out: PresetParts = {}
   const ctx: BuildCtx = { ps, r, s: spec, lite, rnd: seeded((opts.variant ?? 0) + 7), mats, geos, out }
   switch (preset) {

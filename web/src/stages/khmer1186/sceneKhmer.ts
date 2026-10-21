@@ -1183,7 +1183,7 @@ function buildFar(c: KCtx): { mist: Drift } {
   const rng = c.rng
   const A = { x0: -128, x1: 116, z0: -134, z1: 100 }
   // 森の帯（歩ける範囲の外）：葉のかたまり
-  // かたまりは 1 段だけ細かく（大きな三角の面がならんで見えないように）。低画質の外側の帯は粗いまま（三角形を節約）
+  // かたまりは 1 段だけ細かく（大きな三角の面がならんで見えないように）。外側の帯は高画質だけ細かく（スマホの標準・省電力では三角形を節約）
   const clump = (x: number, z: number, s: number, detail: number) => {
     c.bf.add(new THREE.IcosahedronGeometry(s, detail), c.m.canopy, M(x, s * 0.55 + 2 + rng() * 2, z, 0, rng() * 3, 0, 1, 0.75, 1), { tint: new THREE.Color().setHSL(0.28 + rng() * 0.05, 0.4, 0.16 + rng() * 0.07) })
     if (rng() < 0.35) c.bf.add(new THREE.CylinderGeometry(0.3, 0.5, 4, 5, 1, true), c.m.bark, M(x, 2, z), { tint: '#6a5a48' })
@@ -1203,7 +1203,7 @@ function buildFar(c: KCtx): { mist: Drift } {
   }
   // 歩ける範囲のすぐ外（池の北・村の西・寺の東・水田の南）
   ring({ x0: K.BOUNDS.x0 - 4, x1: K.BOUNDS.x1 + 4, z0: K.BARAY.z0 - 4, z1: K.PADDY.z1 + 6 }, 26, 8.5, 1)
-  ring({ x0: A.x0, x1: A.x1, z0: A.z0, z1: A.z1 }, 60, 14, c.q.level === 'low' ? 0 : 1)
+  ring({ x0: A.x0, x1: A.x1, z0: A.z0, z1: A.z1 }, 60, 14, c.q.level === 'high' ? 1 : 0)
   // 池の北の岸のヤシ
   for (let x = -86; x < 50; x += 7) if (!inScar(x, K.BARAY.z0 - 3)) palm(c, x + rng() * 3, K.BARAY.z0 - 2.5 - rng() * 3, 8 + rng() * 4, rng() < 0.5 ? 'sugar' : 'coco', 0, true, false)
   // 遠くの山（北：平らな台地の山。南西：てっぺんに寺のある丘）

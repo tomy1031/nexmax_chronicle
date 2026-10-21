@@ -21,10 +21,11 @@ import type { ChronoTarget, SlitHandle } from '../../chronicle/chrono'
 import { Lamp, SHADE_STYLE, createPerson, type PersonCharacter, type PersonPose } from '../../chronicle/visuals'
 import { buildKhmerScene, KHMER_BALL_ID, type KhmerScene } from './sceneKhmer'
 import { KHMER_ENVIRONMENTS, KhmerEnvMaps, applyKhmerTime, type TimeOfDay } from './environment'
-import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, VILLAGERS, towerPoint, type Spot, type TowerId } from './layout'
+import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, towerPoint, type Spot, type TowerId } from './layout'
 import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
 import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
+import { createKhmerVillagers, type KhmerVillager } from './people'
 import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
 
@@ -43,8 +44,6 @@ const URA_EXIT = v(K.URA_ENTRY.x - 0.4, K.TOP_Y, K.URA_ENTRY.z - 2.6)
 const TREASURE_BOX = v(23.6, K.TOP_Y, -9.4)
 /** 夜の影が出る所（上の台） */
 const TOP_SPAWNS = [v(24, K.TOP_Y, -10.2), v(28, K.TOP_Y, -10.2), v(24, K.TOP_Y, 2.2), v(28.2, K.TOP_Y, 2.2), v(32.2, K.TOP_Y, -4), v(32.2, K.TOP_Y, -7.6)]
-/** 本物の人の形で見せる村人（多いと重いので、目につく所だけ。ほかは出さない） */
-const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'watch2', 'fisher2', 'monk1', 'temple1']
 
 export class KhmerStage implements Stage {
   readonly key = '1186' as const
@@ -59,7 +58,7 @@ export class KhmerStage implements Stage {
   private grandma!: PersonCharacter
   private towa!: PersonCharacter
   private lamp!: Lamp
-  private villagers: Array<{ id: string; ch: PersonCharacter; spot: Spot }> = []
+  private villagers: KhmerVillager[] = []
   private rt: StageRuntime | null = null
   private readonly clock = new SceneClock()
   private readonly walker = new Walker()
@@ -110,16 +109,8 @@ export class KhmerStage implements Stage {
     this.towa.holdLamp(this.lamp)
     this.towa.root.visible = false
     root.add(this.chanda.root, this.grandma.root, this.towa.root)
-    VILLAGERS.forEach((s, i) => {
-      if (!SHOWN_VILLAGERS.includes(s.id)) return
-      const kid = s.role === 'kid'
-      const ch = createPerson('khmerVillager', { variant: i, female: i % 2 === 0, lite: true, height: kid ? 1.1 : s.role === 'monk' ? 1.6 : 1.55 })
-      ch.root.position.copy(s.pos)
-      ch.root.rotation.y = s.yaw
-      ch.setPose(s.role === 'kid' ? 'wave' : s.role === 'monk' ? 'pray' : 'idle')
-      root.add(ch.root)
-      this.villagers.push({ id: s.id, ch, spot: s })
-    })
+    this.villagers = createKhmerVillagers()
+    for (const vv of this.villagers) root.add(vv.ch.root)
     // 仮の箱（舞台の確認用）は本編では出さない
     this.sc.villagers.setVisible(false)
     this.sc.chanda.group.visible = false
@@ -371,7 +362,8 @@ export class KhmerStage implements Stage {
     this.walker.face(this.chanda, this.sc.arun.center)
     this.walker.face(this.grandma, rt.player.position)
     this.grandma.setPose('cane')
-    void rt.cinematic({ look: this.sc.arun.center.clone(), from: v(17.8, 11.0, -3.2), lookTo: this.grandma.root.position.clone().setY(10.8), panSec: 14, inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 52 })
+    const altarFrom = v(17.8, 11.0, -3.2)
+    void rt.cinematic({ look: this.arunLook(altarFrom), from: altarFrom, lookTo: this.grandma.root.position.clone().setY(10.8), panSec: 14, inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 52 })
     this.sc.arun.setGlow(1.4)
     await rt.dialogue(this.lines('grandma_arun'))
     this.sc.arun.setGlow(1)
@@ -443,7 +435,8 @@ export class KhmerStage implements Stage {
     rt.claw.reset()
     rt.player.teleport(sp.pos.clone(), sp.facing)
     rt.camRig.yaw = sp.camYaw
-    rt.camRig.pitch = 0.3
+    // 少し上から：門の下からでも、のぼる段の面が見えるように
+    rt.camRig.pitch = 0.4
     this.walker.clear()
     this.placeForStep('night')
     this.sc.stairs.restoreAll()
@@ -452,8 +445,8 @@ export class KhmerStage implements Stage {
     await this.clock.wait(0.3)
     await curtain.set(false, 1.0)
     rt.hud.banner('― その夜 ―', 'success', 2.4)
-    // トワが来る
-    void rt.cinematic({ look: TOWA_NIGHT.clone(), from: v(2.5, 2.6, 2.8), inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 50, marker: { pos: TOWA_NIGHT.clone().add(v(0, 1.2, 0)), label: 'トワ', color: '#c08aff' } })
+    // トワが来る（大階段の下の南から見上げる：トワ・空のひび・松明の階段が一度に見える。回廊の屋根・壁の中に入らない所から）
+    void rt.cinematic({ look: v(12.0, 12.2, -10.4), from: v(6.0, 1.4, 1.2), inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 42, marker: { pos: TOWA_NIGHT.clone().add(v(0, 1.2, 0)), label: 'トワ', color: '#c08aff' } })
     await rt.dialogue(this.lines('night_begin'))
     // 段をくずす
     this.towa.setPose('raiseLamp')
@@ -463,7 +456,8 @@ export class KhmerStage implements Stage {
       rt.shake(0.5)
     }
     this.sc.stairs.setStonesActive(true)
-    void rt.cinematic({ look: v(13, 6, -4), from: v(1.5, 4.2, 3.4), inSec: 1.0, hold: Infinity, outSec: 1.0, fov: 54 })
+    // くずれた段：南西の少し上から（松明の列・落ちてくる石・上の台のチャンダが入る）
+    void rt.cinematic({ look: v(13, 6.2, -4.2), from: v(6.4, 5.0, 2.6), inSec: 1.0, hold: Infinity, outSec: 1.0, fov: 52 })
     await rt.dialogue(this.lines('night_collapse'))
     rt.endCinematic()
     this.towa.setPose('idle')
@@ -539,7 +533,8 @@ export class KhmerStage implements Stage {
     this.towa.setPose('sad')
     // 夜明けが来る：トワが下がる
     this.night = 'dawn'
-    void rt.cinematic({ look: v(140, 10, -10), from: v(24, 12.5, -4), inSec: 1.4, hold: Infinity, outSec: 1.0, fov: 54 })
+    // 上の台の東のふちから東の空を見る（祠堂の中・四すみの小さな塔のかげに入らない所）
+    void rt.cinematic({ look: v(140, 10, -10), from: v(32.2, 11.4, -4.0), inSec: 1.4, hold: Infinity, outSec: 1.0, fov: 54 })
     this.sc.skyCrack.setOpen(0)
     await rt.dialogue(this.lines('dawn_coming'))
     this.towaRetreat = 0
@@ -553,6 +548,16 @@ export class KhmerStage implements Stage {
   }
 
   private towaRetreat = -1
+
+  /**
+   * アルンを見る点：石の中心から、カメラの方へ 1.5 m 手前（石の当たり判定の外）。
+   * 演出のカメラの壁よけは見る点から光線を飛ばすので、石の中を見る点にすると、カメラが石の中まで寄ってしまう
+   */
+  private arunLook(from: THREE.Vector3): THREE.Vector3 {
+    const c = this.sc.arun.center
+    const d = v(from.x - c.x, 0, from.z - c.z).normalize()
+    return c.clone().addScaledVector(d, 1.5)
+  }
 
   private showTowa(on: boolean): void {
     this.towaShown = on
@@ -585,8 +590,9 @@ export class KhmerStage implements Stage {
       await this.clock.wait(0.3)
       await curtain.set(false, 1.2, '#2a1a20')
     }
-    // 三つの鏡が朝日をはね返し、アルンへ
-    void rt.cinematic({ look: this.sc.arun.center.clone(), from: v(14.5, 16.5, 9.5), inSec: 1.8, hold: Infinity, outSec: 1.0, fov: 58 })
+    // 三つの鏡が朝日をはね返し、アルンへ（祠堂の西の入口の外から、部屋の中のアルンと、入ってくる光の筋を見る）
+    const dawnFrom = v(19.0, 11.8, -3.0)
+    void rt.cinematic({ look: this.arunLook(dawnFrom), from: dawnFrom, inSec: 1.8, hold: Infinity, outSec: 1.0, fov: 58 })
     for (const id of TOWER_IDS) {
       this.sc.beamOn(id)
       await this.clock.wait(0.7)
@@ -633,7 +639,8 @@ export class KhmerStage implements Stage {
     if (curtain.covered) await curtain.set(false, 1.0, '#fff6dc')
     this.chanda.setBlade('broken')
     this.chanda.setPose('laugh')
-    void rt.cinematic({ look: this.sc.arun.center.clone(), from: v(18.4, 11.0, -4.6), inSec: 1.2, hold: Infinity, outSec: 1.0, fov: 46 })
+    const afterFrom = v(18.4, 11.0, -4.6)
+    void rt.cinematic({ look: this.arunLook(afterFrom), from: afterFrom, inSec: 1.2, hold: Infinity, outSec: 1.0, fov: 46 })
     const p = rt.dialogue(this.lines('after_back'))
     await this.clock.wait(5)
     this.sc.arun.setScars(1)
@@ -642,10 +649,14 @@ export class KhmerStage implements Stage {
     this.sc.arun.crack()
     rt.shake(0.5)
     await rt.dialogue(this.lines('after_crack'))
-    void rt.cinematic({ look: this.sc.arun.shardPos, from: v(16.2, 13.5, 4.5), inSec: 1.0, hold: Infinity, outSec: 1.2, fov: 50 })
+    // かけらができる所：西の入口の外から、部屋の中のアルンの前（動くかけらを追うと、壁や土の中から光線を飛ばしてカメラがつぶれるので、決まった所を見る）
+    void rt.cinematic({ look: v(23.4, 10.6, -3.6), from: v(19.2, 11.6, -2.9), inSec: 1.0, hold: Infinity, outSec: 1.2, fov: 50 })
     const shard = this.sc.arun.releaseShard({ to: K.SHARD_GROUND.clone() })
     await this.clock.wait(3.6)
     this.sc.arun.setDead()
+    // かけらが土の庭へ落ちていく（庭の南西から）
+    await this.clock.wait(0.3)
+    void rt.cinematic({ look: K.SHARD_GROUND.clone().add(v(0.8, 1.6, -0.8)), from: v(4.2, 3.4, 19.6), inSec: 0.8, hold: Infinity, outSec: 1.2, fov: 50 })
     await shard
     await rt.dialogue(this.lines('after_shard'))
     // 刃のかけらを宝の箱へ

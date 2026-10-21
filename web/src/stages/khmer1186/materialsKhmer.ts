@@ -159,18 +159,21 @@ export async function createKhmerMaterials(aniso: number) {
 
   /** 砂岩（切り石の段）。色はタイントで（灰色がかった黄土色・桃色がかった砂岩） */
   // 絵の石はもう色がついているので、タイント（黄土色）の色みを打ち消す（灰色の石はほぼ灰色に）
+  // 絵の明るさから作る凹凸は弱めに（描かれた影まででこぼこになって、黒いざらつきが出るため）
   const sandstone = sandArt
-    ? std({ map: sandArt, normalMap: normalFromImage(sandArt.image as HTMLImageElement, 512, 2.4, aniso), normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.92, color: new THREE.Color(1.0, 1.25, 1.8) })
+    ? std({ map: sandArt, normalMap: normalFromImage(sandArt.image as HTMLImageElement, 512, 2.4, aniso), normalScale: new THREE.Vector2(0.3, 0.3), roughness: 0.92, color: new THREE.Color(1.0, 1.25, 1.8) })
     : std({ map: tex(ashlar!.color, true, aniso), normalMap: tex(ashlar!.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.92 })
   /** 舗装・上の台（大きな平たい石） */
   const paving = pbr(tiles, { color: new THREE.Color(1.18, 1.06, 0.9) })
+  /** 主な道（池のほとり → 石の橋 → 門 → 大階段）の舗装：凹凸をおさえて明るく、ほかの舗装より読みやすく */
+  const route = pbr(tiles, { color: new THREE.Color(1.18, 1.06, 0.9), normalScale: new THREE.Vector2(0.25, 0.25) })
   const laterite = std({ map: tex(later.color, true, aniso), normalMap: tex(later.normal as HTMLCanvasElement, false, aniso), roughness: 0.95 })
   const reliefStory = storyArt
-    ? std({ map: storyArt, normalMap: normalFromImage(storyArt.image as HTMLImageElement, 640, 2.0, aniso), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.9 })
+    ? std({ map: storyArt, normalMap: normalFromImage(storyArt.image as HTMLImageElement, 640, 2.0, aniso), normalScale: new THREE.Vector2(0.2, 0.2), roughness: 0.9 })
     : std({ map: tex(story!.color, true, aniso), normalMap: tex(story!.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.9 })
   reliefStory.map!.wrapS = THREE.ClampToEdgeWrapping
   const reliefBand = bandArt
-    ? std({ map: bandArt, normalMap: normalFromImage(bandArt.image as HTMLImageElement, 512, 2.4, aniso), normalScale: new THREE.Vector2(1.0, 1.0), roughness: 0.9 })
+    ? std({ map: bandArt, normalMap: normalFromImage(bandArt.image as HTMLImageElement, 512, 2.4, aniso), normalScale: new THREE.Vector2(0.3, 0.3), roughness: 0.9 })
     : std({ map: tex(proc!.color, true, aniso), normalMap: tex(proc!.normal as HTMLCanvasElement, false, aniso), normalScale: new THREE.Vector2(1.1, 1.1), roughness: 0.9 })
   const thatch = std({ map: tex(thatchP.color, true, aniso), normalMap: tex(thatchP.normal as HTMLCanvasElement, false, aniso), roughness: 1, side: THREE.DoubleSide })
   const weave = std({ map: tex(weaveP.color, true, aniso), roughness: 0.9, normalMap: noiseN, normalScale: new THREE.Vector2(0.4, 0.4) })
@@ -187,7 +190,7 @@ export async function createKhmerMaterials(aniso: number) {
   )
   const leaf = makeFoliage(std({ map: tex(paintLeafCard(256, 21).color, true, aniso), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, emissive: new THREE.Color('#2a4a10'), emissiveIntensity: 0.1 }), 0.04)
   /** 遠くの森のかたまり（葉のカードは重いので、丸いかたまりにする） */
-  const canopy = std({ color: '#ffffff', roughness: 0.95, normalMap: noiseN, normalScale: new THREE.Vector2(1.4, 1.4) })
+  const canopy = std({ color: '#ffffff', roughness: 0.95, normalMap: noiseN, normalScale: new THREE.Vector2(0.3, 0.3) })
   const ground = makeGround(groundT, detailT)
   /** 青銅（鏡・金具） */
   const bronze = std({ color: '#ffffff', roughness: 0.32, metalness: 0.85, normalMap: noiseN, normalScale: new THREE.Vector2(0.12, 0.12) })
@@ -209,6 +212,7 @@ export async function createKhmerMaterials(aniso: number) {
   const named = {
     sandstone,
     paving,
+    route,
     laterite,
     reliefStory,
     reliefBand,

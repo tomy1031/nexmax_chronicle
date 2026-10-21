@@ -506,6 +506,33 @@ export function palm(c: KCtx, x: number, z: number, h: number, kind: 'sugar' | '
   if (collide && !far) c.col.box(x, y0 + 1.5, z, 0.35, 3, 0.35)
 }
 
+const AXIS_Z = new THREE.Vector3(0, 0, 1)
+const ONE = new THREE.Vector3(1, 1, 1)
+
+/**
+ * 葉のかたまり：丸いかたまり（半径 R、たてに ky 倍）と、その表面にそって外を向いた葉のカード（cards 枚、一辺 card）。
+ * カードは上半分に多く置き、かたまりの面の向き（外向き）にそろえる（ばらばらに刺さった紙に見えないように）
+ */
+export function leafCrown(c: KCtx, B: Batch, center: THREE.Vector3, R: number, ky: number, cards: number, card: number, tint: THREE.ColorRepresentation): void {
+  const r = c.rng
+  B.add(new THREE.IcosahedronGeometry(R, 1), c.m.canopy, M(center.x, center.y, center.z, 0, r() * 3, 0, 1, ky, 1), { tint })
+  const n = new THREE.Vector3()
+  const p = new THREE.Vector3()
+  const q = new THREE.Quaternion()
+  const roll = new THREE.Quaternion()
+  for (let j = 0; j < cards; j++) {
+    const az = (j / cards) * Math.PI * 2 + r() * 0.8
+    const el = -0.2 + r() * 1.1
+    n.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az))
+    // だ円体の表面の点と、そこでの外向きの法線
+    p.set(center.x + n.x * R, center.y + n.y * R * ky, center.z + n.z * R)
+    n.set(n.x, n.y / ky, n.z).normalize()
+    p.addScaledVector(n, card * 0.12)
+    q.setFromUnitVectors(AXIS_Z, n).multiply(roll.setFromAxisAngle(AXIS_Z, r() * Math.PI * 2))
+    B.add(new THREE.PlaneGeometry(card, card), c.m.leaf, new THREE.Matrix4().compose(p, q, ONE), { tint: new THREE.Color().setHSL(0.26 + r() * 0.05, 0.4, 0.62 + r() * 0.1), cast: false })
+  }
+}
+
 /** 大きな木（板根のある熱帯の木。幹・太い枝・葉のかたまりのカード）。s は大きさ */
 export function bigTree(c: KCtx, x: number, z: number, s = 1, far = false, y0 = 0): void {
   const r = c.rng
@@ -524,25 +551,20 @@ export function bigTree(c: KCtx, x: number, z: number, s = 1, far = false, y0 = 
       g.computeVertexNormals()
       B.add(g, c.m.bark, M(x, y0, z, 0, -a, 0), { tint: '#7e6e5e' })
     }
-  // 枝と葉のかたまり
-  const crowns = far ? 4 : 7
+  // 枝と葉のかたまり（近くの木はかたまりを小さく・少なく、葉のカードは樹冠の表面にそって外向きに）
+  const crowns = far ? 4 : 5
   for (let k = 0; k < crowns; k++) {
     const a = (k / crowns) * Math.PI * 2 + r() * 0.5
-    const rr = (1.8 + r() * 1.6) * s
+    const rr = (far ? 1.8 + r() * 1.6 : 1.2 + r() * 1.0) * s
     const cy = y0 + h * (0.82 + r() * 0.3)
     const p = v(x + Math.cos(a) * rr, cy, z + Math.sin(a) * rr)
     if (!far) strut(c, v(x, y0 + h * 0.65, z), p, 0.16 * s, c.m.bark, '#8a7a68', { r1: 0.08 * s })
-    const size = (2.4 + r() * 1.2) * s
     if (far) {
+      const size = (2.4 + r() * 1.2) * s
       c.bf.add(new THREE.IcosahedronGeometry(size, 0), c.m.canopy, M(p.x, p.y + size * 0.3, p.z, 0, r() * 3, 0, 1, 0.7, 1), { tint: new THREE.Color().setHSL(0.28 + r() * 0.05, 0.42, 0.17 + r() * 0.06) })
     } else {
-      c.b.add(new THREE.IcosahedronGeometry(size * 0.82, 1), c.m.canopy, M(p.x, p.y + size * 0.3, p.z, 0, r() * 3, 0, 1, 0.66, 1), { tint: new THREE.Color().setHSL(0.27 + r() * 0.05, 0.46, 0.18 + r() * 0.06) })
-      // 外側に葉のカード（ふちをやわらかく）
-      for (let j = 0; j < 4; j++) {
-        const q = p.clone().add(v((r() - 0.5) * size * 1.4, size * 0.3 + (r() - 0.3) * size * 0.6, (r() - 0.5) * size * 1.4))
-        const g = new THREE.PlaneGeometry(size * 1.1, size * 1.1)
-        c.b.add(g, c.m.leaf, M(q.x, q.y, q.z, r() * 3, r() * 3, r() * 3), { tint: new THREE.Color().setHSL(0.26 + r() * 0.05, 0.4, 0.62 + r() * 0.1), cast: false })
-      }
+      const size = (1.8 + r() * 0.9) * s
+      leafCrown(c, c.b, v(p.x, p.y + size * 0.3, p.z), size * 0.82, 0.66, 7, size * 0.45, new THREE.Color().setHSL(0.27 + r() * 0.05, 0.46, 0.18 + r() * 0.06))
     }
   }
   if (!far) collideCylinder(c, x, y0, y0 + 4, z, 0.65 * s)

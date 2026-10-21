@@ -183,11 +183,14 @@ export class Arun {
             float flow = sin(y * 3.2 - uTime * 1.7 + sin(vAPos.x * 3.0 + uTime * 0.8) * 1.2) * 0.5 + 0.5;
             float slow = sin(uTime * 0.9 + y * 0.8) * 0.5 + 0.5;
             vec3 vdir = normalize(vViewPosition);
-            float rim = pow(1.0 - abs(dot(normalize(vNormal), vdir)), 2.0);
+            float facing = abs(dot(normalize(vNormal), vdir));
+            float rim = pow(1.0 - facing, 2.0);
             float inner = 0.35 + flow * 0.45 + slow * 0.25;
+            // 奥で光る芯：正面を向いた面の、石の中ほどの高さほど強く（ふちの面は青い結晶の色と照りを見せる）
+            float core = pow(facing, 3.0) * exp(-pow((y - ${(height * 0.42).toFixed(3)}) / ${(height * 0.3).toFixed(3)}, 2.0));
             vec3 glowCol = mix(vec3(0.18, 0.5, 1.0), vec3(0.6, 0.9, 1.0), flow * rim);
             float live = (1.0 - uDead) * uGlow;
-            totalEmissiveRadiance = glowCol * (inner + rim * 1.2) * live * (1.0 - scar * 0.8);
+            totalEmissiveRadiance = (glowCol * (inner * 0.6 + rim * 0.7) + vec3(0.55, 0.85, 1.0) * core * (0.7 + slow * 0.3)) * 0.65 * live * (1.0 - scar * 0.8);
             // ひびの光（入った瞬間は白く光る）
             totalEmissiveRadiance += vec3(0.8, 0.95, 1.0) * crk * (uFlash * 4.0 + live * 0.6);
           }`,
@@ -314,7 +317,8 @@ export class Arun {
       if (this.crackT > 1.4) this.crackT = -1
     }
     if (this.glow !== g0 || this.dead > 0 || this.crackT >= 0 || this.flash > 0) this.apply()
-    this.halo.material.opacity = 0.5 * this.glow * (1 - this.dead) * (0.85 + 0.15 * Math.sin(uTime.value * 1.8))
+    // ハローは弱く（強いと結晶の面が消えて、青い板に見える）
+    this.halo.material.opacity = 0.2 * this.glow * (1 - this.dead) * (0.85 + 0.15 * Math.sin(uTime.value * 1.8))
     if (this.shardT >= 0) this.updateShard(dt)
   }
 

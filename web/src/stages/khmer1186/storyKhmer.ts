@@ -62,6 +62,8 @@ export type ObjectiveCtx = {
   turntableSolved?: boolean
   /** 近い塔（鏡の目標の書き分け） */
   near?: TowerId | null
+  /** 近い塔の仕掛けをこえた（北：島に着いた・南：上の台に上がった）。まだなら仕掛けの手がかりを出す */
+  climbed?: boolean
 }
 
 const TOWER_SUB: Record<TowerId, string> = {
@@ -84,6 +86,7 @@ export function khmerObjective(step: KhmerStep, f: Flags, o: ObjectiveCtx = {}):
       const title = `夜明けの鏡を塔に立てる（のこり ${left.length}）`
       if (o.near && left.includes(o.near)) {
         if (o.near === 'e' && !o.turntableSolved) return { title, sub: TOWER_SUB.e }
+        if (o.near !== 'e' && o.climbed === false) return { title, sub: TOWER_SUB[o.near] }
         return { title, sub: o.near === 'e' ? '東の塔の上の、光っている台で F' : `${o.near === 'n' ? '北' : '南'}の塔の上の台で F：鏡を立てる` }
       }
       return { title, sub: left.map((id) => TOWER_SUB[id].split('：')[0]).join('・') + ' へ' }

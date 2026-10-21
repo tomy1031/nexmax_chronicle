@@ -97,6 +97,13 @@ describe('khmerObjective（左上の目標）', () => {
     expect(khmerObjective('mirrors', f, { near: 'e', turntableSolved: true }).sub).toContain('F')
   })
 
+  it('北・南の塔は、仕掛けをこえるまで、その手がかりを出す', () => {
+    const f = flagsOf('v7_khmer_arrived', 'v7_met_chanda')
+    expect(khmerObjective('mirrors', f, { near: 's', climbed: false }).sub).toContain('石')
+    expect(khmerObjective('mirrors', f, { near: 's', climbed: true }).sub).toContain('F')
+    expect(khmerObjective('mirrors', f, { near: 'n', climbed: false }).sub).toContain('飛びうつる')
+  })
+
   it('夜の中の段階ごとに目標がかわる', () => {
     const f = flagsOf()
     expect(khmerObjective('night', f, { night: 'climb' }).title).toContain('階段')

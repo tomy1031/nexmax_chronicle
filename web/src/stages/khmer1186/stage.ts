@@ -797,6 +797,18 @@ export class KhmerStage implements Stage {
     }
   }
 
+  /** 近い塔の仕掛けをこえたか（北：島の上・南：上の台の高さ）。目標の書き分け用 */
+  private towerClimbed(rt: StageRuntime): boolean {
+    const p = rt.player.position
+    const id = this.nearTower
+    if (id === 'n') {
+      const I = K.ISLAND
+      return p.x > I.x0 && p.x < I.x1 && p.z > I.z0 && p.z < I.z1
+    }
+    if (id === 's') return p.y > TOWERS.s.baseY + SMALL_TOWER.top - 1.5
+    return true
+  }
+
   private towerNear(p: THREE.Vector3): TowerId | null {
     for (const id of TOWER_IDS) {
       const t = TOWERS[id]
@@ -925,7 +937,7 @@ export class KhmerStage implements Stage {
     const u = this.ura.objective(rt)
     if (u) return u
     const step = this.step(rt)
-    return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower })
+    return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower, climbed: this.towerClimbed(rt) })
   }
 
   objectiveTarget(rt: StageRuntime): THREE.Vector3 | null {

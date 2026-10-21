@@ -726,6 +726,8 @@ export class ChronicleNambaStage implements Stage {
     this.placeForStep('defense')
     this.step = 'defense'
     rt.player.teleport(V7_SPAWNS.v7_shrine.pos, V7_SPAWNS.v7_shrine.facing)
+    rt.camRig.yaw = V7_SPAWNS.v7_shrine.camYaw
+    rt.camRig.pitch = V7_SPAWNS.v7_shrine.camPitch
     await this.curtain?.set(false, 0.8)
     this.defense = this.makeDefense(rt)
     await this.runNightFalls(rt)
@@ -770,6 +772,8 @@ export class ChronicleNambaStage implements Stage {
     await this.curtain?.set(true, 0.6)
     this.defense?.restartWave()
     rt.player.teleport(V7_SPAWNS.v7_shrine.pos, V7_SPAWNS.v7_shrine.facing)
+    rt.camRig.yaw = V7_SPAWNS.v7_shrine.camYaw
+    rt.camRig.pitch = V7_SPAWNS.v7_shrine.camPitch
     await this.curtain?.set(false, 0.6)
     this.busy = false
     rt.setControlLocked(false)
@@ -785,7 +789,7 @@ export class ChronicleNambaStage implements Stage {
     await this.clock.wait(0.6)
     rt.setControlLocked(true)
     const m = this.matsui
-    void rt.cinematic({ look: v(16.4, 1.3, 19.0), from: v(15.2, 1.8, 23.0), hold: Infinity, inSec: 1.0, fov: 52 })
+    void rt.cinematic({ look: v(18.0, 1.35, 20.4), from: v(15.4, 1.75, 23.2), hold: Infinity, inSec: 1.0, fov: 52 })
     const L = lines.lines('projection')
     await rt.dialogue(L.slice(0, 1))
     const run = this.walker.walkTo(m, [v(17.4, 0, 20.3), v(16.7, 0, 18.4), SPOTS_V7.matsuiProject.pos], 3.2, KANBAN.c.pos)
@@ -844,6 +848,9 @@ export class ChronicleNambaStage implements Stage {
     this.walker.face(this.matsui, rt.player.position)
     await rt.dialogue(lines.lines('decision').slice(1))
     await rt.dialogue(lines.lines('notebook'))
+    // 戻ったカメラは南東から（ほこらと帰りの光の輪が見える。社長の頭でふさがない）
+    rt.camRig.yaw = 0.9
+    rt.camRig.pitch = 0.3
     rt.endCinematic()
     rt.story.set('v7_shrine_saved', true)
     rt.save('v7_shrine')

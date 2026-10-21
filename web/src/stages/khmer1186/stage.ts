@@ -15,7 +15,7 @@ import type { Hint } from '../../ui/hud'
 import type { MusicId } from '../../audio/tracks'
 import type { EnemyHandle } from '../../combat/combatSystem'
 import { SceneClock } from '../../chronicle/kit/clock'
-import { Walker, faceYaw } from '../../chronicle/kit/walker'
+import { Walker } from '../../chronicle/kit/walker'
 import { Curtain } from '../../chronicle/kit/curtain'
 import type { ChronoTarget, SlitHandle } from '../../chronicle/chrono'
 import { Lamp, SHADE_STYLE, createPerson, type PersonCharacter, type PersonPose } from '../../chronicle/visuals'
@@ -23,7 +23,7 @@ import { buildKhmerScene, KHMER_BALL_ID, type KhmerScene } from './sceneKhmer'
 import { KHMER_ENVIRONMENTS, KhmerEnvMaps, applyKhmerTime, type TimeOfDay } from './environment'
 import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, VILLAGERS, towerPoint, type Spot, type TowerId } from './layout'
 import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
-import { KhmerUra } from './uraKhmer'
+import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
 import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
@@ -37,27 +37,14 @@ const RETURN_RING = v(20.4, K.TOP_Y, -9.2)
 const TOWA_NIGHT = v(12.6, 13.2, -11.6)
 /** 夜のチャンダ（上の台、階段のすぐ北） */
 const CHANDA_NIGHT: Spot = { pos: v(20.3, K.TOP_Y, -7.6), yaw: Math.PI / 2 }
+/** 裏側から出た所（上の台、アルンの祠の前の少し北。アルンを見るカメラの線から外す） */
+const URA_EXIT = v(K.URA_ENTRY.x - 0.4, K.TOP_Y, K.URA_ENTRY.z - 2.6)
 /** 宝の箱（折れた刃のかけらをしまう） */
 const TREASURE_BOX = v(23.6, K.TOP_Y, -9.4)
 /** 夜の影が出る所（上の台） */
 const TOP_SPAWNS = [v(24, K.TOP_Y, -10.2), v(28, K.TOP_Y, -10.2), v(24, K.TOP_Y, 2.2), v(28.2, K.TOP_Y, 2.2), v(32.2, K.TOP_Y, -4), v(32.2, K.TOP_Y, -7.6)]
 /** 本物の人の形で見せる村人（多いと重いので、目につく所だけ。ほかは出さない） */
 const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'watch2', 'fisher2', 'monk1', 'temple1']
-
-type UraLike = {
-  readonly active: boolean
-  run(rt: StageRuntime): Promise<string>
-  update(dt: number, frame: ActionFrame, rt: StageRuntime): void
-  animate(dt: number, t: number): void
-  objective(rt: StageRuntime): { title: string; sub: string } | null
-  hints(rt: StageRuntime): Hint[] | null
-  markers(out: ObjectiveMark[], rt: StageRuntime): void
-  devSkip(rt: StageRuntime): void
-  dispose(): void
-}
-
-/** visuals 担当の UraBattle（chronicle/uraBattle.ts）。まだ無ければ空 */
-const URA_BATTLE = import.meta.glob('../../chronicle/uraBattle.ts')
 
 export class KhmerStage implements Stage {
   readonly key = '1186' as const
@@ -66,8 +53,8 @@ export class KhmerStage implements Stage {
   readonly subtitle = '900年前のカンボジア'
   environment: StageEnvironment = KHMER_ENVIRONMENTS.afternoon
   private sc!: KhmerScene
-  private ura!: UraLike
-  private uraOwn: KhmerUra | null = null
+  /** 裏側の戦い（chronicle/uraBattle.ts、scenario 'khmer'） */
+  private ura!: UraBattle
   private chanda!: PersonCharacter
   private grandma!: PersonCharacter
   private towa!: PersonCharacter
@@ -83,6 +70,8 @@ export class KhmerStage implements Stage {
   private busy = false
   private meet: MeetPhase = 'find'
   private night: NightPhase = 'intro'
+  /** 開発用：夜の影の波を全部すませた */
+  private wavesSkipped = false
   private readonly told = new Set<string>()
   private ringOpen = false
   private leaving = false
@@ -111,34 +100,8 @@ export class KhmerStage implements Stage {
     const root = this.sc.root
     ctx.progress(0.62, '裏側の空間を組み立て中…')
     await ctx.yieldFrame()
-    // 裏側（visuals 担当の UraBattle があれば、それを使う）
-    const loader = URA_BATTLE['../../chronicle/uraBattle.ts']
-    if (loader) {
-      try {
-        const mod = (await loader()) as { UraBattle: { build(o: unknown): UraLike & { run(rt: StageRuntime, o?: unknown): Promise<string> } } }
-        const b = mod.UraBattle.build({ root, colliders: this.sc.colliders, origin: K.URA_ORIGIN.clone(), quality: ctx.quality.level, scenario: 'khmer' })
-        const self = this
-        this.ura = {
-          get active() {
-            return b.active
-          },
-          run: (rt) => b.run(rt, { ally: self.chanda, lines: (k: string) => self.lines(k) }),
-          update: (dt, fr, rt) => b.update(dt, fr, rt),
-          animate: (dt, t) => b.animate(dt, t),
-          objective: (rt) => b.objective(rt),
-          hints: (rt) => b.hints(rt),
-          markers: (out, rt) => {
-            const m = (b as unknown as { markers(rt: StageRuntime): ObjectiveMark[] | null }).markers(rt)
-            if (m) out.push(...m)
-          },
-          devSkip: (rt) => b.devSkip(rt),
-          dispose: () => b.dispose(),
-        }
-      } catch (e) {
-        console.warn('[khmer] UraBattle を使えないので、11 章用の裏側を使います', e)
-      }
-    }
-    if (!this.ura) this.buildOwnUra(root, ctx)
+    // 裏側（x = +3000 に組み立てる。夜明けの光の扉から入る）
+    this.ura = UraBattle.build({ root, colliders: this.sc.colliders, origin: K.URA_ORIGIN.clone(), quality: ctx.quality, scenario: 'khmer' })
     // 人
     this.chanda = createPerson('chanda')
     this.grandma = createPerson('khmerElder')
@@ -169,28 +132,8 @@ export class KhmerStage implements Stage {
     lid.position.y = 0.3
     chest.add(lid)
     root.add(chest)
-    const lights = [...this.sc.lights]
-    if (this.uraOwn) lights.push(...this.uraOwn.arena.lights)
+    const lights = [...this.sc.lights, ...this.ura.lights]
     return { root, colliders: this.sc.colliders, claw: this.sc.claw, lights }
-  }
-
-  private buildOwnUra(root: THREE.Object3D, ctx: StageLoadContext): void {
-    const u = new KhmerUra(root, this.sc.colliders, K.URA_ORIGIN.clone(), ctx.quality.level)
-    this.uraOwn = u
-    const self = this
-    this.ura = {
-      get active() {
-        return u.active
-      },
-      run: (rt) => u.run(rt, { chanda: self.chanda, clock: self.clock, walker: self.walker, curtain: self.curtain as Curtain, lines: (k) => self.lines(k) }),
-      update: (dt, _fr, rt) => u.update(dt, rt),
-      animate: (dt, t) => u.animate(dt, t),
-      objective: () => u.objective(),
-      hints: () => u.hints(),
-      markers: (out) => u.markers(out),
-      devSkip: () => u.devSkip(),
-      dispose: () => u.dispose(),
-    }
   }
 
   spawn(id: string | null): SpawnPoint {
@@ -223,7 +166,6 @@ export class KhmerStage implements Stage {
     const f = this.f(rt)
     const step = this.step(rt)
     this.sc.setTimeOfDay(this.time)
-    ;(this.uraOwn as KhmerUra | null)?.begin(this.sc.root)
     // 前にしたことを見た目へ（鏡・回る鏡の台・飲みこまれた石像と家・アルン）
     for (const id of TOWER_IDS) if (f(MIRROR_FLAGS[id])) this.sc.placeMirror(id, true)
     if (f('v7_mirror_e')) this.sc.turntable.setSolved(true)
@@ -546,11 +488,12 @@ export class KhmerStage implements Stage {
     rt.combat.setCheckpoint(SPAWNS.altar.pos.clone(), SPAWNS.altar.facing)
     void rt.dialogue(this.lines('night_top'))
     this.chanda.setPose('guard')
+    this.wavesSkipped = false
     for (let w = 0; w < NIGHT_WAVES.length; w++) {
-      if (this.night !== 'defend') break
+      if (this.night !== 'defend' || this.wavesSkipped) break
       if (w > 0) void rt.dialogue(this.lines('night_wave2'))
       this.spawnWave(rt, w)
-      await this.clock.until(() => rt.combat.alive('night').length === 0 || this.night !== 'defend')
+      await this.clock.until(() => rt.combat.alive('night').length === 0 || this.night !== 'defend' || this.wavesSkipped)
       if (this.clock.dead) return
       await this.clock.wait(1.2)
     }
@@ -562,9 +505,9 @@ export class KhmerStage implements Stage {
     kinds.forEach((kind, i) => {
       const at = TOP_SPAWNS[(i + w * 2) % TOP_SPAWNS.length]
       const h = rt.combat.spawn(kind, at.clone(), { tag: 'night', style: SHADE_STYLE, leash: 16, hidden: true })
-      setTimeout(() => {
-        if (h.alive) rt.combat.appear(h)
-      }, i * 450)
+      void this.clock.wait(i * 0.45).then(() => {
+        if (h.alive && !this.clock.dead) rt.combat.appear(h)
+      })
     })
   }
 
@@ -660,13 +603,12 @@ export class KhmerStage implements Stage {
     await rt.dialogue(this.lines('dawn_door'))
     rt.endCinematic(true)
     rt.setControlLocked(false)
-    // 裏側へ（visuals 担当の UraBattle か、11 章用の裏側）
-    await this.ura.run(rt)
+    // 裏側へ（チャンダといっしょに。出ると上の台の扉の前へ）
+    this.chanda.setPose('idle')
+    await this.ura.run(rt, { ally: this.chanda, exitTo: { pos: URA_EXIT.clone(), yaw: -Math.PI / 2 } })
     if (this.clock.dead) return
-    // もどってきた：上の台へ
+    // もどってきた：上の台
     rt.claw.reset()
-    rt.player.teleport(K.URA_ENTRY.clone(), -Math.PI / 2)
-    rt.camRig.yaw = -Math.PI / 2
     this.chanda.root.position.copy(NPC.chanda.altar.pos)
     this.chanda.root.rotation.y = NPC.chanda.altar.yaw
     this.chanda.setBlade('broken')
@@ -751,7 +693,7 @@ export class KhmerStage implements Stage {
     this.sc.update(dt, rt.playTime, rt.camera)
     this.sc.carryPlayer(rt.player)
     this.ura.update(dt, frame, rt)
-    rt.combat.passive = this.busy || rt.talking || rt.inCinematic
+    if (!this.ura.active) rt.combat.passive = this.busy || rt.talking || rt.inCinematic
     const step = this.step(rt)
     const f = this.f(rt)
     // 止められる物（いま止めて意味のある物だけ狙える）
@@ -780,6 +722,7 @@ export class KhmerStage implements Stage {
       }
     }
     // 帰りの光の輪
+    if (this.ringOpen && !this.busy && !rt.talking && rt.player.position.distanceTo(RETURN_RING) < 6) void this.talkOnce(rt, 'return_ring')
     if (this.ringOpen && !this.leaving && rt.player.position.distanceTo(RETURN_RING) < 1.3) this.leave(rt)
   }
 
@@ -831,7 +774,8 @@ export class KhmerStage implements Stage {
 
   animate(dt: number, t: number, rt: StageRuntime): void {
     const cam = rt.camera.position
-    this.chanda.update(dt, this.walker.speedOf(this.chanda))
+    // 裏側にいる間のチャンダは UraBattle が動かす
+    if (!this.ura.active) this.chanda.update(dt, this.walker.speedOf(this.chanda))
     this.grandma.update(dt, this.walker.speedOf(this.grandma))
     if (this.towa.root.visible) {
       this.towaFloat += dt
@@ -851,6 +795,7 @@ export class KhmerStage implements Stage {
   // ================================================================ F
 
   interact(rt: StageRuntime): boolean {
+    if (this.ura.interact(rt)) return true
     if (this.busy) return false
     const step = this.step(rt)
     const p = rt.player.position
@@ -947,17 +892,19 @@ export class KhmerStage implements Stage {
   }
 
   objectiveTarget(rt: StageRuntime): THREE.Vector3 | null {
+    // いちばん近い目印へ（鏡の段は塔が三つあるので、近い塔を指す）
     const m = this.objectiveMarkers(rt)
-    return m && m.length ? m[0].pos : null
+    if (!m || !m.length) return null
+    const p = rt.player.position
+    let best = m[0]
+    for (const x of m) if (x.pos.distanceToSquared(p) < best.pos.distanceToSquared(p)) best = x
+    return best.pos
   }
 
   objectiveMarkers(rt: StageRuntime): readonly ObjectiveMark[] | null {
     const out = this.marks
     out.length = 0
-    if (this.ura.active) {
-      this.ura.markers(out, rt)
-      return out
-    }
+    if (this.ura.active) return this.ura.markers(rt)
     const step = this.step(rt)
     const head = (o: THREE.Object3D, h = 1.9) => o.position.clone().setY(o.position.y + h)
     switch (step) {
@@ -982,7 +929,7 @@ export class KhmerStage implements Stage {
   }
 
   music(rt: StageRuntime): MusicId | null {
-    if (this.ura.active) return 'ura'
+    if (this.ura.active) return this.ura.music ?? 'ura'
     const step = this.step(rt)
     if (step === 'night') return 'ruins2028'
     if (step === 'ura' || step === 'after' || step === 'return') return 'dawn'
@@ -1032,11 +979,12 @@ export class KhmerStage implements Stage {
           rt.claw.reset()
           rt.player.teleport(SPAWNS.altar.pos.clone(), SPAWNS.altar.facing)
         } else if (this.night === 'defend') {
+          this.wavesSkipped = true
           for (const h of rt.combat.alive('night')) rt.combat.kill(h)
         }
         break
       case 'ura':
-        this.ura.devSkip(rt)
+        if (this.ura.active) this.ura.devSkip(rt)
         break
       case 'after':
         break
@@ -1054,11 +1002,11 @@ export class KhmerStage implements Stage {
       night: this.night,
       busy: this.busy,
       time: this.time,
-      ura: this.uraOwn?.phase ?? (this.ura?.active ? 'active' : 'off'),
       turntable: { angle: +this.sc.turntable.angle.toFixed(2), correct: +this.sc.turntable.correctAngle.toFixed(2), solved: this.sc.turntable.solved },
       collapsed: this.sc.stairs.collapsedList,
       ring: this.ringOpen,
       near: this.nearTower,
+      ...(this.ura?.debug() ?? {}),
     }
   }
 
@@ -1080,4 +1028,3 @@ export function createKhmerStage(): KhmerStage {
   return new KhmerStage()
 }
 
-void faceYaw

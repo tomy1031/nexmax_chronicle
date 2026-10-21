@@ -53,6 +53,8 @@ type Fight = {
   grabs: number
   nextGrab: number
   armDef: ClawTargetDef
+  /** つかんでいるあいだ、まちがえて狙わないように止めた近くの的（木箱など） */
+  muted: ClawTargetDef[]
 }
 
 /** 町のかんばんの記録を見ている */
@@ -316,9 +318,9 @@ export class ChronicleNambaStage implements Stage {
     rt.combat.enabled = true
     rt.combat.setCheckpoint(V7_SPAWNS.v7_nextmake.pos, Math.PI)
     rt.combat.showBoss(h, 'よろいの影獣')
-    const armDef: ClawTargetDef = { id: 'v7_beast_arm', type: 'enemy_pull', label: '佐伯さんをつかんだ影の腕', point: new THREE.Vector3(), radius: 0.5, enabled: false, noLineOfSight: true, range: 12 }
+    const armDef: ClawTargetDef = { id: 'v7_beast_arm', type: 'enemy_pull', label: '佐伯さんをつかんだ影の腕', point: new THREE.Vector3(), radius: 0.7, enabled: false, noLineOfSight: true, range: 12 }
     rt.claw.targets.push(armDef)
-    this.fight = { h, plates: plateObjs.length, grab: null, grabs: 0, nextGrab: 3.0, armDef }
+    this.fight = { h, plates: plateObjs.length, grab: null, grabs: 0, nextGrab: 3.0, armDef, muted: [] }
     h.brain.stun(0.6)
     this.busy = false
     rt.setControlLocked(false)
@@ -362,6 +364,9 @@ export class ChronicleNambaStage implements Stage {
         g.t = 0
         F.h.def.enabled = false
         F.armDef.enabled = true
+        // 子どもでも腕をねらえるように：近くの木箱などの的を、はなすまで止める
+        F.muted = rt.claw.targets.filter((t) => t !== F.armDef && t.enabled && t.point.distanceTo(h.pos) < 9)
+        for (const t of F.muted) t.enabled = false
         void rt.dialogue(lines.lines('beast_grab'))
         rt.shake(0.2)
       }
@@ -384,6 +389,8 @@ export class ChronicleNambaStage implements Stage {
     F.nextGrab = 16
     F.armDef.enabled = false
     F.h.def.enabled = true
+    for (const t of F.muted) t.enabled = true
+    F.muted = []
     F.h.brain.stun(byClaw ? 2.4 : 0.8)
     const s = this.saeki
     s.root.position.y = 0
@@ -801,7 +808,7 @@ export class ChronicleNambaStage implements Stage {
     const nx = SPOTS_V7.nexmaxShrine
     rt.player.teleport(nx.pos, Math.atan2(-(nx.face.x - nx.pos.x), -(nx.face.z - nx.pos.z)))
     const sh = this.ns.shrine
-    void rt.cinematic({ look: v(12.9, 1.45, 23.5), from: v(17.4, 1.6, 23.9), hold: Infinity, inSec: 1.6, fov: 48 })
+    void rt.cinematic({ look: v(12.9, 1.4, 23.55), from: v(18.6, 1.7, 23.75), hold: Infinity, inSec: 1.6, fov: 50 })
     for (let i = 0; i <= 10; i++) {
       sh.setSun(i / 10)
       await this.clock.wait(0.15)

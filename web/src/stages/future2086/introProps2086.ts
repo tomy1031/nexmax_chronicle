@@ -9,7 +9,7 @@ import { uTime } from '../../render/materials'
 import { mulberry32 } from '../../render/noise'
 import type { ClawTargetDef } from '../../player/clawLogic'
 import type { MovableInput } from '../../player/clawSystem'
-import type { ColliderList } from '../../world/colliders'
+import { ColliderList } from '../../world/colliders'
 import { F } from './layout'
 import { ROUNDED } from './textures2086'
 
@@ -934,10 +934,22 @@ type Mats = {
 
 export type IntroProps = ReturnType<typeof buildIntroProps>
 
-export function buildIntroProps(root: THREE.Group, col: ColliderList) {
+/**
+ * opts.v7（物語 v7 の本編）：導入編だけの小物（中継アンテナ・運営本部・非常警報・記録の石標）は町に置かない
+ * （形は作るが、町の外の入れ物と当たり判定に入れる）
+ */
+export function buildIntroProps(root: THREE.Group, col: ColliderList, opts: { v7?: boolean } = {}) {
   const group = new THREE.Group()
   group.name = 'intro_props'
   root.add(group)
+  // 置かない小物も root の下（見えない）に入れて、解放はシェルにまかせる
+  const away = new THREE.Group()
+  away.name = 'intro_props_unused'
+  away.visible = false
+  if (opts.v7) root.add(away)
+  const awayCol = new ColliderList()
+  const g2 = opts.v7 ? away : group
+  const c2 = opts.v7 ? awayCol : col
   const mats: Mats = {
     white: new THREE.MeshStandardMaterial({ color: '#f2f4f8', roughness: 0.35, metalness: 0.05 }),
     navy: new THREE.MeshStandardMaterial({ color: '#1b2752', roughness: 0.4, metalness: 0.3 }),
@@ -947,13 +959,13 @@ export function buildIntroProps(root: THREE.Group, col: ColliderList) {
     glowCyan: new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 2.6, 3.4), toneMapped: false }),
     glowWarm: new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.6, 1.8), toneMapped: false }),
   }
-  const antenna = buildAntenna(group, col, mats)
+  const antenna = buildAntenna(g2, c2, mats)
   const screen = buildBigScreen(group, col, mats)
   const street = buildStreetScreen(group, col, mats)
   const balloon = buildLampBalloon(group, col, mats)
-  const hq = buildHq(group, col, mats)
-  const alarm = buildAlarm(group, col, mats)
-  const stones = buildStones(group, col)
+  const hq = buildHq(g2, c2, mats)
+  const alarm = buildAlarm(g2, c2, mats)
+  const stones = buildStones(g2, c2)
   const confetti = buildConfetti(group)
   const interactables: IntroInteractable[] = [
     { id: 'antenna', pos: INTRO_LAYOUT.antenna.clone().add(v(0, 0, 0.9)), reach: 2.2 },

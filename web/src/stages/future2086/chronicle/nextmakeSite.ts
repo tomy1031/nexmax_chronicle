@@ -778,7 +778,8 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
       },
       drop() {
         toolState = 'falling'
-        toolVel.set(-0.35, 0.6, 0.1)
+        // 子どもでも間に合うように、ふわっと上がってから、ゆっくり落ちる（約 1.3 秒）
+        toolVel.set(-0.3, 1.8, 0.1)
       },
       freeze(on: boolean) {
         if (on && toolState === 'falling') toolState = 'frozen'
@@ -808,7 +809,7 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
       }
       // 工具箱
       if (toolState === 'falling') {
-        toolVel.y -= 9.8 * dt
+        toolVel.y -= 4.2 * dt
         tool.position.addScaledVector(toolVel, dt)
         tool.rotation.x += dt * 3.2
         tool.rotation.z += dt * 1.6
@@ -818,6 +819,8 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
           toolState = 'ground'
         }
       }
+      // 時空裂きのクローが毎フレーム読む点（工具箱について動く）
+      toolPoint.copy(tool.position).y += 0.1
       // ゴースト（変わる前の景色）：一瞬はっきり → 下からほどけて消える
       if (ghostT >= 0) {
         ghostT += dt

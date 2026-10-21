@@ -344,6 +344,39 @@ export class RingRecord {
     return t
   }
 
+  /** 好きな絵（URL）を記録として組み上げる（物語 v7：60 年前の NEXTMAKE・1186 年の浮き彫りなど）。読めるまでは今の絵 */
+  showUrl(url: string, seconds = 2.4): void {
+    const key = ('url:' + url) as RecordKind
+    const start = () => {
+      this.kind = key
+      this.u.map.value = this.tex[key] as THREE.Texture
+      this.u.uCrop.value.copy(this.crop[key] ?? new THREE.Vector4(1, 1, 0, 0))
+      this.reveal = 0
+      this.revealTarget = 1
+      this.revealSpeed = 1 / Math.max(0.2, seconds)
+      this.alphaTarget = 1
+      this.alpha = 1
+    }
+    if (this.tex[key]) return start()
+    new THREE.TextureLoader().load(
+      url,
+      (t) => {
+        t.colorSpace = THREE.SRGBColorSpace
+        const img = t.image as { width: number; height: number }
+        const w = img.width || 1
+        const h = img.height || 1
+        this.crop[key] = w >= h ? new THREE.Vector4(h / w, 1, (1 - h / w) / 2, 0) : new THREE.Vector4(1, w / h, 0, (1 - w / h) / 2)
+        this.owned.push(t)
+        this.tex[key] = t
+        start()
+      },
+      undefined,
+      () => {
+        /* 読めなければ何もしない */
+      },
+    )
+  }
+
   /** 体験中の客が見ている昔の町（うっすら） */
   showVisitor(): void {
     this.setKind('dotonbori')

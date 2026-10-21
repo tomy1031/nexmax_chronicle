@@ -173,6 +173,11 @@ export class CineDirector {
     return this.shot
   }
 
+  /** いま見ている点（lookTo へのパンの途中も含む。ショットが無ければ最後の値） */
+  get currentLook(): THREE.Vector3 {
+    return this.look
+  }
+
   get skippable(): boolean {
     return !!this.shot?.skippable && this.t < this.outStart
   }

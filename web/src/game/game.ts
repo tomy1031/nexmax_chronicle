@@ -1067,7 +1067,8 @@ export class Game {
       dir.divideScalar(len)
       const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
       const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
-      if (hit !== null) cam.copy(start).addScaledVector(dir, Math.max(0.5, hit - 0.4))
+      // 0 に近い当たりは、見る点が当たり判定の中にあるとき（石・地面など）。そのときは寄せない
+      if (hit !== null && hit > 0.05) cam.copy(start).addScaledVector(dir, Math.max(0.5, hit - 0.4))
     }
     return cam
   }
@@ -1102,15 +1103,16 @@ export class Game {
   /** 演出のカメラが壁の向こうに入ったら、見る点の側へ寄せる（向きはそのまま、見る点を見たまま） */
   private readonly cineFix = new THREE.Vector3()
   private keepCineOutOfWalls(a: Active): void {
-    const look = this.cine.current?.look
-    if (!look) return
+    if (!this.cine.current) return
+    // パン（lookTo）の途中も、いま見ている点から調べる
+    const look = this.cine.currentLook
     const dir = this.cineFix.subVectors(this.camera.position, look)
     const len = dir.length()
     if (len < 0.9) return
     dir.divideScalar(len)
     const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
     const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
-    if (hit !== null) this.camera.position.copy(start).addScaledVector(dir, Math.max(0.4, hit - 0.25))
+    if (hit !== null && hit > 0.05) this.camera.position.copy(start).addScaledVector(dir, Math.max(0.4, hit - 0.25))
   }
 
   private cancelCinematic(): void {

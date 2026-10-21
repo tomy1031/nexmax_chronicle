@@ -24,6 +24,8 @@ export type ClockTowerParts = {
   setNextHook(index: number | null): void
   /** 黒い手が壁をなでる予告の強さ（lane は TOWER.sweeps の番号、k は 0..1） */
   setSweepWarn(lane: number, k: number): void
+  /** 屋上にトワが立っているか（夜、トワの後ろの後光を強くして、夜空に姿が読めるように） */
+  setTowaOnTop(on: boolean): void
   /** 12 章：時計台の上の空の大きなゆらぎ（裂く所。0..1。0 で消す） */
   setSkySeam(k: number): void
   /** 文字盤を一瞬強く光らせる（ループ・石の共鳴の合図。0..1） */
@@ -393,6 +395,11 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
   backGlow.rotation.y = -Math.PI / 2
   backGlow.position.x = 0.05
   for (const m of [nextRing, halo, backGlow]) m.renderOrder = 4
+  // 脈打つ輪と後光は、上の足場の床にかくれても見えるように（下から見上げると、金具はひとつ上の足場の上にある）
+  for (const m of [halo, backGlow]) {
+    ;(m.material as THREE.Material).depthTest = false
+    m.renderOrder = 8
+  }
   next.add(backGlow, nextRing, halo)
   group.add(next)
 
@@ -410,9 +417,9 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
     group.add(mesh)
     warns.push({ mesh, mat })
   }
-  // 屋上の後光（夜、トワの後ろがうすく光る：ランプの影の演出の下地）
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), additive('#6a7cff', 0.0, softDotTexture()))
-  glow.position.set(cx, T.deckY + 2.2, cz)
+  // 屋上の後光（夜、トワの後ろがうすく光る：広場から見上げたとき、夜空に黒いトワの姿が読めるように。南を向いた板）
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6), additive('#b4a8ff', 0.0, softDotTexture()))
+  glow.position.set(T.towa.pos.x, T.deckY + 1.2, T.towa.pos.z - 0.6)
   glow.renderOrder = 3
   group.add(glow)
 
@@ -439,14 +446,14 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
   }
 
   // 12 章：時計台の上の空の大きなゆらぎ（広場から見上げても分かるように、大きな白青のすじ＋紫のにじみ。いつもカメラの方を向く）
-  const skySeamMat = createSeamMaterial(new THREE.Color(0.95, 1.25, 1.9), 2.4, true)
-  const skySeam = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 11), skySeamMat)
+  const skySeamMat = createSeamMaterial(new THREE.Color(0.95, 1.25, 1.9), 3.0, true)
+  const skySeam = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 13), skySeamMat)
   skySeam.position.copy(T.seamTop)
   skySeam.frustumCulled = false
   skySeam.renderOrder = 6
   const skyGlowMat = new THREE.SpriteMaterial({ map: softDotTexture(), color: new THREE.Color(0.55, 0.45, 1.3), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: 0 })
   const skyGlow = new THREE.Sprite(skyGlowMat)
-  skyGlow.scale.set(9, 14, 1)
+  skyGlow.scale.set(11, 17, 1)
   skyGlow.position.copy(T.seamTop)
   skyGlow.renderOrder = 5
   skySeam.visible = skyGlow.visible = false
@@ -454,7 +461,10 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
   let skyK = 0
 
   let night = false
+  let towaOnTop = false
   let flash = 0
+  const glowMat = glow.material as THREE.MeshBasicMaterial
+  const applyGlow = () => (glowMat.opacity = night ? (towaOnTop ? 0.6 : 0.15) : 0)
   const parts: ClockTowerParts = {
     group,
     hooks,
@@ -473,6 +483,10 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
       w.mat.uniforms.uK.value = k
       w.mesh.visible = k > 0.001
     },
+    setTowaOnTop(on: boolean) {
+      towaOnTop = on
+      applyGlow()
+    },
     setSkySeam(k: number) {
       skyK = k
       skySeam.visible = skyGlow.visible = k > 0.001
@@ -483,7 +497,7 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
     setNight(on: boolean) {
       night = on
       dialMat.uniforms.uNight.value = on ? 1 : 0
-      ;(glow.material as THREE.MeshBasicMaterial).opacity = on ? 0.18 : 0
+      applyGlow()
       washMat.opacity = on ? 0.55 : 0
     },
     update(dt: number) {
@@ -494,7 +508,7 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
         // ゆっくり脈打つ（ここを狙う、の合図）
         const p = 0.8 + 0.2 * Math.sin(t * 3.0)
         skySeamMat.uniforms.uK.value = skyK * p
-        skyGlowMat.opacity = 0.55 * skyK * p
+        skyGlowMat.opacity = 0.7 * skyK * p
       }
       if (next.visible) {
         const k = (t * 0.8) % 1

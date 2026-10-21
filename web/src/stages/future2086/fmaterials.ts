@@ -342,13 +342,14 @@ export function createFutureMaterials(mats: MaterialLibrary, aniso = 8) {
   function applyLights(): void {
     const night = tod === 'night'
     const a = action && night
-    glow.color.setScalar(night ? (a ? 1.15 : 1.55) : 1.0)
-    farGlow.color.setScalar(night ? (a ? 1.05 : 1.4) : 0.9)
-    glass.emissiveIntensity = night ? (a ? 0.7 : 0.95) : 0.1
-    farGlass.emissiveIntensity = night ? (a ? 0.65 : 0.9) : 0.08
-    lantern.emissiveIntensity = night ? (a ? 1.8 : 2.5) : 1.1
-    screen.emissiveIntensity = night ? (a ? 1.1 : 1.8) : 1.3
-    holo.uniforms.uIntensity.value = night ? (a ? 1.6 : 2.4) : 1.8
-    holoNight.uniforms.uIntensity.value = a ? 1.6 : 2.4
+    // アクション中の値は、美術監督の初期案（看板 1.1・ホロ 1.6・光の帯 1.15）より少し強めに落とす（ブルームで白くとんで差が見えにくいため）
+    glow.color.setScalar(night ? (a ? 1.05 : 1.55) : 1.0)
+    farGlow.color.setScalar(night ? (a ? 0.95 : 1.4) : 0.9)
+    glass.emissiveIntensity = night ? (a ? 0.55 : 0.95) : 0.1
+    farGlass.emissiveIntensity = night ? (a ? 0.5 : 0.9) : 0.08
+    lantern.emissiveIntensity = night ? (a ? 1.45 : 2.5) : 1.1
+    screen.emissiveIntensity = night ? (a ? 0.95 : 1.8) : 1.3
+    holo.uniforms.uIntensity.value = night ? (a ? 1.35 : 2.4) : 1.8
+    holoNight.uniforms.uIntensity.value = a ? 1.35 : 2.4
   }
 }

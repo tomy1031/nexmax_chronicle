@@ -51,9 +51,10 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
     sub: 'オルムの輪のすぐ手前に、てっぺんの足場',
   },
   climb: {
-    pos: v(-0.4, 3.0, -27.4),
-    look: v(5.6, 9.6, -21.4),
-    fov: 64,
+    // 2 段目の足場より高い所から（下からだと、足場の床にネクマックスと上の金具が隠れる）
+    pos: v(-2.6, 10.5, -29.0),
+    look: v(5.4, 11.5, -21.8),
+    fov: 60,
     // 2 段目の足場（上面 y=7.4）に立つ
     nexmax: { pos: v(4.95, 7.4, -22.4), face: v(9, 7.4, -22.4) },
     sora: null,
@@ -153,6 +154,8 @@ export const CHRONICLE_CAMS: Record<string, ChronicleCam> = {
     look: v(-6.88, 1.4, -3.38),
     fov: 52,
     nexmax: { pos: v(-5.6, 0.18, -1.6), face: v(-6.9, 0, -3.4) },
+    // ソラは本編と同じ展示の前（操作卓のそば。ダイヤルの前に立たない）
+    sora: { pos: v(-5.0, 0.18, -1.65), face: v(-2, 0, 2) },
     title: 'ソラのわっかの年代ダイヤル',
   },
   bench: {

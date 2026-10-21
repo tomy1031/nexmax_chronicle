@@ -370,6 +370,7 @@ export class ChronicleFutureStage implements Stage {
   private hideTowa(): void {
     this.towa.root.visible = false
     this.lamp.root.visible = false
+    this.ch.tower.setTowaOnTop(false)
   }
 
   private showTowa(pos: THREE.Vector3, face: THREE.Vector3, pose: Parameters<PersonCharacter['setPose']>[0] = 'idle', mask = true): void {
@@ -379,6 +380,7 @@ export class ChronicleFutureStage implements Stage {
     this.towa.root.rotation.y = faceYaw(pos, face)
     this.towa.setPose(pose)
     this.towa.setMask(mask)
+    this.ch.tower.setTowaOnTop(pos.y > TOWER.deckY - 0.5)
     // 仮面を外したあと（結末・おわりに）は、台詞の顔も素顔に
     if (!mask) this.rt?.hud.setSpeakerIcon('トワ', TOWA_UNMASKED)
   }
@@ -751,8 +753,9 @@ export class ChronicleFutureStage implements Stage {
     // 時計台のてっぺんにトワ
     const top = TOWER.towa.pos
     this.showTowa(top, v(1.5, 0, 6), 'idle')
-    this.towa.setRim('#b08cff', 0.9)
-    void this.cine(rt, { look: top.clone().add(v(0, 1.1, 0)), from: v(1.6, 2.0, 1.0), hold: Infinity, inSec: 1.6, fov: 34, marker: { pos: top.clone().add(v(0, 2.3, 0)), label: '時計台' } })
+    this.towa.setRim('#b08cff', 1.0)
+    // 広場から、てっぺんのトワを見上げる（近いと屋上の縁にかくれるので、少し離れて寄る）
+    void this.cine(rt, { look: top.clone().add(v(0, 1.1, 0)), from: v(4.4, 1.8, 6.4), hold: Infinity, inSec: 1.6, fov: 22, marker: { pos: top.clone().add(v(0, 2.6, 0)), label: '時計台' } })
     await this.talk(rt, 'ch2_towa')
     // ランプを空へ → 空のひび → 黒い輪
     this.towa.setPose('raiseLamp')
@@ -1086,16 +1089,18 @@ export class ChronicleFutureStage implements Stage {
     await this.wait(0.4)
     await this.fade(false, 1.0)
     // てっぺんのトワ：塔の真下からだと屋上の床に隠れるので、南の広場の側から見上げる
-    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(5.2, 1.6, -4.0), hold: Infinity, inSec: 1.2, fov: 34, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
+    this.towa.setRim('#b08cff', 1.0)
+    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(6.0, 1.6, 6.0), hold: Infinity, inSec: 1.2, fov: 18, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.6, 0)), label: 'トワ' } })
     await this.wait(2.6)
     // のぼる道すじ：通りから西の壁を見上げて、金具 1〜4 と、金色に光る最初の金具を見せる
     this.ch.tower.setNextHook(0)
-    void this.cine(rt, { look: v(5.4, 9.5, -22.2), from: v(-1.8, 1.8, -27.5), hold: Infinity, inSec: 1.1, fov: 58, marker: { pos: TOWER.hooks[0].point.clone().add(v(0, 0.6, 0)), label: '金具' } })
+    // 通りの西から少し離れて見上げる（近いと、金具がひとつ上の足場の床にかくれる）
+    void this.cine(rt, { look: v(5.4, 6.2, -21.8), from: v(-5.0, 2.2, -20.0), hold: Infinity, inSec: 1.1, fov: 60, marker: { pos: TOWER.hooks[0].point.clone().add(v(0, 0.6, 0)), label: '金具' } })
     await this.talk(rt, 'ch4_climb')
     rt.endCinematic()
     // 見上げる（最初の金具が見えるように。下げすぎると、カメラが地面すれすれで壁に寄る）
     rt.camRig.yaw = faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz))
-    rt.camRig.pitch = -0.38
+    rt.camRig.pitch = -0.45
     this.lock(rt, false)
     // のぼる（黒い手が壁をなでる）。町の光は一段落として、塔の足場と金具を目立たせる
     this.fs.setAction(true)
@@ -1119,7 +1124,7 @@ export class ChronicleFutureStage implements Stage {
           // 足場に着いたら、次の金具の方を見上げる（方向キーで取り消せる）
           if (i >= 0 && i !== shown && rt.player.grounded) {
             shown = i
-            rt.camRig.turnTo(faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz)), -0.36)
+            rt.camRig.turnTo(faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz)), -0.52)
           }
         }
         return rt.player.position.y > TOWER.deckY - 0.5
@@ -1576,7 +1581,7 @@ export class ChronicleFutureStage implements Stage {
     this.showTowa(towaAt, rt.player.position, 'idle')
     rt.shake(0.4)
     // ネクマックスの左うしろから、ひびの前に浮かぶトワを見上げる（中庭の南の壁ぎわにカメラが押しこまれないように、位置を決める）
-    void this.cine(rt, { look: v(13.4, 2.4, -45.0), from: v(12.0, 1.7, -38.4), hold: Infinity, inSec: 1.2, fov: 54, marker: { pos: towaAt.clone().add(v(0, 2.4, 0)), label: 'トワ' } })
+    void this.cine(rt, { look: v(13.4, 2.4, -45.0), from: v(11.6, 2.3, -37.4), hold: Infinity, inSec: 1.2, fov: 54, marker: { pos: towaAt.clone().add(v(0, 2.4, 0)), label: 'トワ' } })
     await this.talk(rt, 'ch10_towa')
     rt.endCinematic()
     this.lock(rt, false)
@@ -1814,7 +1819,8 @@ export class ChronicleFutureStage implements Stage {
     await this.wait(0.3)
     await this.fade(false, 0.8)
     this.sky.start(1.3)
-    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.2, 0)), from: v(1.2, 1.6, 4.0), hold: Infinity, inSec: 1.2, fov: 40, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
+    this.towa.setRim('#b08cff', 1.0)
+    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.2, 0)), from: v(4.4, 1.8, 6.4), hold: Infinity, inSec: 1.2, fov: 26, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.6, 0)), label: 'トワ' } })
     await this.until(() => this.sky.done)
     await this.talk(rt, 'ch12_towa')
     rt.endCinematic()
@@ -1844,13 +1850,14 @@ export class ChronicleFutureStage implements Stage {
     if (this.part !== 'night') this.setPart('night', rt, true)
     this.fs.setAction(true)
     this.showTowa(TOWER.towa.pos, v(1.5, 0, 6), 'raiseLamp')
-    this.placeSora(v(-1.0, 0, 8.2), faceYaw(v(-1, 0, 8.2), v(TOWER.cx, 0, TOWER.cz)))
     this.lock(rt, true)
-    // ソラとならんで、時計台の上の大きなゆらぎを見上げる（2 人のうしろから。ゆらぎは画面の上に）
+    // ソラとならんで、時計台の上の大きなゆらぎを見上げる（2 人のうしろから。ゆらぎは画面の上に。
+    // ソラは街頭ビジョンの前ではなく、ネクマックスの右へ）
     await this.fade(true, 0.35)
     this.teleportSpawn(rt, 'night_plaza')
+    this.placeSora(v(2.4, 0, 7.0), faceYaw(v(2.4, 0, 7.0), v(TOWER.cx, 0, TOWER.cz)))
     this.ch.tower.setSkySeam(1)
-    void this.cine(rt, { look: v(1.93, 4.15, 0.91), from: v(2.2, 1.45, 12.6), hold: Infinity, inSec: 0.3, fov: 64 })
+    void this.cine(rt, { look: v(2.31, 4.2, 0.51), from: v(1.9, 1.5, 12.2), hold: Infinity, inSec: 0.3, fov: 64 })
     await this.fade(false, 0.35)
     await this.talk(rt, 'ch12_now')
     rt.endCinematic()

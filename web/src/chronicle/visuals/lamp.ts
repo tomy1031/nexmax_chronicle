@@ -54,7 +54,7 @@ void main() {
   vec3 rimC = mix(warmRim, darkRim, uDark);
   // 黒い火：中は黒く、ふちだけ紫に光る。明るい火：中が白っぽい金
   float a = body * mix(0.85, 1.0, uDark) * uK;
-  vec3 col = core * a + rimC * (rim * 1.3 + glow * mix(0.55, 0.3, uDark)) * uK;
+  vec3 col = core * a + rimC * (rim * mix(1.3, 0.78, uDark) + glow * mix(0.55, 0.18, uDark)) * uK;
   gl_FragColor = vec4(col, a);
 }
 `
@@ -175,7 +175,7 @@ export class Lamp {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4
       const x = Math.cos(a) * 0.066
       const z = Math.sin(a) * 0.066
-      ps.add(body, SHAPES.cyl, iron, T(x, -0.185, z, 0, 0, 0, 0.0045, 0.15, 0.0045))
+      ps.add(body, SHAPES.cyl, iron, T(x, -0.185, z, 0, 0, 0, 0.007, 0.15, 0.007))
     }
     ps.add(
       body,
@@ -335,19 +335,19 @@ export class Lamp {
           life: 1.6 + Math.random() * 1.0,
           size: (0.07 + Math.random() * 0.05) * s,
           grow: 3.4,
-          color: Math.random() < 0.3 ? '#4a2272' : '#22103a',
+          color: Math.random() < 0.3 ? '#302437' : '#191621',
           alpha: 0.7,
           gravity: 0.22,
           drag: 1.1,
           fadeIn: 0.2,
         })
         // 夜でも見えるように、うすい紫のもやを重ねる
-        if (Math.random() < 0.45) this.glow.emit(this.tmp, this.tv, { life: 1.8, size: 0.09 * s, grow: 3, color: '#6a3aa8', alpha: 0.16, gravity: 0.2, drag: 1.1, fadeIn: 0.25 })
+        if (Math.random() < 0.45) this.glow.emit(this.tmp, this.tv, { life: 1.8, size: 0.09 * s, grow: 3, color: '#6a3aa8', alpha: 0.08, gravity: 0.2, drag: 1.1, fadeIn: 0.25 })
         if (Math.random() < 0.18) this.glow.emit(this.tmp, this.tv.multiplyScalar(0.6), { life: 1.0, size: 0.02 * s, color: new THREE.Color('#b070ff').multiplyScalar(2), gravity: 0.1, drag: 1.5 })
       }
     }
     // 明るさ（火の明るさ・われたときの光）
-    let lvl = this.brokenFlag ? 0 : this.darkK > 0.5 ? 0.35 : 1.0
+    let lvl = this.brokenFlag ? 0 : this.darkK > 0.5 ? 0.18 : 1.0
     this.lightColor.copy(WARM).lerp(DARK_LIGHT, this.darkK)
     if (this.burstT >= 0) {
       this.burstT += dt
@@ -402,7 +402,7 @@ export class Lamp {
     if (this.light) {
       this.light.position.copy(c)
       this.light.color.copy(this.lightColor)
-      this.light.intensity = lvl * 1.2
+      this.light.intensity = lvl * THREE.MathUtils.lerp(0.45, 0.12, this.darkK)
     }
     this.smoke.update(dt)
     this.glow.update(dt)

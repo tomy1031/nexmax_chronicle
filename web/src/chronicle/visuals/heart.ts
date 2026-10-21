@@ -7,7 +7,7 @@
 import * as THREE from 'three'
 import { uTime } from '../../render/materials'
 import { merge, withHull } from '../../world/nexmax/geom'
-import { createToonMaterial, toonRamp } from './toon'
+import { createToonMaterial, toonRamp, createCutMarker } from './toon'
 import { Particles } from './particles'
 import { BILLBOARD_GLSL, NOISE_GLSL, VIEW_H, clamp01, disposeRoot, easeOut, seeded, unitQuad } from './common'
 import { VeinSet, heartBeat } from './logic'
@@ -91,33 +91,34 @@ function heartGeometry(rnd: () => number): THREE.BufferGeometry {
       z *= 0.95
     }
     // 左右のふくらみ（上の 2 つのこぶ）
-    const lobe = Math.max(0, y) * 0.18 * Math.cos(Math.atan2(z, x) * 2)
+    const lobe = Math.max(0, y) * 0.25 * Math.cos(Math.atan2(z, x) * 2)
     x *= 1 + lobe
     // ゆがみ（生きもののでこぼこ）
-    const wob = 1 + (Math.sin(x * 5 + rnd() * 0.01) * Math.sin(y * 4) * Math.sin(z * 6)) * 0.05
+    const wob = 1 + (Math.sin(x * 5 + rnd() * 0.01) * Math.sin(y * 4) * Math.sin(z * 6)) * 0.025
     p.setXYZ(i, x * wob, y * wob, z * wob)
   }
   body.rotateZ(0.32)
   body.rotateX(0.12)
   body.computeVertexNormals()
-  parts.push(color(body, '#1a0d1c'))
+  parts.push(color(body, '#382239'))
   // 心房（上のうしろの 2 つのふくらみ）
   for (const sx of [-1, 1]) {
-    const a = new THREE.SphereGeometry(0.55, 20, 14)
+    const a = new THREE.SphereGeometry(0.65, 20, 14)
     a.translate(sx * 0.55, 0.7, 0.25)
-    parts.push(color(a, '#200f22'))
+    parts.push(color(a, '#38283f'))
   }
   // 太い管（大動脈のアーチと 2 本の管）
   const arch = new THREE.TorusGeometry(0.42, 0.2, 10, 20, Math.PI)
   arch.rotateY(Math.PI / 2)
-  arch.translate(0.05, 1.0, 0.05)
+  arch.scale(1, 0.7, 1)
+  arch.translate(0.05, 0.95, 0.05)
   parts.push(color(arch, '#241226'))
   for (const [x, z, h, r] of [
-    [-0.35, -0.15, 0.8, 0.16],
-    [0.42, 0.3, 0.7, 0.14],
+    [-0.35, -0.15, 0.56, 0.16],
+    [0.42, 0.3, 0.49, 0.14],
   ] as const) {
     const c = new THREE.CylinderGeometry(r, r * 1.2, h, 12, 1, true)
-    c.translate(x, 1.1 + h * 0.3, z)
+    c.translate(x, 0.95 + h * 0.3, z)
     parts.push(color(c, '#241226'))
   }
   const withUv = parts.map((g) => {
@@ -129,7 +130,7 @@ function heartGeometry(rnd: () => number): THREE.BufferGeometry {
 
 /** 心臓の材質：トゥーン＋輪郭線（createToonMaterial）に、脈うつふくらみ・赤紫のひび・金のひび・吸う光を足す */
 function heartMaterial(u: { beat: THREE.IUniform; crack: THREE.IUniform; absorb: THREE.IUniform; dissolve: THREE.IUniform }): THREE.MeshToonMaterial {
-  const m = createToonMaterial({ line: '#2a0414', lineScale: 1.2, selfLight: 0.15, rim: '#c03a8a', rimK: 0.9 })
+  const m = createToonMaterial({ line: '#2a0414', lineScale: 1.2, selfLight: 0.15, rim: '#c03a8a', rimK: 0.38 })
   const base = m.onBeforeCompile
   m.onBeforeCompile = (s, r) => {
     base.call(m, s, r)
@@ -159,9 +160,9 @@ function heartMaterial(u: { beat: THREE.IUniform; crack: THREE.IUniform; absorb:
   float r1 = abs(cvNoise3(vObj * 2.2 + 1.7) - 0.5);
   float r2 = abs(cvNoise3(vObj * 4.6 + 9.1) - 0.5);
   float crackR = smoothstep(0.04, 0.0, r1) + smoothstep(0.025, 0.0, r2) * 0.6;
-  totalEmissiveRadiance += vec3(1.0, 0.12, 0.45) * crackR * (0.35 + uBeat * 1.6 + uAbsorb * 1.2);
+  totalEmissiveRadiance += vec3(1.0, 0.12, 0.45) * crackR * (0.12 + uBeat * 0.45 + uAbsorb * 0.35);
   // 吸った光（金がまじる）
-  totalEmissiveRadiance += vec3(1.2, 0.8, 0.3) * crackR * uAbsorb * 0.8;
+  totalEmissiveRadiance += vec3(1.2, 0.8, 0.3) * crackR * uAbsorb * 0.2;
   // 夜明けの金のひび（広がる）
   float r3 = abs(cvNoise3(vObj * 1.6 + 4.3) - 0.5);
   float gold = smoothstep(0.02 + uCrack * 0.09, 0.0, r3) * step(0.001, uCrack);
@@ -181,10 +182,10 @@ function veinMaterial(): THREE.MeshToonMaterial {
   m.onBeforeCompile = (s) => {
     s.uniforms.uTime = uTime
     s.vertexShader = s.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 aV;\nvarying vec3 vV;\nvarying vec3 vObj;')
+      .replace('#include <common>', '#include <common>\nattribute vec4 aV;\nvarying vec4 vV;\nvarying vec3 vObj;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vV = aV;\n  vObj = position;')
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec3 vV;\nvarying vec3 vObj;\n${NOISE_GLSL}`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec4 vV;\nvarying vec3 vObj;\n${NOISE_GLSL}`)
       .replace(
         'void main() {',
         `void main() {
@@ -195,14 +196,15 @@ function veinMaterial(): THREE.MeshToonMaterial {
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
   float cvRim = 1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
-  totalEmissiveRadiance += vec3(0.6, 0.15, 0.7) * pow(cvRim, 2.5) * 1.1;
+  totalEmissiveRadiance += vec3(0.6, 0.15, 0.7) * pow(cvRim, 2.5) * 0.45;
   // 心臓へ向かって流れる帯（u が小さい方へ）
   float u = vV.x;
   float ph = fract(u * 3.0 + uTime * (0.35 + vV.y * 1.8));
   float band = smoothstep(0.82, 0.95, ph) * smoothstep(1.0, 0.95, ph);
   vec3 idleC = vec3(0.6, 0.12, 0.55);
-  vec3 drinkC = vec3(1.6, 1.15, 0.45) * 1.6;
-  totalEmissiveRadiance += mix(idleC, drinkC, vV.y) * band * (0.45 + vV.y * 1.2);
+  vec3 drinkC = vec3(1.6, 1.15, 0.45) * 1.25;
+  float filament = smoothstep(0.6, 0.95, cos(vV.w * 6.283185));
+  totalEmissiveRadiance += mix(idleC, drinkC, vV.y) * band * (0.16 + vV.y * 0.5) * mix(1.0, filament, vV.y);
   float cvE = vV.z > 0.001 ? smoothstep(vV.z * 1.1 + 0.08, vV.z * 1.1 - 0.05, cvD) : 0.0;
   totalEmissiveRadiance += vec3(0.85, 0.45, 1.0) * cvE * 3.0;`,
       )
@@ -294,6 +296,13 @@ export class OrmHeart {
   private readonly streamP: { s: number; speed: number; vein: number; from: THREE.Vector3; enterU: number; off: THREE.Vector3; on: boolean }[] = []
   private streamEmit: { from: THREE.Vector3; until: number; vein: number } | null = null
   private time = 0
+  private readonly cutMarks: THREE.Mesh[] = []
+  private readonly sourceLight: THREE.Mesh
+  private readonly sourceMat: THREE.MeshBasicMaterial
+  private readonly arrival: THREE.Mesh
+  private readonly arrivalMat: THREE.MeshBasicMaterial
+  private sourceT = -1
+  private arrivalK = 0
   private readonly mats: THREE.Material[] = []
   private readonly geos: THREE.BufferGeometry[] = []
 
@@ -326,7 +335,7 @@ export class OrmHeart {
     const g = new THREE.BufferGeometry()
     this.vPos = new THREE.BufferAttribute(new Float32Array(nV * 3), 3).setUsage(THREE.DynamicDrawUsage)
     this.vNor = new THREE.BufferAttribute(new Float32Array(nV * 3), 3).setUsage(THREE.DynamicDrawUsage)
-    this.vAttr = new THREE.BufferAttribute(new Float32Array(nV * 3), 3).setUsage(THREE.DynamicDrawUsage)
+    this.vAttr = new THREE.BufferAttribute(new Float32Array(nV * 4), 4).setUsage(THREE.DynamicDrawUsage)
     g.setAttribute('position', this.vPos)
     g.setAttribute('normal', this.vNor)
     g.setAttribute('aV', this.vAttr)
@@ -392,6 +401,24 @@ export class OrmHeart {
         },
       })
     }
+    for (let i = 0; i < n; i++) {
+      const mark = createCutMarker((0.46 - 0.3 * VEIN_CUT_U + 0.06) * this.size, 0.12 * this.size)
+      this.cutMarks.push(mark)
+      parent.add(mark)
+    }
+    // 吸収の出発点は0.2秒で消灯、到着点だけを点灯させる。
+    this.sourceMat = new THREE.MeshBasicMaterial({ color: '#ffe6a2', transparent: true, depthWrite: false, toneMapped: false })
+    this.sourceLight = new THREE.Mesh(new THREE.SphereGeometry(0.13 * this.size, 12, 8), this.sourceMat)
+    this.sourceLight.name = 'absorbSource'
+    this.sourceLight.visible = false
+    parent.add(this.sourceLight)
+    this.arrivalMat = this.sourceMat.clone()
+    this.arrival = new THREE.Mesh(this.sourceLight.geometry, this.arrivalMat)
+    this.arrival.name = 'absorbArrival'
+    this.arrival.visible = false
+    parent.add(this.arrival)
+    this.geos.push(this.sourceLight.geometry)
+    this.mats.push(this.sourceMat, this.arrivalMat)
     // 粒・光・かけら・流れる光
     this.sparks = new Particles({ max: 500, shape: 'soft', additive: true, renderOrder: 5 })
     this.dust = new Particles({ max: 300, shape: 'smoke', additive: false, renderOrder: 4 })
@@ -461,8 +488,12 @@ export class OrmHeart {
         }
       })
     }
-    if (best < 0) return
-    this.streamEmit = { from: from.clone(), until: this.time + sec, vein: best }
+    if (best < 0 || best >= this.data.length || !this.state.alive(best) || this.shattered) return
+    // 新しい光源へ切り替えるときも、強く光る管は1本だけ。
+    this.streamP.forEach(p => { p.on = false })
+    this.streamEmit = { from: from.clone(), until: this.time + Math.max(0, sec), vein: best }
+    this.sourceLight.position.copy(from)
+    this.sourceT = 0
   }
 
   /** 夜明けの金のひび（0..1） */
@@ -488,6 +519,12 @@ export class OrmHeart {
 
   update(dt: number, t: number): void {
     this.time = t
+    if (this.sourceT >= 0) this.sourceT += dt
+    this.sourceLight.visible = this.sourceT >= 0 && this.sourceT < 0.2 && !this.shattered
+    this.sourceMat.opacity = Math.max(0, 1 - this.sourceT / 0.2)
+    this.arrivalK = Math.max(0, this.arrivalK - dt * 4)
+    this.arrivalMat.opacity = this.arrivalK
+    this.arrival.visible = this.arrivalK > 0.01 && !this.shattered
     this.root.updateMatrixWorld()
     this.center.setFromMatrixPosition(this.root.matrixWorld)
     // 脈（すじが減るほど、あせって速く）
@@ -545,6 +582,13 @@ export class OrmHeart {
   dispose(): void {
     this.sparks.dispose()
     this.dust.dispose()
+    this.sourceLight.removeFromParent()
+    this.arrival.removeFromParent()
+    for (const mark of this.cutMarks) {
+      mark.removeFromParent()
+      mark.geometry.dispose()
+      ;(mark.material as THREE.Material).dispose()
+    }
     this.veinMesh.removeFromParent()
     this.shards.removeFromParent()
     this.stream.removeFromParent()
@@ -559,6 +603,8 @@ export class OrmHeart {
     if (!this.state.cut(i, this.time)) return
     const d = this.data[i]
     d.cutT = 0
+    this.cutMarks[i].visible = false
+    if (this.streamEmit?.vein === i) this.streamEmit = null
     const at = d.pos.clone()
     this.sparks.burst(36, at, 5, { life: 0.6, size: 0.14, color: new THREE.Color('#e8f4ff').multiplyScalar(2.2), drag: 3.5 }, 0, 0.3)
     this.sparks.burst(24, at, 2, { life: 1.2, size: 0.12, color: new THREE.Color('#b070ff').multiplyScalar(1.8), drag: 1.5, gravity: -0.3 })
@@ -598,7 +644,7 @@ export class OrmHeart {
       c2.copy(d.end).addScaledVector(dir, -L * 0.3).addScaledVector(d.bend, L * 0.12)
       // 裂かれたあと：根もと側は心臓へちぢむ
       const retract = alive ? 0 : Math.min(0.85, d.cutT * 0.9)
-      const absorb = this.streamEmit && this.streamEmit.vein === d.index ? this.absorbK : this.absorbK * 0.15
+      const absorb = this.streamEmit && this.streamEmit.vein === d.index ? this.absorbK : 0
       d.absorb = absorb
       for (let r = 0; r < VR; r++) {
         let u = r / (VR - 1)
@@ -619,6 +665,10 @@ export class OrmHeart {
       // 裂く的：先から 3 割ほど心臓側
       const ci = Math.round(VEIN_CUT_U * (VR - 1))
       if (alive) d.pos.copy(d.pts[ci])
+      const mark = this.cutMarks[d.index]
+      mark.visible = alive && dissolve < 0.01
+      mark.position.copy(d.pos)
+      mark.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), a.subVectors(d.pts[Math.min(VR - 1, ci + 1)], d.pts[Math.max(0, ci - 1)]).normalize())
       // 管
       T.subVectors(d.pts[1], d.pts[0]).normalize()
       N.set(0, 1, 0)
@@ -667,9 +717,10 @@ export class OrmHeart {
           nor[vi * 3] = nx
           nor[vi * 3 + 1] = ny
           nor[vi * 3 + 2] = nz
-          att[vi * 3] = u
-          att[vi * 3 + 1] = absorb
-          att[vi * 3 + 2] = fade
+          att[vi * 4] = u
+          att[vi * 4 + 1] = absorb
+          att[vi * 4 + 2] = fade
+          att[vi * 4 + 3] = k / VRAD
         }
       }
     }
@@ -691,7 +742,7 @@ export class OrmHeart {
         p.s = 0
         p.speed = 0.55 + Math.random() * 0.3
         p.vein = e.vein
-        p.from.copy(e.from).add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.3))
+        p.from.copy(e.from).add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.1))
         // すじのいちばん近い所から入る
         const d = this.data[e.vein]
         let bu = 1
@@ -704,7 +755,7 @@ export class OrmHeart {
           }
         }
         p.enterU = bu
-        p.off.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.18)
+        p.off.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.06)
         made++
       }
     }
@@ -717,6 +768,10 @@ export class OrmHeart {
         return
       }
       p.s += dt * p.speed
+      if (p.s >= 1 && this.state.alive(p.vein)) {
+        this.arrivalK = 1
+        this.arrival.position.copy(this.data[p.vein].start)
+      }
       if (p.s >= 1 || !this.state.alive(p.vein)) {
         p.on = false
         al[i] = 0

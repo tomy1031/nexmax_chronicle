@@ -4,6 +4,7 @@
 //   act=名前              はじめに 1 回うごかす（view ごとの動き。画面右上のボタンと同じ）
 //   at=秒                 その秒まで進めてから止める（撮影用。t も固定）
 //   walk=1                people：その場で歩く / pose=… people：全員のポーズ / only=preset 1 人だけ大きく
+//   blade=whole|broken|none  people：刃の状態（折れ口の撮影にも）
 //   night=1|0             夜（既定は view ごと）
 //   cam=x,y,z&look=x,y,z&fov=度    好きな位置から
 //   quality=low|medium|high / nohud
@@ -16,6 +17,7 @@ import { uTime } from '../../render/materials'
 import { createSkyDome, createSkyEnvironment, EDO_SKY, type SkyPalette } from '../../render/sky'
 import { setOutlineViewport } from '../../world/nexmax/materials'
 import { createNexmax } from '../../world/nexmax/nexmaxModel'
+import { Lamp } from './lamp'
 import { createPerson, createBed, type PersonCharacter, type PersonPose, type PersonPreset } from './person'
 
 const urlp = new URLSearchParams(location.search)
@@ -59,9 +61,12 @@ export type View = {
 
 type ViewFactory = (c: ViewCtx) => View | Promise<View>
 
-const VIEWS: Record<string, ViewFactory> = {
-  people: peopleView,
-}
+// 遅延viewからの循環importがViteの別URLで評価されても、登録先と起動を共有する。
+const previewState = (window as Window & { __cvState?: { views: Record<string, ViewFactory>; started: boolean } })
+const state = previewState.__cvState ??= { views: {}, started: false }
+const VIEWS = state.views
+VIEWS.people = peopleView
+VIEWS.lineup = lineupView
 
 /** あとから足す view（lamp・hands など）を登録する */
 export function registerView(name: string, f: ViewFactory): void {
@@ -112,30 +117,40 @@ function peopleView(c: ViewCtx): View {
     add('khmerVillager', 5.2, 'wave', { variant: 3, female: true })
     add('ofuji', 6.2, 'crank')
   }
+  const lamps: Lamp[] = []
   let bed: ReturnType<typeof createBed> | null = null
   for (const e of list) {
     c.root.add(e.p.root)
     e.p.root.position.set(e.x, 0, e.z ?? 0)
     e.p.setPose(forcePose ?? e.pose)
+    if (e.p.preset === 'towa' && e.mask !== false) {
+      const lamp = new Lamp(c.root, { scale: 1.3, light: true })
+      e.p.holdLamp(lamp)
+      lamps.push(lamp)
+    }
     if (e.mask === false) e.p.setMask(false)
     if (e.expr) e.p.setExpression(e.expr as never)
-    if (e.blade) e.p.setBlade(e.blade as never)
+    const blade = e.blade ?? urlp.get('blade')
+    if (blade) e.p.setBlade(blade as never)
     if (e.p.preset === 'towaMother' && (forcePose ?? e.pose) === 'sitBed') {
       bed = createBed()
       bed.root.position.set(e.x, 0, (e.z ?? 0) + 0.0)
       c.root.add(bed.root)
       e.p.root.position.copy(bed.hipSpot).add(bed.root.position)
+      e.p.setExpression('sad')
+      e.p.lookAt(v3(e.x - 1.2, 1.15, -0.4))
     }
     c.tag(e.p.root.position.clone().setY(e.p.root.position.y + e.p.headTop + 0.12), e.name)
   }
   const nx = createNexmax(1.05)
   nx.root.position.set(only ? -1.1 : 7.2, 0, 0)
   if (!only) c.root.add(nx.root)
-  const cam = only ? { pos: v3(0.2, 1.15, -3.6), look: v3(0, 0.95, 0), fov: 38 } : { pos: v3(0.6, 1.6, -9.6), look: v3(0.6, 0.85, 0), fov: 46 }
+  const cam = only ? { pos: v3(0.2, 1.15, -3.6), look: v3(0, 0.95, 0), fov: 38 } : { pos: v3(0.6, 1.9, -15), look: v3(0.6, 0.85, 0), fov: 46 }
   return {
     label: `人の形：${list.map((e) => e.name).join('・')}`,
     cam,
-    update(dt) {
+    update(dt, t) {
+      lamps.forEach(lamp => lamp.update(dt, t))
       for (const e of list) e.p.update(dt, walk ? 1.4 : 0)
       nx.update(dt, 0)
       void bed
@@ -145,6 +160,45 @@ function peopleView(c: ViewCtx): View {
       mask: () => list.forEach((e) => e.p.setMask(!e.p.masked)),
       laugh: () => list.forEach((e) => e.p.setPose('laugh')),
     },
+  }
+}
+
+/** 同じ足元・同じ奥行き・同じ画面内身長で材質と輪郭を比べる。distance=game で実プレイ距離。 */
+function lineupView(c: ViewCtx): View {
+  const presets: PersonPreset[] = ['towa', 'towaChild', 'towaMother', 'chanda', 'khmerElder', 'ofuji', 'khmerVillager']
+  const selected = urlp.get('only') as PersonPreset | null
+  const people = (selected ? [selected] : presets).map((preset, i) => {
+    const p = createPerson(preset, { height: 1.5 })
+    p.setPose('idle')
+    p.update(1, 0)
+    p.root.position.x = selected ? 0.55 : (i - 2.5) * 0.82
+    c.root.add(p.root)
+    c.tag(v3(p.root.position.x, 1.9, 0), NAMES[preset])
+    return p
+  })
+  const nx = createNexmax(1.5)
+  nx.root.position.x = selected ? -0.55 : -3.1
+  c.root.add(nx.root)
+  c.tag(v3(nx.root.position.x, 1.9, 0), 'ネクマックス')
+  // 髪飾りを含む外形の高さも揃え、照明と材質を等条件で見る。
+  for (const p of people) {
+    const bounds = new THREE.Box3()
+    p.root.updateMatrixWorld(true)
+    // 杖や手に持つ物の端を足元と誤認しないよう、人物の結合メッシュだけで測る。
+    p.root.traverse(o => {
+      if (!(o instanceof THREE.Mesh) || o.name !== p.preset) return
+      o.geometry.computeBoundingBox()
+      if (o.geometry.boundingBox) bounds.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld))
+    })
+    const k = 1.5 / (bounds.max.y - bounds.min.y)
+    p.root.scale.setScalar(k)
+    p.root.position.y = -bounds.min.y * k
+  }
+  const game = urlp.get('distance') === 'game'
+  return {
+    label: '人物とネクマックス：同じ照明・奥行き・外形の高さ（1.5m） / distance=game',
+    cam: { pos: v3(0, 1.5, game ? -11 : selected ? -3.8 : -8.5), look: v3(0, 0.85, 0), fov: 42 },
+    update(dt) { people.forEach(p => p.update(dt, 0)); nx.update(dt, 0) },
   }
 }
 
@@ -313,6 +367,34 @@ async function main(): Promise<void> {
     step: (sec: number) => {
       for (let k = 0; k < sec; k += 1 / 30) step(1 / 30)
     },
+    /** 本体だけを小さい描画先へ実描画する（影・後処理を除く）。持っている小道具も含める。 */
+    personStats: () => {
+      const result: { preset: string; calls: number; triangles: number }[] = []
+      const target = new THREE.WebGLRenderTarget(8, 8)
+      const previousTarget = renderer.getRenderTarget()
+      const shadows = renderer.shadowMap.enabled
+      const measure = new THREE.Scene()
+      measure.add(rig.sun.clone(), rig.hemi.clone())
+      renderer.shadowMap.enabled = false
+      renderer.setRenderTarget(target)
+      try {
+        for (const person of root.children) {
+          if (!(person.name in NAMES)) continue
+          const copy = person.clone()
+          copy.traverse(o => { o.frustumCulled = false })
+          measure.add(copy)
+          renderer.info.reset()
+          renderer.render(measure, camera)
+          result.push({ preset: person.name, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles })
+          measure.remove(copy)
+        }
+      } finally {
+        renderer.setRenderTarget(previousTarget)
+        renderer.shadowMap.enabled = shadows
+        target.dispose()
+      }
+      return result
+    },
     stats: () => ({ ...stats, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, programs: renderer.info.programs?.length ?? 0 }),
   }
   let frames = 0
@@ -332,8 +414,14 @@ async function main(): Promise<void> {
       t.el.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`
       t.el.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`
     }
-    if (++frames === 3) window.__cvReady = true
+    if (++frames === 3) {
+      window.__cvReady = true
+      if (at !== null) renderer.setAnimationLoop(null)
+    }
   })
 }
 
-void main()
+if (!state.started) {
+  state.started = true
+  void main()
+}

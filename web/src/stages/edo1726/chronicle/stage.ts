@@ -312,7 +312,7 @@ export class ChronicleEdoStage implements Stage {
     void this.walk('oharu', [OHARU_CHASE[1]], 0.7, DOLL_PATH[2])
     // 路地を下りてくる人形を、ネクマックスの右うしろから見る（ほこらの石灯籠より手前に置く）
     const p = rt.player.position
-    const from = v(Math.min(-9.9, Math.max(-11.9, p.x + 0.9)), 1.75, Math.min(24.3, p.z + 1.9))
+    const from = v(Math.min(-9.75, Math.max(-11.9, p.x + 1.1)), 1.95, Math.min(24.3, p.z + 1.9))
     void rt.cinematic({ look: this.tea.position, from, hold: 3.2, inSec: 1.0, outSec: 1.0, fov: 44 })
     await rt.dialogue(lines.lines('doll_comes'))
   }

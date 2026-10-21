@@ -8,8 +8,8 @@ import type { Physics } from './physics'
 import { createLookState, stepLook, type Axis2 } from './inputActions'
 
 export const CAMERA_TUNING = {
-  /** カメラの高さ角（rad）。小さいほど低い位置から見上げる */
-  pitchMin: -0.55,
+  /** カメラの高さ角（rad）。小さいほど低い位置から見上げる（高い所の金具も照準に入るように、深めに見上げられる） */
+  pitchMin: -0.8,
   pitchMax: 1.2,
   mouseSensitivity: 0.0024,
 }

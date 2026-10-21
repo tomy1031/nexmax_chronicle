@@ -28,6 +28,8 @@ export type ChronoTarget = {
   range?: number
   /** 遮蔽を調べない（空の大きな物など） */
   noLineOfSight?: boolean
+  /** いま効かせてよいか（動いていない物を止めて「止める」をむだにしないように。省略でいつでも） */
+  canAct?(): boolean
   /** 時空裂きのクローで J（freeze：止まった／seam：切れ目がひらく／ura：裂いた） */
   onAct(): void
   /** freeze：時間が戻った */
@@ -256,7 +258,7 @@ export class ChronoSystem {
 
   private syncDef(t: ChronoTarget, def: ClawTargetDef): void {
     // freeze・seam は時空裂きを持ってから狙える。ura はいつでも狙える（持っていなければ、すりぬける）。止めている物は狙わない
-    def.enabled = t.enabled && (t.kind === 'ura' || this.unlocked) && this.frozen?.id !== t.id
+    def.enabled = t.enabled && (t.canAct?.() ?? true) && (t.kind === 'ura' || this.unlocked) && this.frozen?.id !== t.id
     def.label = t.label
   }
 }

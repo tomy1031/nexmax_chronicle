@@ -141,6 +141,36 @@ export function additive(color: THREE.ColorRepresentation, opacity = 1, map?: TH
   })
 }
 
+/**
+ * ゆらぎ（裂ける所）の縦のすじ：ゆれる白青の線とまわりのにじみ（加算）。uK（0..1）で見え方。
+ * 中庭の練習（nextmakeSite）と、12 章の時計台の上の大きなゆらぎで使う。color は芯の色（1 を超えてよい）。
+ * billboard=true なら板がいつもカメラの方を向く（遠くの空に出すとき。板の大きさは形の寸法のまま）
+ */
+export function createSeamMaterial(color: THREE.Color = new THREE.Color(0.75, 1.1, 1.6), gain = 1.6, billboard = false): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: billboard
+      ? /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0); mv.xy += position.xy; gl_Position = projectionMatrix * mv; }`
+      : /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime; uniform float uK; uniform vec3 uColor; uniform float uGain; varying vec2 vUv;
+      void main() {
+        float x = vUv.x - 0.5 + sin(vUv.y * 9.0 + uTime * 2.2) * 0.06 + sin(vUv.y * 23.0 - uTime * 3.1) * 0.025;
+        float line = smoothstep(0.08, 0.0, abs(x));
+        float halo = smoothstep(0.5, 0.0, abs(x)) * 0.25;
+        float ends = smoothstep(0.0, 0.25, vUv.y) * smoothstep(1.0, 0.75, vUv.y);
+        float flick = 0.75 + 0.25 * sin(uTime * 7.0 + vUv.y * 5.0);
+        float a = (line + halo) * ends * flick * uK;
+        gl_FragColor = vec4(uColor * a * uGain, a);
+      }`,
+    uniforms: { uTime, uK: { value: 0.8 }, uColor: { value: color }, uGain: { value: gain } },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    fog: false,
+  })
+}
+
 /** 透明なガラス（入口の屋根・ほこらの窓など）。モジュールで 1 つを使い回す（Batch で結合できる） */
 let clearGlassMat: THREE.MeshStandardMaterial | null = null
 export function clearGlass(): THREE.MeshStandardMaterial {

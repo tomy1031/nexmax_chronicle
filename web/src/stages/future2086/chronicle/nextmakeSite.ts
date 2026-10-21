@@ -15,7 +15,7 @@ import { building } from '../buildings2086'
 import { NEON, chochin, fbox, vine, type FCtx } from '../kit2086'
 import type { FutureScene } from '../scene'
 import { SITE } from './layoutChronicle'
-import { additive, canvasTexture, createGhostMaterial, finishCtx, font, makeCtx, newColliders, softDotTexture } from './kitChronicle'
+import { additive, canvasTexture, createGhostMaterial, createSeamMaterial, finishCtx, font, makeCtx, newColliders, softDotTexture } from './kitChronicle'
 import { buildShrine, type ShrineParts } from './shrine'
 import type { Mover, SwitchColliders } from './switchColliders'
 
@@ -362,6 +362,8 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
   // ================================================================== ほこらを守った歴史：古い建物と中庭
   const colC = newColliders()
   const cc = makeCtx(fs, gC, quality, 1726, colC)
+  // 中庭の明かり（fs.lights に足した分。あとで提灯の色を落ち着かせ、ビルの歴史のときは消す）
+  const courtLight0 = fs.lights.length
   oldWing(cc, S.oldEast, 'w')
   oldWing(cc, S.oldNorth, 's')
   // 古い建物の看板（東の棟の屋上の縁。通りからも見える）
@@ -388,7 +390,7 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
     const t = i / 8
     const x = 7.6 + (11.2 - 7.6) * t + Math.sin(i * 1.7) * 0.25
     const z = -39.2 + (-45.0 + 39.2) * t
-    cc.b.add(new THREE.CylinderGeometry(0.42, 0.46, 0.08, 9), cc.m.stoneWall, M(x + 0.4 * t, 0.04, z, 0, i, 0, 1, 1, 0.8), { tint: '#c4beb2', uv: 'scale', uvScale: [0.6, 0.6] })
+    cc.b.add(new THREE.CylinderGeometry(0.42, 0.46, 0.08, 9), cc.m.stoneWall, M(x + 0.4 * t, 0.04, z, 0, i, 0, 1, 1, 0.8), { tint: '#eee3c7', uv: 'scale', uvScale: [0.6, 0.6] })
   }
   // 塀（通りの側。門のところは空ける）と門
   dobei(cc, S.x0 + 0.27, S.yard.z0, S.x0 + 0.27, S.gate.z0)
@@ -506,11 +508,12 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
   cc.foliage.cherry(S.tree.x, 0, S.tree.z, 0.95, 77)
   cc.b.add(new THREE.CylinderGeometry(1.2, 1.3, 0.3, 20), cc.m.stoneWall, M(S.tree.x, 0.15, S.tree.z), { tint: '#b8b1a3', uv: 'scale', uvScale: [2, 0.3] })
   cc.col.box(S.tree.x, 0.3, S.tree.z, 0.6, 0.6, 0.6)
+  // 植え込み（南の塀ぎわの 2 つは、決闘のはじめのカメラの前に来ないように、ベンチの左右へ）
   for (const [x, z] of [
     [7.6, -38.2],
     [7.6, -49.0],
-    [16.0, -37.2],
-    [13.4, -37.2],
+    [16.4, -37.1],
+    [10.9, -37.1],
   ] as const)
     cc.foliage.bush(x, 0, z, 0.7, Math.round(x * 13 - z), 1.0)
   {
@@ -581,26 +584,7 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
   let gearSnap: number | null = null
 
   // ---- ゆらぎ（縦のすじ）と裏側の足場
-  const seamMat = new THREE.ShaderMaterial({
-    vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */ `
-      uniform float uTime; uniform float uK; varying vec2 vUv;
-      void main() {
-        float x = vUv.x - 0.5 + sin(vUv.y * 9.0 + uTime * 2.2) * 0.06 + sin(vUv.y * 23.0 - uTime * 3.1) * 0.025;
-        float line = smoothstep(0.08, 0.0, abs(x));
-        float halo = smoothstep(0.5, 0.0, abs(x)) * 0.25;
-        float ends = smoothstep(0.0, 0.25, vUv.y) * smoothstep(1.0, 0.75, vUv.y);
-        float flick = 0.75 + 0.25 * sin(uTime * 7.0 + vUv.y * 5.0);
-        float a = (line + halo) * ends * flick * uK;
-        gl_FragColor = vec4(vec3(0.75, 1.1, 1.6) * a * 1.6, a);
-      }`,
-    uniforms: { uTime, uK: { value: 0.8 } },
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    fog: false,
-  })
+  const seamMat = createSeamMaterial()
   const seam = new THREE.Group()
   for (const ry of [0, Math.PI / 2]) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 2.6), seamMat)
@@ -653,6 +637,19 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
   const toolVel = v(0, 0, 0)
   const toolPoint = tool.position.clone()
 
+  // 提灯の点光源は、赤い照り返しで壁と石畳が赤くならないように、やわらかい電球色で弱く（提灯の表面の色はそのまま）。
+  // ほこらの小さな灯り（暖色）はそのまま。門からほこらへの道に、淡い青の補助の光（暖色のほこらと道を分ける）
+  const courtLights = fs.lights.slice(courtLight0)
+  for (const l of courtLights) {
+    if (l.dist === 8 && (l.color === '#ff7a48' || l.color === '#ffb466')) {
+      l.color = '#ffe1b3'
+      l.intensity *= 0.55
+    }
+  }
+  const fill = { pos: v(12, 2.6, -43), color: '#bad9ff', intensity: 1.2, dist: 10 }
+  fs.lights.push(fill)
+  courtLights.push(fill)
+  const courtBase = courtLights.map((l) => l.intensity)
   finishCtx(cc, gC, 'site_courtyard')
   colliders.addSet('site_courtyard', colC, false)
 
@@ -667,6 +664,8 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
     colliders.setEnabled('site_courtyard', vv === 'courtyard')
     for (const m of toothMovers) m.enabled = vv === 'courtyard'
     if (vv !== 'courtyard') colliders.setEnabled('site_ura', false)
+    // 中庭の明かりは中庭があるときだけ（強さ 0 の明かりはシェルが割り当てない）
+    courtLights.forEach((l, i) => (l.intensity = vv === 'courtyard' ? courtBase[i] : 0))
   }
   apply('building')
   const ghostMat = createGhostMaterial()

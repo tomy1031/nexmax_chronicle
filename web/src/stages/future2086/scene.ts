@@ -75,6 +75,10 @@ export type FutureScene = {
   materials: FutureMaterials
   update(dt: number, t: number): void
   setTimeOfDay(mode: TimeOfDay): void
+  /** アクションの間、夜の祭りの光を一段落とす（fmaterials の setAction） */
+  setAction(on: boolean): void
+  /** 星を出す・消す（夕方は夜の素材でも星は出さない） */
+  setStars(on: boolean): void
   setOrum(s: OrumState): void
   /** IDO の展示画面を裂け目へ（0..1） */
   openRift(v: number): void
@@ -303,6 +307,12 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
         debris.setActive(false)
         booth.setRift(0)
       }
+    },
+    setAction(on: boolean) {
+      fm.setAction(on)
+    },
+    setStars(on: boolean) {
+      stars.visible = on
     },
     setOrum(s: OrumState) {
       if (s.show !== undefined) orum.setShow(s.show)

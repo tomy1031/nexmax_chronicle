@@ -30,6 +30,8 @@ type DollState = 'idle' | 'chime' | 'possessing' | 'stepdown' | 'stand' | 'walk'
 const NORMAL_SCALE = 0.86
 /** 顔の前の補助灯の強さ（のりうつっているとき） */
 const FACE_LIGHT = 4
+/** カメラの側からの明かりの強さ（体の色に足す割合） */
+const CAMERA_FILL = 0.22
 /** 弱点の歯車の真ちゅうの色 */
 const GEAR_BRASS = new THREE.Color('#c28f42')
 const POSSESSED_SCALE = 1.1
@@ -342,14 +344,37 @@ type Mats = {
   gears: THREE.MeshStandardMaterial[]
 }
 
-function dollMaterials(lib: MaterialLibrary): Mats {
+/**
+ * カメラの側から当てる暖色の明かり（点光源を使わない、材質の中の明かり）。
+ * 夜のボス戦で、点光源の数が少ない画質でも顔・手・衣装の色が読めるように、カメラに向いた面ほど体の色を足す
+ */
+function addCameraFill(m: THREE.MeshStandardMaterial, fill: { value: number }): void {
+  m.onBeforeCompile = (s) => {
+    s.uniforms.uDollFill = fill
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uDollFill;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.9, 0.78) * uDollFill * (0.3 + 0.7 * max(normal.z, 0.0));`,
+      )
+  }
+  m.customProgramCacheKey = () => 'edo7-doll-fill'
+}
+
+function dollMaterials(lib: MaterialLibrary, fill: { value: number }): Mats {
   const crack = crackTexture()
-  const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ vertexColors: true, emissiveMap: crack, emissive: new THREE.Color(0, 0, 0), ...p })
+  const std = (p: THREE.MeshStandardMaterialParameters) => {
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, emissiveMap: crack, emissive: new THREE.Color(0, 0, 0), ...p })
+    addCameraFill(m, fill)
+    return m
+  }
   const fromLib = (m: THREE.Material) => {
     const c = (m as THREE.MeshStandardMaterial).clone()
     c.emissiveMap = crack
     c.emissive = new THREE.Color(0, 0, 0)
     c.emissiveIntensity = 1
+    addCameraFill(c, fill)
     return c
   }
   return {
@@ -415,6 +440,8 @@ export class TimeBellDoll {
   rage = 1
   /** 顔の前を照らす暖色の補助灯（町の点光源の候補。のりうつっている間だけ点く。人形について動く） */
   readonly faceLight: LightSpot = { pos: new THREE.Vector3(), color: '#ffe0b5', intensity: 0, dist: 16 }
+  /** カメラの側からの暖色の明かり（材質の中。のりうつっている間だけ） */
+  private readonly fill = { value: 0 }
 
   private readonly mats: Mats
   private readonly body = new THREE.Group()
@@ -467,7 +494,7 @@ export class TimeBellDoll {
    * mistCount：もやの粒の数（画質で減らす）
    */
   constructor(c: Ctx, pos: THREE.Vector3, yaw: number, mistCount = 220) {
-    this.mats = dollMaterials(c.m)
+    this.mats = dollMaterials(c.m, this.fill)
     this.mist = new DollMist(mistCount)
     c.lights.push(this.faceLight)
     this.dialHand = this.buildPedestal(c, pos, yaw)
@@ -1129,6 +1156,7 @@ export class TimeBellDoll {
       const ahead = 3.4 * this.scale
       this.faceLight.pos.set(this.root.position.x - Math.sin(yaw) * ahead, this.root.position.y + this.height * 0.6, this.root.position.z - Math.cos(yaw) * ahead)
       this.faceLight.intensity = FACE_LIGHT * pk
+      this.fill.value = CAMERA_FILL * pk
     }
     for (const e of this.eyes) e.visible = pk > 0.3
     for (const d of this.eyeDots) d.visible = pk <= 0.3

@@ -51,7 +51,8 @@ const BENCH_FRONT = v(-16.6, 0.06, 16.0)
 /** 実演のときの源兵衛（からくりのうでのそば） */
 const GENBEI_ARM = v(-15.25, 0.06, 18.55)
 /** 夜：おはるが見守る所（広場の北東のすみ）・ボス戦のやり直しの所 */
-const OHARU_PLAZA = v(-15.4, 0.03, 23.4)
+/** 広場でのおはるの立ち位置：裏口の東のわき（ネクマックスの肩ごしに人形を見る線に入らない） */
+const OHARU_PLAZA = v(-13.7, 0.03, 24.5)
 const PLAZA_ENTRY = v(-16.0, 0.03, 24.2)
 /** からくりの箱（朝まで工房の床。クローで運ぶ） */
 const BOX_HOME = v(-13.65, 0.06, 18.25)
@@ -110,6 +111,9 @@ export class ChronicleEdoStage implements Stage {
   private ringOpen = false
   private clawOnHand = false
   private stepT = 0
+  /** カメラのうでの長さ（シェルの既定。工房の中で縮めたら、外で戻す） */
+  private camDist0 = 0
+  private camShort = false
   private readonly tmp = new THREE.Vector3()
   private readonly tmp2 = new THREE.Vector3()
   private readonly marks: ObjectiveMark[] = []
@@ -164,6 +168,7 @@ export class ChronicleEdoStage implements Stage {
 
   begin(rt: StageRuntime): void {
     this.rt = rt
+    this.camDist0 = rt.camRig.distance
     this.curtain = new Curtain(rt.renderer.domElement.ownerDocument.getElementById('ui') ?? document.body)
     this.wave = new ResonanceWave(rt.renderer.domElement.ownerDocument.getElementById('ui') ?? document.body)
     this.sky = this.w.createSky({ renderer: rt.renderer, scene: rt.scene, sky: rt.sky, sun: rt.sun, post: rt.post })
@@ -370,7 +375,12 @@ export class ChronicleEdoStage implements Stage {
     void this.walk('oharu', [DOOR_IN.clone().add(v(0.8, 0, 0.2)), WORKSHOP_SPOTS.oharu], 2.0, v(-16.4, 0, 18.6))
     this.place('genbei', WORKSHOP_SPOTS.genbei, rt.player.position, 'idle')
     this.look.genbei = rt.player.position
+    // 戸口の内側の東から：作業台の源兵衛と、入ってきたネクマックス・おはるを一画面に
+    const p = rt.player.position
+    const g = this.genbei.root.position
+    void rt.cinematic({ look: v((p.x + g.x) / 2, 1.05, (p.z + g.z) / 2), from: v(-13.9, 1.85, 15.0), hold: Infinity, inSec: 1.0, fov: 50, arc: 0 })
     await rt.dialogue(lines.lines('workshop_enter'))
+    rt.endCinematic()
     this.look.genbei = null
     this.genbeiPose = 'crank'
   }
@@ -524,6 +534,13 @@ export class ChronicleEdoStage implements Stage {
     d.setGearHighlight(0)
     await rt.dialogue(lines.lines('boss_intro'))
     rt.endCinematic()
+    // 戻ったカメラは、ネクマックスの肩ごしに人形を正面に見る（広場の入口の向きのままだと、人形が画面のはしに切れる）
+    {
+      const p = rt.player.position
+      const dp = d.position
+      rt.player.turnToward(dp.x - p.x, dp.z - p.z, 1, 1)
+      rt.camRig.turnTo(Math.atan2(p.x - dp.x, p.z - dp.z), 0.22)
+    }
     // 戦いのはじまり
     this.sub.boss = 'fight'
     this.sub.nextGear = this.gears.next
@@ -815,7 +832,10 @@ export class ChronicleEdoStage implements Stage {
     this.place('genbei', front.clone().add(v(0.3, 0, -1.8)), sh.boxWorld(), 'idle')
     this.place('oharu', front.clone().add(v(0.4, 0, 1.8)), sh.boxWorld(), 'idle')
     const bw = sh.boxWorld()
-    void rt.cinematic({ look: bw, from: bw.clone().add(v(3.6, 0.85, -0.4)), hold: Infinity, inSec: 1.2, panSec: 18, fov: 46, marker: { pos: bw.clone().add(v(0, 0.3, 0)), label: '時計じかけの錠前', color: '#ffd447' } })
+    // 見る点は格子戸のすぐ前（ほこらは東向き）。箱そのものはほこらの当たり判定の中にあるので、
+    // そこを見る点にすると、演出のカメラの壁よけが格子戸の前までカメラを引きよせてしまう
+    const doorFront = bw.clone().add(v(0.75, 0, 0))
+    void rt.cinematic({ look: doorFront, from: bw.clone().add(v(3.6, 0.85, -0.4)), hold: Infinity, inSec: 1.2, panSec: 18, fov: 46, marker: { pos: bw.clone().add(v(0, 0.3, 0)), label: '時計じかけの錠前', color: '#ffd447' } })
     await this.clock.wait(0.6)
     sh.placeBox(true)
     sh.box.contents.add(this.clawProp.root)
@@ -930,6 +950,7 @@ export class ChronicleEdoStage implements Stage {
       this.sky.dawn(this.dawnAnim)
     }
     rt.combat.passive = this.busy || rt.talking || rt.inCinematic
+    this.keepCameraInWorkshop(rt)
     // 人物の向き
     for (const who of ['genbei', 'oharu'] as const) {
       const c = this.ch(who)
@@ -937,6 +958,28 @@ export class ChronicleEdoStage implements Stage {
       const target = this.look[who] ?? (dist2(c.root.position, p) < 4.5 && !(who === 'genbei' && this.genbeiPose === 'crank') ? p : null)
       if (target) this.walker.turnToward(c, target, dt, 4)
     }
+  }
+
+  /**
+   * 工房の中では、カメラが表の戸口から外へ出ないよう、うでの長さを縮める。
+   * 表は戸口だけ当たり判定が無いので、まっすぐ入ると、カメラが外から暖簾と格子ごしに見てしまう（中の人が見えない）
+   */
+  private keepCameraInWorkshop(rt: StageRuntime): void {
+    const rig = rt.camRig
+    const p = rt.player.position
+    if (!this.w.workshop.inside(p)) {
+      if (this.camShort) {
+        rig.distance = this.camDist0
+        this.camShort = false
+      }
+      return
+    }
+    // カメラの位置 = 足もと + 上 0.95 + 向き × 長さ。向きの z が北（-）のとき、表の内側（z0 + 0.45）でとめる
+    const dz = Math.cos(rig.yaw) * Math.cos(rig.pitch)
+    let d = this.camDist0
+    if (dz < -0.05) d = Math.min(d, Math.max(1.2, (p.z - (C.WORKSHOP.z0 + 0.45)) / -dz))
+    rig.distance = d
+    this.camShort = true
   }
 
   animate(dt: number, t: number, rt: StageRuntime): void {
@@ -1241,6 +1284,7 @@ export class ChronicleEdoStage implements Stage {
     if (rt) {
       rt.combat.showBossBar(null)
       rt.combat.onRespawn = null
+      if (this.camShort) rt.camRig.distance = this.camDist0
     }
     this.rt = null
     const w = window as unknown as { __edo7Dev?: unknown }

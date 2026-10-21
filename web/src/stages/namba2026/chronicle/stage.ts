@@ -49,7 +49,8 @@ type Person = Character
 type Fight = {
   h: EnemyHandle & { def: ClawTargetDef; knock: THREE.Vector3 }
   plates: number
-  grab: { phase: 'approach' | 'hold'; t: number } | null
+  /** side：持ち上げる側（プレイヤーから見て右 1・左 -1） */
+  grab: { phase: 'approach' | 'hold'; t: number; side: number } | null
   grabs: number
   nextGrab: number
   armDef: ClawTargetDef
@@ -289,6 +290,7 @@ export class ChronicleNambaStage implements Stage {
     const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: 12, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
     rt.combat.appear(h)
     h.brain.stun(6)
+    this.setPromenadeCrowd(false)
     void this.walker.walkTo(this.matsui, [SPOTS_V7.matsuiFight.pos], 2.4, center)
     await rt.dialogue(L.slice(2))
     // まわりの看板・鉄板が飛んできて、よろいになる
@@ -327,6 +329,11 @@ export class ChronicleNambaStage implements Stage {
     void rt.dialogue(lines.lines('beast_hint'))
   }
 
+  /** 遊歩道を歩く町の人（影獣が出たら、にげていなくなる・たおしたら戻る） */
+  private setPromenadeCrowd(on: boolean): void {
+    for (const c of this.ns.pedestrians.group.children) if (c.position.z > 5 && c.position.z < 10.5 && c.position.x < 10) c.visible = on
+  }
+
   private onPlate(left: number): void {
     const rt = this.rt
     if (!rt || !this.fight) return
@@ -346,7 +353,7 @@ export class ChronicleNambaStage implements Stage {
     if (!F.grab) {
       F.nextGrab -= dt
       if (F.nextGrab <= 0 && F.grabs < 2 && !this.busy) {
-        F.grab = { phase: 'approach', t: 0 }
+        F.grab = { phase: 'approach', t: 0, side: 1 }
         this.walker.stop(s)
       }
       return
@@ -362,6 +369,11 @@ export class ChronicleNambaStage implements Stage {
       if (d <= 1.55 || g.t > 4) {
         g.phase = 'hold'
         g.t = 0
+        // プレイヤーから見て、佐伯さんのいる側に持ち上げる（獣の体のかげにかくれないように）
+        const px = rt.player.position.x - h.pos.x
+        const pz = rt.player.position.z - h.pos.z
+        // 横の向き (-pz, px) と佐伯さんの側をくらべる
+        g.side = -pz * (s.root.position.x - h.pos.x) + px * (s.root.position.z - h.pos.z) >= 0 ? 1 : -1
         F.h.def.enabled = false
         F.armDef.enabled = true
         // 子どもでも腕をねらえるように：近くの木箱などの的を、はなすまで止める
@@ -372,12 +384,23 @@ export class ChronicleNambaStage implements Stage {
       }
       return
     }
-    // つかんでいる：佐伯さんを持ち上げる
+    // つかんでいる：プレイヤーの方を向き、佐伯さんを横に持ち上げる
+    this.tmp.set(rt.player.position.x - h.pos.x, 0, rt.player.position.z - h.pos.z)
+    if (this.tmp.lengthSq() > 0.01) {
+      this.tmp.normalize()
+      let dy = Math.atan2(-this.tmp.x, -this.tmp.z) - h.yaw
+      while (dy > Math.PI) dy -= Math.PI * 2
+      while (dy < -Math.PI) dy += Math.PI * 2
+      h.yaw += dy * Math.min(1, dt * 5)
+    }
     const fx = -Math.sin(h.yaw)
     const fz = -Math.cos(h.yaw)
-    s.root.position.set(h.pos.x + fx * 1.15, 0.55 + Math.sin(g.t * 9) * 0.04, h.pos.z + fz * 1.15)
-    s.root.rotation.y = h.yaw + Math.PI
-    F.armDef.point.set(h.pos.x + fx * 0.95, 1.55, h.pos.z + fz * 0.95)
+    // 横（side = 1 で獣の右手）
+    const sx = -fz * g.side
+    const sz = fx * g.side
+    s.root.position.set(h.pos.x + sx * 1.55 + fx * 0.5, 0.55 + Math.sin(g.t * 9) * 0.04, h.pos.z + sz * 1.55 + fz * 0.5)
+    this.walker.face(s, h.pos)
+    F.armDef.point.set(h.pos.x + sx * 1.1 + fx * 0.4, 1.5, h.pos.z + sz * 1.1 + fz * 0.4)
     if (g.t > 12) this.releaseSaeki(rt, false)
   }
 
@@ -417,6 +440,7 @@ export class ChronicleNambaStage implements Stage {
       if (F.grab) this.releaseSaeki(rt, true)
     }
     this.fight = null
+    this.setPromenadeCrowd(true)
     rt.combat.showBoss(null)
     await this.clock.wait(0.8)
     rt.setControlLocked(true)

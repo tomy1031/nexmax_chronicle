@@ -49,6 +49,7 @@ import {
   cyl,
   hearth,
   jar,
+  leafCrown,
   lion,
   lotusPatch,
   nagaHead,
@@ -187,7 +188,8 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
   // 夜に空の口が飲みこむ、村の古い石像と家
   zone(c, 'village')
   const swallow = new SwallowTargets(c, burst)
-  const stoneMat = () => new THREE.MeshStandardMaterial({ map: m.sandstone.map, normalMap: m.sandstone.normalMap, roughness: 0.9, vertexColors: true })
+  // 大階段の段・落ちる石：砂岩と同じ色の打ち消しと、弱めの凹凸
+  const stoneMat = () => new THREE.MeshStandardMaterial({ map: m.sandstone.map, normalMap: m.sandstone.normalMap, normalScale: m.sandstone.normalScale.clone(), color: m.sandstone.color.clone(), roughness: 0.9, vertexColors: true })
   zone(c, 'temple')
   const stairs = new BigStairs(c, stoneMat, burst)
   const arun = new Arun(K.ARUN.clone().setY(K.ARUN.y + K.ARUN_PEDESTAL), K.ARUN_HEIGHT)
@@ -699,12 +701,21 @@ export const KHMER_BALL_ID = 'khmer_rattan_ball'
 
 // ------------------------------------------------------------------ 石の橋（ナーガの手すり）
 
+/** 主な道（池のほとり → 石の橋 → 門 → 大階段）の舗装の色と、まん中の帯 */
+const ROUTE_TINT = '#fff0d0'
+const ROUTE_BAND = { w: 0.16, tint: '#ffd894' }
+
+/** 主な道のまん中の細い帯（x0〜x1、高さ y の床の上） */
+function routeBand(c: KCtx, x0: number, x1: number, y: number, zc: number): void {
+  box(c, (x0 + x1) / 2, y + 0.006, zc, x1 - x0, 0.012, ROUTE_BAND.w, c.m.route, { tint: ROUTE_BAND.tint, cast: false })
+}
+
 function buildBridge(c: KCtx): void {
   const B = K.BRIDGE
   const y = B.deckY
   const zc = (B.z0 + B.z1) / 2
   // 石の道（盛り土）と、水路の上の橋。西の端に坂、東の端は門の基壇へ
-  boxAB(c, B.x0, B.x1, y - 0.5, y, B.z0, B.z1, c.m.paving, { tint: '#f0e4cc', texM: 3, collide: true })
+  boxAB(c, B.x0, B.x1, y - 0.5, y, B.z0, B.z1, c.m.route, { tint: ROUTE_TINT, texM: 3, collide: true })
   boxAB(c, B.x0 - 0.1, B.x1, -0.1, y - 0.1, B.z0 - 0.12, B.z1 + 0.12, c.m.laterite, { tint: KC.laterite, texM: 2, cast: false })
   boxAB(c, K.CANAL.x0, K.CANAL.x1, -2.2, y - 0.5, B.z0 + 0.4, B.z1 - 0.4, c.m.sandstone, { tint: KC.sandGrey, texM: 3 })
   // 橋の下のアーチ（持ち送りの穴）
@@ -712,7 +723,7 @@ function buildBridge(c: KCtx): void {
   const a = v(B.x0 - B.ramp, 0, zc)
   const b = v(B.x0, y, zc)
   collideRamp(c, a, b, B.z1 - B.z0, 0.4)
-  box(c, B.x0 - B.ramp / 2, y / 2 - 0.12, zc, Math.hypot(B.ramp, y), 0.3, B.z1 - B.z0, c.m.paving, { rotZ: Math.atan2(y, B.ramp), tint: '#f0e4cc', texM: 3 })
+  box(c, B.x0 - B.ramp / 2, y / 2 - 0.12, zc, Math.hypot(B.ramp, y), 0.3, B.z1 - B.z0, c.m.route, { rotZ: Math.atan2(y, B.ramp), tint: ROUTE_TINT, texM: 3 })
   // ナーガの手すり（両側）と、両端の七つの頭
   for (const z of [B.z0 - 0.05, B.z1 + 0.05]) nagaRail(c, B.nagaWest + 1.15, z, B.nagaEast - 1.15, z, y, y + 0.72)
   for (const z of [B.z0 - 0.05, B.z1 + 0.05]) {
@@ -721,7 +732,11 @@ function buildBridge(c: KCtx): void {
     nagaHead(c, B.nagaEast, y, z, -Math.PI / 2, 0.9)
   }
   // 橋へ来る石の道
-  boxAB(c, -40, B.x0 - B.ramp, 0, 0.03, B.z0 + 0.6, B.z1 - 0.6, c.m.paving, { tint: '#e8dcc4', texM: 3, cast: false })
+  boxAB(c, -40, B.x0 - B.ramp, 0, 0.03, B.z0 + 0.6, B.z1 - 0.6, c.m.route, { tint: ROUTE_TINT, texM: 3, cast: false })
+  // 道のまん中の細い帯（池のほとり → 坂 → 橋 → 門。次に通る入口へ目を運ぶ）
+  routeBand(c, -40, B.x0 - B.ramp, 0.03, zc)
+  box(c, B.x0 - B.ramp / 2, y / 2 + 0.035, zc, Math.hypot(B.ramp, y), 0.012, ROUTE_BAND.w, c.m.route, { rotZ: Math.atan2(y, B.ramp), tint: ROUTE_BAND.tint, cast: false })
+  routeBand(c, B.x0, B.x1, y, zc)
   // 松明（西のたもと）
   for (const z of [B.z0 - 1.1, B.z1 + 1.1]) torchPost(c, B.nagaWest - 1.6, 0, z)
   // 道ばたの獅子
@@ -752,8 +767,9 @@ function buildTemple(c: KCtx): void {
   pave(ax0, ax1, Pyr.cz + p1.half - 0.2, az1)
   pave(ax0, Pyr.cx - p1.half + 0.2, az0, az1)
   pave(Pyr.cx + p1.half - 0.2, ax1, az0, az1)
-  // 参道（西の門 → 大階段）
-  pave(G.xWall + 0.6, ax0, -7.4, -0.6)
+  // 参道（西の門 → 大階段）：主な道なので、ほかの舗装と材質を分けて明るく・なめらかに。まん中に細い帯
+  boxAB(c, G.xWall + 0.6, ax0, 0, 0.03, -7.4, -0.6, c.m.route, { tint: ROUTE_TINT, texM: 3.2, cast: false })
+  routeBand(c, K.GOPURA.x + 4.2, K.STAIRS.x0, 0.03, K.GOPURA.z)
   // 東：東の塔と回る鏡の台へ・東の門へ
   pave(ax1, C.x1, -7.4, -0.6)
   pave(K.TURNTABLE.x - 2.6, K.TURNTABLE.x + 2.6, az1, K.TURNTABLE.z + 2.6)
@@ -871,6 +887,8 @@ function buildGallery(c: KCtx): void {
   const sz = (RS.z0 + RS.z1) / 2
   boxAB(c, G.xWall - 0.12, G.xWall, fy + 0.02, fy + G.wallH - 0.02, sz - storyW / 2 - 0.25, sz + storyW / 2 + 0.25, c.m.sandstone, { tint: shade(KC.sand, 1.06), texM: 2 })
   relief(sz - storyW / 2, sz + storyW / 2, c.m.reliefStory, [1, 1], storyH, fy + 0.1, 0.12)
+  // 物語の浮き彫りを照らす、あたたかい補助灯（回廊の屋根の下は暗く、絵が黒くつぶれるため）
+  c.lights.push({ pos: v(G.xWall - 1.7, fy + 2.3, sz), color: '#ffe4bf', intensity: 1.5, dist: 5 })
   // 帯の浮き彫り（アプサラ・はす・ナーガ）
   const bandH = G.wallH - 0.7
   const bandLen = bandH * 2
@@ -885,6 +903,7 @@ function buildGallery(c: KCtx): void {
   const doorZ1 = P.z + P.door
   const wallTop = 4.2
   boxAB(c, x0 - 0.6, x1 + 0.6, 0, fy, gz0, gz1, c.m.sandstone, { tint: KC.sandGrey, texM: 3, collide: true })
+  routeBand(c, x0 - 0.6, x1 + 0.6, fy, P.z)
   boxAB(c, x0, x1, fy, wallTop, gz0, doorZ0, c.m.sandstone, { tint: KC.sand, texM: 3, collide: true })
   boxAB(c, x0, x1, fy, wallTop, doorZ1, gz1, c.m.sandstone, { tint: KC.sand, texM: 3, collide: true })
   boxAB(c, x0, x1, fy + 3.1, wallTop, doorZ0, doorZ1, c.m.sandstone, { tint: shade(KC.sand, 1.03), texM: 3 })
@@ -1100,11 +1119,7 @@ function rootTree(c: KCtx, x: number, z: number): void {
     const a = (k / 6) * Math.PI * 2 + rng() * 0.4
     const p = v(x + Math.cos(a) * 3.4, baseY + 7.5 + rng() * 2, z + Math.sin(a) * 3.4)
     strut(c, v(x, baseY + 6.2, z), p, 0.22, c.m.bark, pale, { r1: 0.12 })
-    B.add(new THREE.IcosahedronGeometry(2.6, 1), c.m.canopy, M(p.x, p.y + 0.8, p.z, 0, rng() * 3, 0, 1, 0.62, 1), { tint: new THREE.Color().setHSL(0.27, 0.46, 0.17 + rng() * 0.05) })
-    for (let j = 0; j < 3; j++) {
-      const q = p.clone().add(v((rng() - 0.5) * 4, 1 + rng() * 1.2, (rng() - 0.5) * 4))
-      B.add(new THREE.PlaneGeometry(2.8, 2.8), c.m.leaf, M(q.x, q.y, q.z, rng() * 3, rng() * 3, rng() * 3), { tint: new THREE.Color().setHSL(0.26, 0.4, 0.62 + rng() * 0.1), cast: false })
-    }
+    leafCrown(c, B, v(p.x, p.y + 0.8, p.z), 2.6, 0.62, 7, 1.45, new THREE.Color().setHSL(0.27, 0.46, 0.17 + rng() * 0.05))
   }
   B.add(new THREE.IcosahedronGeometry(3.4, 1), c.m.canopy, M(x, baseY + 10.5, z, 0, 0, 0, 1.3, 0.6, 1.3), { tint: '#2e5a26' })
 }
@@ -1166,13 +1181,14 @@ function buildFar(c: KCtx): { mist: Drift } {
   const rng = c.rng
   const A = { x0: -128, x1: 116, z0: -134, z1: 100 }
   // 森の帯（歩ける範囲の外）：葉のかたまり
-  const clump = (x: number, z: number, s: number) => {
-    c.bf.add(new THREE.IcosahedronGeometry(s, 0), c.m.canopy, M(x, s * 0.55 + 2 + rng() * 2, z, 0, rng() * 3, 0, 1, 0.75, 1), { tint: new THREE.Color().setHSL(0.28 + rng() * 0.05, 0.4, 0.16 + rng() * 0.07) })
+  // かたまりは 1 段だけ細かく（大きな三角の面がならんで見えないように）。低画質の外側の帯は粗いまま（三角形を節約）
+  const clump = (x: number, z: number, s: number, detail: number) => {
+    c.bf.add(new THREE.IcosahedronGeometry(s, detail), c.m.canopy, M(x, s * 0.55 + 2 + rng() * 2, z, 0, rng() * 3, 0, 1, 0.75, 1), { tint: new THREE.Color().setHSL(0.28 + rng() * 0.05, 0.4, 0.16 + rng() * 0.07) })
     if (rng() < 0.35) c.bf.add(new THREE.CylinderGeometry(0.3, 0.5, 4, 5, 1, true), c.m.bark, M(x, 2, z), { tint: '#6a5a48' })
   }
   const inScar = (x: number, z: number) => x > SCAR_RECT.x0 && x < SCAR_RECT.x1 && z > SCAR_RECT.z0 && z < SCAR_RECT.z1
   const inWater = (x: number, z: number) => (x > K.BARAY.x0 - 3 && x < K.BARAY.x1 + 3 && z > K.BARAY.z0 - 3 && z < K.BARAY.z1 + 3) || (x > K.CANAL.x0 - 3 && x < K.CANAL.x1 + 3 && z > K.CANAL.z0)
-  const ring = (inner: Rect, depth: number, step: number) => {
+  const ring = (inner: Rect, depth: number, step: number, detail: number) => {
     for (let x = inner.x0 - depth; x <= inner.x1 + depth; x += step)
       for (let z = inner.z0 - depth; z <= inner.z1 + depth; z += step) {
         const inside = x > inner.x0 && x < inner.x1 && z > inner.z0 && z < inner.z1
@@ -1180,12 +1196,12 @@ function buildFar(c: KCtx): { mist: Drift } {
         const px = x + (rng() - 0.5) * step
         const pz = z + (rng() - 0.5) * step
         if (inScar(px, pz) || inWater(px, pz)) continue
-        clump(px, pz, step * (0.55 + rng() * 0.35))
+        clump(px, pz, step * (0.55 + rng() * 0.35), detail)
       }
   }
   // 歩ける範囲のすぐ外（池の北・村の西・寺の東・水田の南）
-  ring({ x0: K.BOUNDS.x0 - 4, x1: K.BOUNDS.x1 + 4, z0: K.BARAY.z0 - 4, z1: K.PADDY.z1 + 6 }, 26, 8.5)
-  ring({ x0: A.x0, x1: A.x1, z0: A.z0, z1: A.z1 }, 60, 14)
+  ring({ x0: K.BOUNDS.x0 - 4, x1: K.BOUNDS.x1 + 4, z0: K.BARAY.z0 - 4, z1: K.PADDY.z1 + 6 }, 26, 8.5, 1)
+  ring({ x0: A.x0, x1: A.x1, z0: A.z0, z1: A.z1 }, 60, 14, c.q.level === 'low' ? 0 : 1)
   // 池の北の岸のヤシ
   for (let x = -86; x < 50; x += 7) if (!inScar(x, K.BARAY.z0 - 3)) palm(c, x + rng() * 3, K.BARAY.z0 - 2.5 - rng() * 3, 8 + rng() * 4, rng() < 0.5 ? 'sugar' : 'coco', 0, true, false)
   // 遠くの山（北：平らな台地の山。南西：てっぺんに寺のある丘）

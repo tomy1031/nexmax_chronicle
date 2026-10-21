@@ -21,10 +21,11 @@ import type { ChronoTarget, SlitHandle } from '../../chronicle/chrono'
 import { Lamp, SHADE_STYLE, createPerson, type PersonCharacter, type PersonPose } from '../../chronicle/visuals'
 import { buildKhmerScene, KHMER_BALL_ID, type KhmerScene } from './sceneKhmer'
 import { KHMER_ENVIRONMENTS, KhmerEnvMaps, applyKhmerTime, type TimeOfDay } from './environment'
-import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, VILLAGERS, towerPoint, type Spot, type TowerId } from './layout'
+import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, towerPoint, type Spot, type TowerId } from './layout'
 import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
 import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
+import { createKhmerVillagers, type KhmerVillager } from './people'
 import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
 
@@ -43,8 +44,6 @@ const URA_EXIT = v(K.URA_ENTRY.x - 0.4, K.TOP_Y, K.URA_ENTRY.z - 2.6)
 const TREASURE_BOX = v(23.6, K.TOP_Y, -9.4)
 /** 夜の影が出る所（上の台） */
 const TOP_SPAWNS = [v(24, K.TOP_Y, -10.2), v(28, K.TOP_Y, -10.2), v(24, K.TOP_Y, 2.2), v(28.2, K.TOP_Y, 2.2), v(32.2, K.TOP_Y, -4), v(32.2, K.TOP_Y, -7.6)]
-/** 本物の人の形で見せる村人（多いと重いので、目につく所だけ。ほかは出さない） */
-const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'watch2', 'fisher2', 'monk1', 'temple1']
 
 export class KhmerStage implements Stage {
   readonly key = '1186' as const
@@ -59,7 +58,7 @@ export class KhmerStage implements Stage {
   private grandma!: PersonCharacter
   private towa!: PersonCharacter
   private lamp!: Lamp
-  private villagers: Array<{ id: string; ch: PersonCharacter; spot: Spot }> = []
+  private villagers: KhmerVillager[] = []
   private rt: StageRuntime | null = null
   private readonly clock = new SceneClock()
   private readonly walker = new Walker()
@@ -110,16 +109,8 @@ export class KhmerStage implements Stage {
     this.towa.holdLamp(this.lamp)
     this.towa.root.visible = false
     root.add(this.chanda.root, this.grandma.root, this.towa.root)
-    VILLAGERS.forEach((s, i) => {
-      if (!SHOWN_VILLAGERS.includes(s.id)) return
-      const kid = s.role === 'kid'
-      const ch = createPerson('khmerVillager', { variant: i, female: i % 2 === 0, lite: true, height: kid ? 1.1 : s.role === 'monk' ? 1.6 : 1.55 })
-      ch.root.position.copy(s.pos)
-      ch.root.rotation.y = s.yaw
-      ch.setPose(s.role === 'kid' ? 'wave' : s.role === 'monk' ? 'pray' : 'idle')
-      root.add(ch.root)
-      this.villagers.push({ id: s.id, ch, spot: s })
-    })
+    this.villagers = createKhmerVillagers()
+    for (const vv of this.villagers) root.add(vv.ch.root)
     // 仮の箱（舞台の確認用）は本編では出さない
     this.sc.villagers.setVisible(false)
     this.sc.chanda.group.visible = false

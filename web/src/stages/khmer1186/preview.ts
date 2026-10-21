@@ -20,7 +20,9 @@ import { createNexmax } from '../../world/nexmax/nexmaxModel'
 import { LoadingOverlay } from '../../ui/hud'
 import { buildKhmerScene, type KhmerScene } from './sceneKhmer'
 import { KHMER_ENVIRONMENTS, KhmerEnvMaps, applyKhmerTime, type TimeOfDay } from './environment'
-import { K, SPAWNS, TOWER_IDS, type TowerId } from './layout'
+import { K, NPC, SPAWNS, TOWER_IDS, type TowerId } from './layout'
+import { createKhmerVillagers } from './people'
+import { createPerson } from '../../chronicle/visuals'
 import { createPhysics } from '../../player/physics'
 
 const urlp = new URLSearchParams(location.search)
@@ -38,13 +40,14 @@ export const KHMER_CAMS: Record<string, CamPreset> = {
   tower_e: { pos: v(30.5, 4.6, 19.5), look: v(50, 5, -2), fov: 58, nexmax: { pos: SPAWNS.tower_e.pos, face: v(40, 0, 10) } },
   tower_n: { pos: v(-41.5, 4.4, -53), look: v(4, 3, -68), fov: 60, nexmax: { pos: SPAWNS.tower_n.pos, face: v(-25, 0, -64) } },
   tower_s: { pos: v(17.5, 3.6, 8.5), look: v(26, 5, 22), fov: 58, nexmax: { pos: SPAWNS.tower_s.pos, face: v(26, 0, 25) } },
-  stairs: { pos: v(4.2, 2.2, 4.6), look: v(18, 8, -4), fov: 58, nexmax: { pos: SPAWNS.stairs.pos, face: v(26, 0, -4) } },
+  // 大階段の正面（門を出たすぐの所から、段の列を画面のまん中に通す）
+  stairs: { pos: v(4.8, 2.5, -4), look: v(15, 5.5, -4), fov: 55, nexmax: { pos: v(8.1, 1.6, -4.4), face: v(26, 1.6, -4) } },
   village: { pos: v(-38, 3.2, 18), look: v(-58, 2.5, 3), fov: 58, nexmax: { pos: v(-47, 0, 12), face: v(-54, 0, 8) } },
   arun: { pos: v(17.9, 11.0, -4.0), look: v(26, 11.1, -4), fov: 54, nexmax: { pos: v(19.7, 9.6, -2.9), face: v(26, 0, -4) } },
   relief: { pos: v(-1.3, 1.7, 6.2), look: v(2, 1.8, 10.2), fov: 60, nexmax: { pos: v(-0.4, 0.25, 7.4), face: v(2, 0, 10) } },
   elephant: { pos: v(-12, 3.2, -30), look: v(-6, 1.6, -44), fov: 56, nexmax: { pos: v(-4.3, 2.4, -36.2), face: v(-7, 0, -36.6) } },
   scar: { pos: v(24, 13, -9), look: v(84, 0, -126), fov: 50 },
-  night_stairs: { pos: v(3.8, 3.0, 6.4), look: v(18, 9, -4), fov: 58, time: 'night', nexmax: { pos: SPAWNS.stairs.pos, face: v(26, 0, -4) } },
+  night_stairs: { pos: v(4.8, 2.7, -4.6), look: v(15, 6, -4), fov: 55, time: 'night', nexmax: { pos: v(8.1, 1.6, -4.4), face: v(26, 1.6, -4) } },
   dawn_top: { pos: v(12.6, 16, 6), look: v(26, 14, -4), fov: 60, time: 'dawn' },
 }
 
@@ -121,6 +124,21 @@ async function main(): Promise<void> {
   const nexmax = createNexmax(1.05)
   scene.add(nexmax.root)
   nexmax.root.visible = false
+  // 人：本編と同じ本物の人の形（仮の箱は隠す）
+  const villagers = createKhmerVillagers()
+  const chanda = createPerson('chanda')
+  const grandma = createPerson('khmerElder')
+  chanda.root.position.copy(NPC.chanda.arrive.pos)
+  chanda.root.rotation.y = NPC.chanda.arrive.yaw
+  chanda.setPose('laugh')
+  grandma.root.position.copy(NPC.grandma.altar.pos)
+  grandma.root.rotation.y = NPC.grandma.altar.yaw
+  grandma.setPose('cane')
+  const people = [chanda, grandma, ...villagers.map((x) => x.ch)]
+  for (const p of people) ks.root.add(p.root)
+  ks.villagers.setVisible(false)
+  ks.chanda.group.visible = false
+  ks.grandma.group.visible = false
 
   const resize = () => {
     const { w, h } = size()
@@ -154,7 +172,7 @@ async function main(): Promise<void> {
     const { startKhmerPlay } = await import('./previewPlay')
     const startTime = (urlp.get('time') as TimeOfDay) ?? 'afternoon'
     setTime(startTime)
-    await startKhmerPlay({ renderer, scene, camera, post, ui, ks, nexmax, rig, sky, setTime, assignLights, label, loading, buildMs })
+    await startKhmerPlay({ renderer, scene, camera, post, ui, ks, nexmax, rig, sky, setTime, assignLights, label, loading, buildMs, onFrame: (dt) => people.forEach((x) => x.update(dt, 0)) })
     return
   }
 
@@ -164,12 +182,41 @@ async function main(): Promise<void> {
   controls.dampingFactor = 0.12
   controls.maxDistance = 600
   const camNames = Object.keys(KHMER_CAMS)
+  // 注視点からカメラへのレイで、カメラのすぐ前（カメラ側の数 m）に壁や屋根があれば、その手前まで寄せる
+  // （固定のカメラには物理の壁よけが無いので。注視点のそば・途中の物は構図の一部なので動かさない）
+  const ray = new THREE.Raycaster()
+  const occluders = (): THREE.Object3D[] => {
+    const out: THREE.Object3D[] = []
+    ks.root.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (!m.isMesh || !m.visible) return
+      const mats = Array.isArray(m.material) ? m.material : [m.material]
+      if (mats.some((x) => x.transparent || x.alphaTest > 0)) return
+      out.push(m)
+    })
+    return out
+  }
+  const unblock = (pos: THREE.Vector3, look: THREE.Vector3) => {
+    const dir = pos.clone().sub(look)
+    const dist = dir.length()
+    if (dist < 0.5) return
+    dir.divideScalar(dist)
+    ray.set(look, dir)
+    ray.far = dist
+    const zone = Math.max(2.5, dist * 0.25)
+    const hit = ray.intersectObjects(occluders(), false).find((h) => h.distance > dist - zone)
+    if (hit) {
+      pos.copy(look).addScaledVector(dir, Math.max(0.4, hit.distance - 0.35))
+      console.info(`[khmer] カメラの前に ${hit.object.name || '物'} があるので ${(dist - hit.distance + 0.35).toFixed(2)}m 寄せた`)
+    }
+  }
   const goto = (name: string) => {
     const preset = KHMER_CAMS[name] ?? KHMER_CAMS.overview
     camera.position.copy(preset.pos)
     camera.fov = Number(urlp.get('fov') ?? preset.fov)
     camera.updateProjectionMatrix()
     controls.target.copy(preset.look)
+    unblock(camera.position, preset.look)
     controls.update()
     if (preset.nexmax) {
       nexmax.root.visible = true
@@ -255,6 +302,7 @@ async function main(): Promise<void> {
     controls.update()
     ks.update(dt, uTime.value, camera)
     nexmax.update(dt, 0)
+    for (const p of people) p.update(dt, 0)
     lightT -= dt
     if (lightT <= 0) {
       assignLights(controls.target.clone().lerp(camera.position, 0.4))

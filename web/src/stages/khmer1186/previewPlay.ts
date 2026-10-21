@@ -37,6 +37,8 @@ export type KhmerPlayCtx = {
   label: HTMLDivElement
   loading: LoadingOverlay
   buildMs: number
+  /** 毎フレーム（人の形の動きなど） */
+  onFrame?(dt: number): void
 }
 
 const FIRE_VERB: Record<ClawTargetType, string> = {
@@ -181,6 +183,7 @@ export async function startKhmerPlay(p: KhmerPlayCtx): Promise<void> {
     player.update(dt, { move: frame.move, jump: frame.pressed.has('jump') && !jumpConsumed, dash: frame.held.has('dash') }, camRig.yaw)
     claw.update(dt, frame, camRig.yaw)
     ks.update(dt, uTime.value, camera)
+    p.onFrame?.(dt)
     // 動く足場（象の背中）に乗っていたら運ぶ
     const r = ks.carryPlayer(player)
     riding = r ? 'elephant' : null

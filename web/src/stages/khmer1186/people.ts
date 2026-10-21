@@ -1,8 +1,29 @@
-// 村人・チャンダ・おばあさんの「仮の箱」。人の形は visuals 担当の createPerson('khmerVillager') などで置きかえる（フェーズ 2）。
-// 村人は 1 つの InstancedMesh（体と頭をまとめた形・色は 1 人ずつ）。立ち位置は layout.ts の VILLAGERS・NPC。
+// 村の人。本編とプレビューは createKhmerVillagers()（chronicle/visuals の createPerson('khmerVillager')）の本物の人の形を使う。
+// Villagers・PlaceholderPerson は舞台の確認用の「仮の箱」（立ち位置を見るだけ。本編・プレビューでは隠す）。立ち位置は layout.ts の VILLAGERS・NPC。
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { createPerson, type PersonCharacter } from '../../chronicle/visuals'
 import { VILLAGERS, type Spot, type VillagerSpot } from './layout'
+
+/** 本物の人の形で見せる村人（多いと重いので、目につく所だけ。ほかは出さない） */
+export const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'watch2', 'fisher2', 'monk1', 'temple1']
+
+export type KhmerVillager = { id: string; ch: PersonCharacter; spot: VillagerSpot }
+
+/** 村人（本物の人の形・軽い作り・色ちがい）を立ち位置に立たせて返す。root に足すのと update・dispose は呼ぶ側で */
+export function createKhmerVillagers(): KhmerVillager[] {
+  const out: KhmerVillager[] = []
+  VILLAGERS.forEach((s, i) => {
+    if (!SHOWN_VILLAGERS.includes(s.id)) return
+    const kid = s.role === 'kid'
+    const ch = createPerson('khmerVillager', { variant: i, female: i % 2 === 0, lite: true, height: kid ? 1.1 : s.role === 'monk' ? 1.6 : 1.55 })
+    ch.root.position.copy(s.pos)
+    ch.root.rotation.y = s.yaw
+    ch.setPose(kid ? 'wave' : s.role === 'monk' ? 'pray' : 'idle')
+    out.push({ id: s.id, ch, spot: s })
+  })
+  return out
+}
 
 const ROLE_COLOR: Record<VillagerSpot['role'], string> = {
   stand: '#3a6ab0',

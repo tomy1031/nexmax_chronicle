@@ -113,6 +113,8 @@ export class ChronicleEdoStage implements Stage {
   private readonly tmp = new THREE.Vector3()
   private readonly tmp2 = new THREE.Vector3()
   private readonly marks: ObjectiveMark[] = []
+  /** 人形の足もと（K の当たり：毎フレーム動かす） */
+  private readonly dollBody = new THREE.Vector3()
   private readonly markAt = new THREE.Vector3()
 
   // ================================================================ 読みこみ
@@ -512,6 +514,21 @@ export class ChronicleEdoStage implements Stage {
     rt.combat.enabled = true
     rt.combat.setCheckpoint(PLAZA_ENTRY, YAW.south)
     rt.combat.showBossBar('時の鐘人形', 1 - this.gears.next / 3)
+    // K でたたいても効かない（歯車をつかむ戦い）：おはるが教える
+    let lastHint = -99
+    rt.combat.addHitTarget({
+      id: 'v7_bell_doll_body',
+      pos: this.dollBody,
+      radius: 1.8,
+      enabled: true,
+      onHit: () => {
+        rt.shake(0.1)
+        if (rt.playTime - lastHint > 8) {
+          lastHint = rt.playTime
+          rt.say('おはる', lines.lines('hit_body')[0].text, 2.6)
+        }
+      },
+    })
     for (let i = 0; i < 3; i++) d.targets[i].enabled = !d.gearIsStopped(i)
     d.setGearHighlight(this.gears.next)
     this.bossCd = 2.2
@@ -643,6 +660,7 @@ export class ChronicleEdoStage implements Stage {
     this.lock(rt, true)
     const d = this.w.doll
     rt.combat.showBossBar(null)
+    rt.combat.removeHitTarget('v7_bell_doll_body')
     rt.combat.enabled = false
     d.stopWalking()
     for (const t of d.targets) t.enabled = false
@@ -683,9 +701,13 @@ export class ChronicleEdoStage implements Stage {
     // 夜明け：東の空が明るくなる
     this.dawnAnim = 0
     this.w.kagaribi.setLit(false)
-    void rt.cinematic({ look: v(10, 8, 30), from: v(-16.8, 1.8, 30.0), hold: Infinity, inSec: 2.0, fov: 56 })
+    // 東の空（蔵と塀の上から、城の向こうの空）→ 朝の光の中の人形
+    void rt.cinematic({ look: v(14, 7, 28), from: v(-17.0, 7.2, 29.0), hold: Infinity, inSec: 2.0, fov: 56 })
     await this.clock.wait(2.5)
-    await rt.dialogue(lines.lines('dawn_comes'))
+    const D = lines.lines('dawn_comes')
+    await rt.dialogue(D.slice(0, 1))
+    void rt.cinematic({ look: d.headWorld().add(v(0, -2.2, 0)), from: v(-19.6, 2.4, 28.6), hold: Infinity, inSec: 1.6, fov: 52 })
+    await rt.dialogue(D.slice(1))
     await this.clock.until(() => this.dawnAnim < 0 || this.dawnAnim >= 0.7, 10)
     rt.endCinematic()
     rt.story.set('v7_doll_down', true)
@@ -867,8 +889,10 @@ export class ChronicleEdoStage implements Stage {
       }
       case 'night': {
         if (this.sub.boss === 'before' && !this.busy && p.z > 22.2 && p.x < C.COURT.x0 - 0.1) void this.runBossIntro(rt)
-        if (this.sub.boss === 'fight' && !this.busy) this.bossUpdate(dt, rt)
-        else if (this.sub.boss === 'fight') this.bossUpdate(dt, rt)
+        if (this.sub.boss === 'fight') {
+          this.dollBody.copy(this.w.doll.position).setY(this.w.doll.position.y + 1.0)
+          this.bossUpdate(dt, rt)
+        }
         break
       }
       case 'dawn': {

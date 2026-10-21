@@ -103,6 +103,7 @@
   "stopped_1": [{ "speaker": "おはる", "text": "ひざをついた！ 胸の歯車が近くなったよ！" }],
   "wrong": [{ "speaker": "おはる", "text": "ちがう、そこやない！ 人形が怒ってる！" }],
   "shaken": [{ "speaker": "おはる", "text": "ふりほどかれた！ もう一回！" }],
+  "hit_body": [{ "speaker": "おはる", "text": "たたいてもだめ！ 光ってる歯車を、クローでつかんで！" }],
   "warn_swing": [{ "speaker": "おはる", "text": "腕がくるよ！ 赤い丸からにげて！" }],
   "warn_bell": [{ "speaker": "おはる", "text": "鐘の音がくる！ ジャンプ！" }],
   "chest_done": [

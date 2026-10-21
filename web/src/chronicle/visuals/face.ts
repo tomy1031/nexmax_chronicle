@@ -398,7 +398,7 @@ function mouth(g: CanvasRenderingContext2D, S: number, P: (x: number, y: number)
   const tongue = '#ff8a8a'
   g.strokeStyle = ink
   g.lineWidth = S * 0.016
-  const w = S * 0.052
+  const w = S * 0.052 * (e === 'laugh' ? 1.3 : 1)
   g.beginPath()
   switch (e) {
     case 'smile':
@@ -409,13 +409,19 @@ function mouth(g: CanvasRenderingContext2D, S: number, P: (x: number, y: number)
     case 'laugh': {
       g.moveTo(mx - w * 1.3, my - S * 0.012)
       g.quadraticCurveTo(mx, my - S * 0.004, mx + w * 1.3, my - S * 0.012)
-      g.quadraticCurveTo(mx, my + S * 0.08, mx - w * 1.3, my - S * 0.012)
+      g.quadraticCurveTo(mx, my + S * 0.112, mx - w * 1.3, my - S * 0.012)
       g.fillStyle = inside
       g.fill()
       g.stroke()
+      g.fillStyle = '#fff6e8'
+      g.beginPath()
+      g.moveTo(mx - w * 1.05, my - S * 0.006)
+      g.lineTo(mx + w * 1.05, my - S * 0.006)
+      g.quadraticCurveTo(mx, my + S * 0.025, mx - w * 1.05, my - S * 0.006)
+      g.fill()
       g.fillStyle = tongue
       g.beginPath()
-      g.ellipse(mx, my + S * 0.035, w * 0.6, S * 0.014, 0, 0, Math.PI * 2)
+      g.ellipse(mx, my + S * 0.049, w * 0.6, S * 0.0196, 0, 0, Math.PI * 2)
       g.fill()
       break
     }

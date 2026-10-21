@@ -187,7 +187,7 @@ export class ChronicleNambaStage implements Stage {
       case 'return':
         this.place(this.matsui, S.matsuiShrine)
         this.place(this.saeki, S.saekiShrine)
-        this.place(this.ofuji, { pos: v(14.4, 0, 24.45), face: SHRINE.pos })
+        this.place(this.ofuji, S.ofujiAside)
         break
     }
   }
@@ -676,7 +676,7 @@ export class ChronicleNambaStage implements Stage {
     this.walker.face(this.ofuji, rt.player.position)
     await rt.dialogue(L.slice(2, 5))
     // 錠前を見せる：おふじさんは少しわきへ
-    void this.walker.walkTo(this.ofuji, [v(14.4, 0, 24.45)], 1.0, ns.pos)
+    void this.walker.walkTo(this.ofuji, [SPOTS_V7.ofujiAside.pos], 1.0, ns.pos)
     void rt.cinematic({ look: sh.lockPoint(this.tmp).clone(), from: v(14.95, 1.35, 23.3), hold: Infinity, inSec: 1.0, fov: 34, arc: 0 })
     await rt.dialogue(L.slice(5, 6))
     // 佐伯さんとおふじさん
@@ -797,7 +797,7 @@ export class ChronicleNambaStage implements Stage {
     }
     this.place(this.matsui, SPOTS_V7.matsuiShrine)
     this.place(this.saeki, SPOTS_V7.saekiShrine)
-    this.place(this.ofuji, { pos: v(14.4, 0, 24.45), face: SHRINE.pos })
+    this.place(this.ofuji, SPOTS_V7.ofujiAside)
     const nx = SPOTS_V7.nexmaxShrine
     rt.player.teleport(nx.pos, Math.atan2(-(nx.face.x - nx.pos.x), -(nx.face.z - nx.pos.z)))
     const sh = this.ns.shrine

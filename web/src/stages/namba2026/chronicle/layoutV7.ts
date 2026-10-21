@@ -87,6 +87,8 @@ export const SPOTS_V7 = {
   /** 9 章：おふじさん（ほこらの前でぜんまいを巻く。防衛戦のあいだは路地の口へ下がる） */
   ofujiWind: { pos: v(14.28, 0, 23.72), face: SHRINE.pos.clone() },
   ofujiSafe: { pos: v(16.2, 0, 19.0), face: SHRINE.pos.clone() },
+  /** 錠前を見せるときと、朝の場面（ほこらの正面をあける。南の献灯の東） */
+  ofujiAside: { pos: v(14.8, 0, 24.75), face: SHRINE.pos.clone() },
   /** 9 章：社長と佐伯さん（ほこらの前の両わき。献灯の外側に立ち、正面のおふじさんとカメラのあいだをあける） */
   matsuiShrine: { pos: v(15.05, 0, 21.75), face: v(14.28, 0, 23.72) },
   saekiShrine: { pos: v(15.0, 0, 25.45), face: v(14.28, 0, 23.72) },

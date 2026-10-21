@@ -419,6 +419,15 @@ export class ArmorPlates {
     p.mat.transparent = false
   }
 
+  /** 全部はずして見えなくする（このあと reattach で 1 枚ずつ飛んでくる） */
+  hideAll(): void {
+    for (const p of this.plates) {
+      this.loose.add(p.mesh)
+      p.mesh.visible = false
+      p.state = 'gone'
+    }
+  }
+
   /** 全部はりついた状態へ（チェックポイントからやり直すとき） */
   reset(): void {
     for (const p of this.plates) {

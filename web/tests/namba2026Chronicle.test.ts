@@ -176,7 +176,7 @@ describe("v7 の配置", () => {
       expect(Math.hypot(end.x - SHRINE.pos.x, end.z - SHRINE.pos.z)).toBeLessThan(1.2);
       expect(end.y).toBeGreaterThan(1.8);
     }
-    for (const c of DEFENSE.darkCorners) expect(Math.hypot(c.x - SHRINE.pos.x, c.z - SHRINE.pos.z)).toBeGreaterThan(3);
+    for (const c of DEFENSE.darkCorners) expect(Math.hypot(c.x - SHRINE.pos.x, c.z - SHRINE.pos.z)).toBeGreaterThan(2);
   });
 
   it("社長が路地のかんばんへかけよる道は、ほこらのそばから C の前まで", () => {

@@ -14,10 +14,17 @@ import { paintClockShopRecord, paintGenbeiPage, paintPresidentSketch, paintStati
 
 const GLASS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="M15 15l6 6"/></svg>'
 
-/** 記録の絵（1 回だけ描いて使い回す） */
+/** 記録の絵（1 回だけ描いて使い回す）。イラスト（chronicle/art.ts）が読めたら setRecordArt で差しかえる */
 const imageCache = new Map<RecordImage, HTMLCanvasElement>()
+const artCache = new Map<RecordImage, HTMLCanvasElement>()
+export function setRecordArt(kind: RecordImage, c: HTMLCanvasElement | null): void {
+  if (c) artCache.set(kind, c)
+  else artCache.delete(kind)
+}
 export function recordImage(kind: RecordImage): HTMLCanvasElement | null {
   if (kind === 'none') return null
+  const art = artCache.get(kind)
+  if (art) return art
   let c = imageCache.get(kind)
   if (!c) {
     c = kind === 'clockShop' ? paintClockShopRecord() : kind === 'stationClock' ? paintStationClockRecord() : paintGenbeiPage()

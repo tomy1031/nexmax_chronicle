@@ -12,7 +12,8 @@ import { C, WORKSHOP_SPOTS } from './layout'
 import { andon, clockMovement, gearGeometry, shide, yaguraClock } from './parts'
 import { paintSpread } from './pages'
 import { TempSlit } from './slit'
-import { makeCanvas } from '../../../render/textures'
+import { drawLettering, makeCanvas } from '../../../render/textures'
+import { V7_ART } from '../../../chronicle/art'
 
 const W = C.WORKSHOP
 const X0 = W.x0
@@ -404,6 +405,25 @@ function buildInterior(c: Ctx): void {
 // ---------------------------------------------------------------- 動く物：書（ひらいた本）
 
 /** 源兵衛の書。見台の上でひらいている。右のページ＝青い刃のかけら、左のページ＝あとで「時を裂く爪」を描く */
+/** 絵の見開き（1280×720）のうち、本のページの所（左・上・幅・高さ）。縦横比はページの板（1.6）に近づける */
+const ART_CROP = { p1: [140, 22, 1030, 644], p2: [110, 40, 1070, 660] } as const
+/** 2 ページ目の絵（右ページの小さな青いからくり）を描いていく順（中心 x・y と、広がる半径。キャンバスの 0〜1） */
+const REVEAL: ReadonlyArray<[number, number, number]> = [
+  [0.7, 0.42, 0.16],
+  [0.71, 0.66, 0.15],
+  [0.6, 0.62, 0.1],
+  [0.83, 0.42, 0.12],
+  [0.88, 0.3, 0.1],
+  [0.93, 0.45, 0.14],
+  [0.68, 0.18, 0.14],
+  [0.7, 0.86, 0.13],
+]
+
+/**
+ * 源兵衛の書。見台の上でひらいている。はじめは「青い刃のかけら」の見開き（V7_ART.bookPage1）。
+ * drawClawPage() で次の見開きをひらき、源兵衛が「時を裂く爪」の絵（V7_ART.bookPage2）を描いていく（にじむように広がる）。
+ * 絵が読めないときは、手描きのキャンバス（pages.ts）で同じことをする。
+ */
 export class GenbeiBook {
   readonly root = new THREE.Group()
   /** ページの真ん中（カメラの寄り先） */
@@ -415,19 +435,35 @@ export class GenbeiBook {
   private claw = 0
   private drawing: { t: number; dur: number; done: () => void } | null = null
   private repaint = 0
+  private readonly art: { p1: HTMLImageElement | null; p2: HTMLImageElement | null } = { p1: null, p2: null }
+  private static readonly W = 1024
+  private static readonly H = 640
 
   constructor(c: Ctx) {
-    const [cv, g] = makeCanvas(1024, 704)
+    const [cv, g] = makeCanvas(GenbeiBook.W, GenbeiBook.H)
     this.g = g
-    paintSpread(g, 1024, 704, 0)
     this.tex = new THREE.CanvasTexture(cv)
     this.tex.colorSpace = THREE.SRGBColorSpace
     this.tex.anisotropy = 4
+    this.paint()
+    // 物語の絵（読めたら差しかえる）
+    const load = (url: string, key: 'p1' | 'p2') =>
+      new THREE.ImageLoader().load(
+        url,
+        (img) => {
+          this.art[key] = img
+          this.paint()
+        },
+        undefined,
+        () => console.warn('[edo7] 書の絵を読めなかったので手描きの絵を使います', url),
+      )
+    load(V7_ART.bookPage1, 'p1')
+    load(V7_ART.bookPage2, 'p2')
     // ページ（のどがくぼみ、両端が少し反る）
-    const geo = new THREE.PlaneGeometry(0.44, 0.3, 24, 1)
+    const geo = new THREE.PlaneGeometry(0.46, 0.288, 24, 1)
     const pos = geo.attributes.position as THREE.BufferAttribute
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i) / 0.22
+      const x = pos.getX(i) / 0.23
       pos.setZ(i, 0.012 * (1 - Math.cos(Math.min(1, Math.abs(x)) * Math.PI * 0.5)) * 2.2 + 0.006 * Math.pow(Math.abs(x), 6))
     }
     geo.computeVertexNormals()
@@ -436,10 +472,8 @@ export class GenbeiBook {
     page.receiveShadow = true
     // 表紙（藍の布）と紙の束
     const sub: Ctx = { ...c, b: new Batch(), col: new ColliderList() }
-    for (const e of [-1, 1]) sub.b.add(rbox(0.225, 0.31, 0.012, 0.003), sub.m.plain, M(e * 0.112, 0, -0.012), { tint: '#2c3f6e' })
-    for (const e of [-1, 1]) sub.b.add(rbox(0.205, 0.29, 0.01, 0.002), sub.m.plain, M(e * 0.104, 0, -0.003), { tint: '#efe4cc' })
-    // 綴じ糸
-    for (let k = 0; k < 4; k++) sub.b.add(new THREE.CylinderGeometry(0.0025, 0.0025, 0.02, 4), sub.m.plain, M(0.21, -0.11 + k * 0.073, -0.006, Math.PI / 2, 0, 0), { tint: '#d8c890', cast: false })
+    for (const e of [-1, 1]) sub.b.add(rbox(0.235, 0.3, 0.012, 0.003), sub.m.plain, M(e * 0.117, 0, -0.02), { tint: '#2c3f6e' })
+    for (const e of [-1, 1]) sub.b.add(rbox(0.215, 0.28, 0.008, 0.002), sub.m.plain, M(e * 0.109, 0, -0.01), { tint: '#efe4cc' })
     const covers = sub.b.build('genbei_book_covers')
     this.root.add(page, covers)
     // 見台の傾き：読む人（北）から見て、ページの上が南へ遠ざかる
@@ -457,20 +491,66 @@ export class GenbeiBook {
   setClawPage(t: number): void {
     this.drawing = null
     this.claw = t
-    paintSpread(this.g, 1024, 704, t)
-    this.tex.needsUpdate = true
+    this.paint()
   }
 
   get clawPage(): number {
     return this.claw
   }
 
-  /** 源兵衛が 2 ページ目に「時を裂く爪」を描く（dur 秒。描き終わると resolve） */
+  /** 源兵衛が次の見開きに「時を裂く爪」を描く（dur 秒。描き終わると resolve） */
   drawClawPage(dur = 4.5): Promise<void> {
     this.drawing?.done()
     return new Promise((done) => {
       this.drawing = { t: this.claw * dur, dur, done }
     })
+  }
+
+  /** 今の状態でページを描く */
+  private paint(): void {
+    const g = this.g
+    const W = GenbeiBook.W
+    const H = GenbeiBook.H
+    const t = this.claw
+    const crop = (img: HTMLImageElement, r: readonly number[]) => g.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, W, H)
+    if (t <= 0 && this.art.p1) crop(this.art.p1, ART_CROP.p1)
+    else if (t > 0 && this.art.p2) {
+      const img = this.art.p2
+      const r = ART_CROP.p2
+      // 白紙の見開き：左ページ（白紙）を右へ鏡に写す
+      crop(img, r)
+      g.save()
+      g.translate(W, 0)
+      g.scale(-1, 1)
+      g.drawImage(img, r[0], r[1], r[2] * 0.5, r[3], 0, 0, W * 0.5, H)
+      g.restore()
+      // 絵をにじむように広げる（描いた順）
+      g.save()
+      g.beginPath()
+      const n = REVEAL.length
+      for (let i = 0; i < n; i++) {
+        const k = Math.max(0, Math.min(1, t * 1.25 * n - i))
+        if (k <= 0) continue
+        const [x, y, rad] = REVEAL[i]
+        g.moveTo(x * W + rad * W * k, y * H)
+        g.arc(x * W, y * H, rad * W * k, 0, Math.PI * 2)
+      }
+      g.clip()
+      crop(img, r)
+      g.restore()
+      // 題（左ページの上の余白）と印
+      const a = Math.max(0, Math.min(1, (t - 0.78) / 0.2))
+      if (a > 0) {
+        g.save()
+        g.globalAlpha = a
+        drawLettering(g, { text: '時を裂く爪', vertical: true, x: W * 0.3, y: H * 0.1, w: W * 0.12, h: H * 0.52, ink: '#1e1a18', face: 'kaisho', maxSize: W * 0.08 })
+        g.fillStyle = '#c8392b'
+        g.fillRect(W * 0.33, H * 0.66, W * 0.05, W * 0.05)
+        drawLettering(g, { text: '源', vertical: true, x: W * 0.334, y: H * 0.665, w: W * 0.042, h: W * 0.042, ink: '#fbeee0', face: 'kaisho', bold: 0 })
+        g.restore()
+      }
+    } else paintSpread(g, W, H, t)
+    this.tex.needsUpdate = true
   }
 
   update(dt: number): void {
@@ -481,8 +561,7 @@ export class GenbeiBook {
     this.repaint -= dt
     if (this.repaint <= 0 || this.claw >= 1) {
       this.repaint = 0.07
-      paintSpread(this.g, 1024, 704, this.claw)
-      this.tex.needsUpdate = true
+      this.paint()
     }
     if (this.claw >= 1) {
       this.drawing = null

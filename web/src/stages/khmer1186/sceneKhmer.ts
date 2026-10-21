@@ -963,8 +963,10 @@ function buildPyramid(c: KCtx): void {
   }
   lion(c, S.x0 - 0.9, 0, S.z0 - 0.5, Math.PI / 2, 1.1)
   lion(c, S.x0 - 0.9, 0, S.z1 + 0.5, Math.PI / 2, 1.1)
-  // 階段のわきの松明（夜の防衛で照らす）
-  for (const i of [2, 5]) for (const z of [S.z0 - 0.3, S.z1 + 0.3]) torchPost(c, S.x0 + S.run * (i + 0.5), S.rise * (i + 0.5) + 0.75, z, 1.0)
+  // 階段のわきの松明（夜の防衛で照らす）。いちばん下の区切りにも立てて、夜に「ここからのぼる」入口を見せる
+  for (const i of [0, 2, 5]) for (const z of [S.z0 - 0.3, S.z1 + 0.3]) torchPost(c, S.x0 + S.run * (i + 0.5), S.rise * (i + 0.5) + 0.75, z, 1.0)
+  // 松明の照り返し：大階段の下の段のまん中を照らす（夜にのぼる段が読めるように）。松明と同じ色なので、強さは松明といっしょに切りかわる
+  c.lights.push({ pos: v(S.x0 + 0.5, 2.4, (S.z0 + S.z1) / 2), color: '#ffa04a', intensity: 0, dist: 9 })
   // 上の台の舗装
   const top = Pyr.tiers[2]
   const Y = K.TOP_Y

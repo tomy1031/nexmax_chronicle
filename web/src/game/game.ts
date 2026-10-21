@@ -804,7 +804,7 @@ export class Game {
     a.combat.animate(ndt * a.combat.timeScale, uTime.value)
     a.chrono.update(ndt, this.camera)
     if (!frozen) this.tickDialogue(ndt, false)
-    this.chapterCard.update(frozen ? 0 : dt)
+    this.chapterCard.update()
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
     this.nexmax.handAnchor.getWorldPosition(this.hand)

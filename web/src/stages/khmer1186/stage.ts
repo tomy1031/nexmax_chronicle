@@ -14,6 +14,7 @@ import type { WireEvent } from '../../player/clawLogic'
 import type { Hint } from '../../ui/hud'
 import type { MusicId } from '../../audio/tracks'
 import type { EnemyHandle } from '../../combat/combatSystem'
+import type { EnemyStats } from '../../combat/combatLogic'
 import { SceneClock } from '../../chronicle/kit/clock'
 import { Walker } from '../../chronicle/kit/walker'
 import { Curtain } from '../../chronicle/kit/curtain'
@@ -30,6 +31,15 @@ import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
 
 const DB = new DialogueDB(data)
+
+/**
+ * 夜の影の攻撃を、子ども向けにゆるめる（共有の ENEMY_STATS はそのまま、この敵だけ）：
+ * 構え（溜め）が見えてから当たるまで 1.2 秒より長く（欠け虫は 0.45 秒・欠け盾は 0.6 秒）・当たりはハート 1 つ
+ */
+function kidEnemy(h: EnemyHandle): void {
+  const b = h.brain as unknown as { stats: EnemyStats }
+  b.stats = { ...b.stats, windup: Math.max(1.25, b.stats.windup), damage: Math.min(1, b.stats.damage) }
+}
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 /** 帰りの光の輪（上の台の西のふち） */
@@ -82,6 +92,8 @@ export class KhmerStage implements Stage {
   private towaFloat = 0
   private towaShown = false
   private readonly marks: ObjectiveMark[] = []
+  /** 落ちる石を、足場にならない高さで止めた回数（ヒント用） */
+  private stoneMiss = 0
   /** rt.chrono に渡した止める対象（enabled を毎フレーム切りかえる） */
   private readonly fzTargets: { fz: Freezable; t: ChronoTarget }[] = []
 
@@ -176,6 +188,12 @@ export class KhmerStage implements Stage {
         void this.talkOnce(rt, 'tower_e_solved')
       }
     }
+    // ちがう向きで 2 回止めたら、止めるタイミングを教える（そのあとも 3 回ごとに）
+    let missed = 0
+    this.sc.turntable.onMissed = () => {
+      missed++
+      if (this.step(rt) === 'mirrors' && missed >= 2 && missed % 3 === 2) void rt.dialogue(this.lines('tower_e_hint'))
+    }
     // 時空裂きで止められる物
     this.addFreezables(rt)
     this.placeForStep(step)
@@ -220,7 +238,14 @@ export class KhmerStage implements Stage {
         enabled: false,
         seconds: 4,
         range: fz.id === 'khmer_turntable' ? 14 : 12,
-        onAct: () => fz.setFrozen(true),
+        onAct: () => {
+          // 落ちる石を、足場にならない高さで止めた：2 回目から、止めどきを教える（そのあとも 3 回ごとに）
+          if (fz.goodNow && !fz.goodNow()) {
+            this.stoneMiss++
+            if (this.stoneMiss >= 2 && this.stoneMiss % 3 === 2) void rt.dialogue(this.lines('stone_hint'))
+          }
+          fz.setFrozen(true)
+        },
         onThaw: () => fz.setFrozen(false),
       }
       rt.chrono.add(t)
@@ -499,6 +524,7 @@ export class KhmerStage implements Stage {
     kinds.forEach((kind, i) => {
       const at = TOP_SPAWNS[(i + w * 2) % TOP_SPAWNS.length]
       const h = rt.combat.spawn(kind, at.clone(), { tag: 'night', style: SHADE_STYLE, leash: 16, hidden: true })
+      kidEnemy(h)
       void this.clock.wait(i * 0.45).then(() => {
         if (h.alive && !this.clock.dead) rt.combat.appear(h)
       })
@@ -771,12 +797,34 @@ export class KhmerStage implements Stage {
     }
   }
 
+  /** 近い塔の仕掛けをこえたか（北：島の上・南：上の台の高さ）。目標の書き分け用 */
+  private towerClimbed(rt: StageRuntime): boolean {
+    const p = rt.player.position
+    const id = this.nearTower
+    if (id === 'n') {
+      const I = K.ISLAND
+      return p.x > I.x0 && p.x < I.x1 && p.z > I.z0 && p.z < I.z1
+    }
+    if (id === 's') return p.y > TOWERS.s.baseY + SMALL_TOWER.top - 1.5
+    return true
+  }
+
   private towerNear(p: THREE.Vector3): TowerId | null {
+    // 回る鏡の台のそば（南の塔の階段の下の円とも重なるので、先に見る。でないと台の前で「南の塔」の目標が出る）
+    if (Math.hypot(p.x - K.TURNTABLE.x, p.z - K.TURNTABLE.z) < 7) return 'e'
+    // いちばん近い塔（塔の中心から 12m・階段の下から 9m の中）
+    let best: TowerId | null = null
+    let bd = 0
     for (const id of TOWER_IDS) {
       const t = TOWERS[id]
       const base = towerPoint(t, SMALL_TOWER.tiers[2].half + SMALL_TOWER.stairs.run * SMALL_TOWER.stairs.segs, 0, 0)
-      if (Math.hypot(p.x - t.x, p.z - t.z) < 12 || Math.hypot(p.x - base.x, p.z - base.z) < 9) return id
+      const d = Math.min(Math.hypot(p.x - t.x, p.z - t.z) - 12, Math.hypot(p.x - base.x, p.z - base.z) - 9)
+      if (d < bd) {
+        best = id
+        bd = d
+      }
     }
+    if (best) return best
     // 北の塔：水の上の村の東・象のりば・池の中
     if (p.z < -45 && p.x > -42) return 'n'
     if (Math.hypot(p.x - K.TURNTABLE.x, p.z - K.TURNTABLE.z) < 9) return 'e'
@@ -899,7 +947,7 @@ export class KhmerStage implements Stage {
     const u = this.ura.objective(rt)
     if (u) return u
     const step = this.step(rt)
-    return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower })
+    return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower, climbed: this.towerClimbed(rt) })
   }
 
   objectiveTarget(rt: StageRuntime): THREE.Vector3 | null {

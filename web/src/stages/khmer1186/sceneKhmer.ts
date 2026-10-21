@@ -68,7 +68,7 @@ import {
 import { KhmerBodies, PlatformRider, type KinematicBox } from './physKhmer'
 import { Arun } from './arun'
 import { MirrorStand, Turntable, type Freezable } from './mirrors'
-import { BigStairs, FallingStone, buildFlight, stonePath } from './stairs'
+import { BigStairs, FallingStone, STONE_REST, buildFlight, stonePath } from './stairs'
 import { StoneFallLogic, PingPongWalker } from './khmerLogic'
 import { ElephantHerd, type Elephant } from './elephant'
 import { Burst, Drift, Moon, SkyCrack, Torches } from './fxKhmer'
@@ -208,7 +208,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
   // 南の塔：くずれた区切りの前で落ちてくる石
   const towerStones: FallingStone[] = []
   for (const w of southWalls) {
-    const logic = new StoneFallLogic({ path: stonePath(w.foot, w.up, SMALL_TOWER.stairs.rise, SMALL_TOWER.stairs.run), speed: 1.6, wobble: 1.1, gap: 1.4, window: { y0: w.y0 + 0.4, y1: w.y0 + 0.9 }, half: 0.31, delay: towerStones.length * 2.1 })
+    const logic = new StoneFallLogic({ path: stonePath(w.foot, w.up, SMALL_TOWER.stairs.rise, SMALL_TOWER.stairs.run), speed: 1.6, wobble: 1.4, gap: 1.4, window: { y0: w.y0 + 0.4, y1: w.y0 + 0.9 }, half: 0.31, delay: towerStones.length * 2.1, rest: STONE_REST })
     towerStones.push(new FallingStone(`south_${w.seg}`, logic, stoneMat(), bodies, burst))
   }
   // 象

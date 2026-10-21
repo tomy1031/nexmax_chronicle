@@ -1039,7 +1039,9 @@ export class ChronicleEdoStage implements Stage {
           if (r === 'wrong') {
             d.setRage(this.gears.rage)
             rt.shake(0.3)
-            rt.say('おはる', lines.lines('wrong')[0].text, 2.6)
+            // 2 回まちがえたら、照準の切りかえ（R）を教える
+            const key = this.gears.mistakes >= 2 ? 'wrong_hint' : 'wrong'
+            rt.say('おはる', lines.lines(key)[0].text, 3.2)
           }
         }
       }
@@ -1149,7 +1151,7 @@ export class ChronicleEdoStage implements Stage {
 
   objective(_rt: StageRuntime): { title: string; sub: string } {
     if (this.step === 'night' && this.sub.boss === 'fight' && this.gears.holding >= 0) return { title: 'はなさないで！', sub: `${GEAR_NAMES[this.gears.holding]}の歯車が止まるまで（${Math.ceil((1 - this.gears.progress) * 3)}秒）` }
-    return edoObjective(this.step, { ...this.sub, nextGear: this.gears.next })
+    return edoObjective(this.step, { ...this.sub, nextGear: this.gears.next, mistakes: this.gears.mistakes })
   }
 
   objectiveTarget(rt: StageRuntime): THREE.Vector3 | null {

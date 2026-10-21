@@ -318,7 +318,8 @@ export const NPC = {
     stairs: spot(17.6, 8.55, -2.1, -1.5),
     altar: spot(21.6, K.TOP_Y, -2.6, -1.9),
     tower_n: spot(-39, K.WALK_Y, -56.6, -1.5),
-    tower_e: spot(37.4, 0, 9, -1.0),
+    // 回る鏡の台の南東（西や門の側から台を狙う線に立たない）
+    tower_e: spot(41.6, 0, 13.4, 0.44),
     tower_s: spot(28.6, 0, 16.2, -0.4),
   },
   grandma: {

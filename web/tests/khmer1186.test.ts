@@ -63,6 +63,17 @@ describe('落ちてくる石', () => {
     expect(s.pos.distanceTo(at)).toBeLessThan(1e-6)
     expect(s.top).toBeGreaterThanOrEqual(0.4)
   })
+  it('rest：下に着いたら、足場にちょうどいい高さで rest 秒休む（そのあいだに止められる）', () => {
+    const s = new StoneFallLogic({ path, speed: 2, wobble: 0.2, window: { y0: 0.4, y1: 0.9 }, half: 0.3, rest: 1.5 })
+    let inWin = 0
+    for (let i = 0; i < 600; i++) {
+      s.update(1 / 60)
+      if (s.inWindow) inWin += 1 / 60
+      if (s.phase === 'fade') break
+    }
+    // 休みの 1.5 秒＋転がる間
+    expect(inWin).toBeGreaterThan(1.5)
+  })
   it('loop: false なら 1 回で終わる', () => {
     const s = new StoneFallLogic({ path, speed: 4, wobble: 0.1, fade: 0.1, loop: false })
     for (let i = 0; i < 400; i++) s.update(1 / 60)

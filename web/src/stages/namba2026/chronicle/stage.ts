@@ -36,11 +36,15 @@ import { V7_ART, loadArtCanvas } from '../../../chronicle/art'
 import { IDO_RECORDS, SEARCH_WORDS, recordOfKanban } from './idoSearchLogic'
 import { createOfujiPlaceholder } from './ofuji'
 import { DefenseDirector } from './defenseDirector'
+import { softenEnemy } from './softEnemy'
 import { ARMOR_SOURCES, KANBAN, LAB, SHRINE, SPOTS_V7, V7_SPAWNS, type KanbanId } from './layoutV7'
 import { KANBAN_RECORD, STEP_SPAWN, STEP_TIME, combatStep, nambaV7Objective, nambaV7Step, stepMusic, type NambaV7Ctx, type NambaV7Step } from './storyNamba'
 
 const lines = new DialogueDB(linesData)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
+
+/** よろいの影獣（6 章）：体力・溜め・当たり。体力 0 で戻るときのやり直しの位置（獣の住みかから 4m はなれた、遊歩道の東） */
+const BEAST = { hp: 10, windup: 1.3, damage: 1, firstStun: 1.8, firstGrab: 5.0, retry: v(-1.2, 0, 9.0) }
 
 type Spot = { pos: THREE.Vector3; face: THREE.Vector3 }
 type Person = Character
@@ -56,6 +60,8 @@ type Fight = {
   armDef: ClawTargetDef
   /** つかんでいるあいだ、まちがえて狙わないように止めた近くの的（木箱など） */
   muted: ClawTargetDef[]
+  /** やられる前の獣の体力（体力 0 で戻っても、獣の体力は満タンにしない） */
+  lastHp: number
 }
 
 /** 町のかんばんの記録を見ている */
@@ -287,7 +293,8 @@ export class ChronicleNambaStage implements Stage {
     const plateObjs = createArmorPlateObjects()
     for (const p of plateObjs) p.visible = false
     const yaw = Math.atan2(-(rt.player.position.x - center.x), -(rt.player.position.z - center.z))
-    const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: 12, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
+    const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: BEAST.hp, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
+    softenEnemy(h, { windup: BEAST.windup, damage: BEAST.damage })
     rt.combat.appear(h)
     h.brain.stun(6)
     this.setPromenadeCrowd(false)
@@ -318,12 +325,13 @@ export class ChronicleNambaStage implements Stage {
     rt.endCinematic()
     // 戦い
     rt.combat.enabled = true
-    rt.combat.setCheckpoint(V7_SPAWNS.v7_nextmake.pos, Math.PI)
+    rt.combat.setCheckpoint(BEAST.retry, Math.atan2(-(center.x - BEAST.retry.x), -(center.z - BEAST.retry.z)))
     rt.combat.showBoss(h, 'よろいの影獣')
     const armDef: ClawTargetDef = { id: 'v7_beast_arm', type: 'enemy_pull', label: '佐伯さんをつかんだ影の腕', point: new THREE.Vector3(), radius: 0.7, enabled: false, noLineOfSight: true, range: 12 }
     rt.claw.targets.push(armDef)
-    this.fight = { h, plates: plateObjs.length, grab: null, grabs: 0, nextGrab: 3.0, armDef, muted: [] }
-    h.brain.stun(0.6)
+    this.fight = { h, plates: plateObjs.length, grab: null, grabs: 0, nextGrab: BEAST.firstGrab, armDef, muted: [], lastHp: BEAST.hp }
+    // はじめは少し動かない（獣のすぐそばから始まるので、はなれて向きを合わせる間）
+    h.brain.stun(BEAST.firstStun)
     this.busy = false
     rt.setControlLocked(false)
     void rt.dialogue(lines.lines('beast_hint'))
@@ -350,6 +358,7 @@ export class ChronicleNambaStage implements Stage {
     if (!F || !F.h.alive) return
     const h = F.h
     const s = this.saeki
+    if (!rt.combat.downed) F.lastHp = h.brain.hp
     if (!F.grab) {
       F.nextGrab -= dt
       if (F.nextGrab <= 0 && F.grabs < 2 && !this.busy) {
@@ -780,7 +789,14 @@ export class ChronicleNambaStage implements Stage {
   }
 
   private onCombatRespawn(): void {
-    // 体力 0 で戻ったとき：防衛戦はそのまま（ほこらの体力も）
+    // 体力 0 で戻ったとき：影獣の体力は、やられる前のまま（シェルは満タンにもどす）。防衛戦はそのまま（ほこらの体力も）
+    const F = this.fight
+    if (F && F.h.alive) {
+      F.h.brain.hp = Math.min(F.h.brain.hp, F.lastHp)
+      // 戻ってすぐ襲われないように、少しのあいだ動かない
+      F.h.brain.stun(2.5)
+    }
+    this.defense?.onPlayerRespawn()
   }
 
   /** 2 波しのいだ：社長が路地のかんばんで「江戸の朝」を映す → 小さな影がにげる → 大きな影 */

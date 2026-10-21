@@ -123,7 +123,6 @@ export class ChronicleFutureStage implements Stage {
   private handHits = 0
   private handsCut = 0
   private readonly handClock: Record<string, number> = {}
-  private climbLanding = new THREE.Vector3()
   // ---- 年代ダイヤル
   private dial: { logic: YearDialLogic; resolve: () => void } | null = null
   // ---- 決闘
@@ -481,7 +480,7 @@ export class ChronicleFutureStage implements Stage {
       const step = step2086(this.f)
       if (step !== this.step) {
         this.step = step
-        this.prepareSoft(step, rt)
+        this.prepareSoft(step)
       }
       this.phase = defaultPhase(step)
       const before = step
@@ -499,10 +498,9 @@ export class ChronicleFutureStage implements Stage {
   }
 
   /** 段階が変わったとき（場面の続き）：大きく作り直さずに必要なものだけ */
-  private prepareSoft(step: Step2086, rt: StageRuntime): void {
+  private prepareSoft(step: Step2086): void {
     this.ch.dial.setDial(dialVisible(this.f))
     this.lens.set(lensMounted(step, this.lensToday))
-    void rt
   }
 
   private runStep(step: Step2086, rt: StageRuntime): Promise<void> {
@@ -1058,7 +1056,7 @@ export class ChronicleFutureStage implements Stage {
     this.sky.finish(rt)
     await this.wait(0.4)
     await this.fade(false, 1.0)
-    void rt.cinematic({ look: TOWER.towa.pos.clone().add(v(0, 1, 0)), hold: 2.2, inSec: 1.2, fov: 38, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
+    void rt.cinematic({ look: TOWER.towa.pos.clone().add(v(0, 1, 0)), from: TOWER.foot.clone().add(v(-3.2, 1.4, 3.6)), hold: 2.2, inSec: 1.2, fov: 40, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.3, 0)), label: 'トワ' } })
     await this.talk(rt, 'ch4_climb')
     // 見上げる（最初の金具が見えるように）
     rt.camRig.yaw = faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz))
@@ -1066,7 +1064,6 @@ export class ChronicleFutureStage implements Stage {
     this.lock(rt, false)
     // のぼる（黒い手が壁をなでる）
     this.handsMode = 'climb'
-    this.climbLanding.copy(TOWER.foot)
     this.handT = 0
     for (const h of this.ch.tower.hooks) h.enabled = true
     this.setPhase('tower_climb', [{ pos: this.ch.tower.hooks[0].point.clone(), label: '金具' }])
@@ -1965,7 +1962,6 @@ export class ChronicleFutureStage implements Stage {
       this.handClock.climbHit = 0
       if (this.hands.has('wall')) this.hands.retract('wall')
     }
-    void this.climbLanding
   }
 
   /** 風船：クローが運んでくると子どもへ返す（任意） */
@@ -2063,14 +2059,12 @@ export class ChronicleFutureStage implements Stage {
     return this.marks.length ? this.marks : null
   }
 
-  music(rt: StageRuntime): MusicId | null {
-    void rt
+  music(): MusicId | null {
     return this.ura.music ?? musicOf(this.step, this.part)
   }
 
-  onClawEvent(e: WireEvent, rt: StageRuntime): void {
+  onClawEvent(e: WireEvent): void {
     if (e.kind === 'connected' && e.target.id === this.props.balloon.def.id) this.props.balloon.grab()
-    void rt
   }
 
   onPassThroughAny(): void {
@@ -2133,8 +2127,11 @@ export class ChronicleFutureStage implements Stage {
     this.fx?.dispose()
     this.choice.close()
     this.ura.dispose()
+    // 夜の環境マップを使ったまま消さない（シェルが次の時代の環境を入れるまでの間）
+    if (this.rt && this.nightEnv && this.rt.scene.environment === this.nightEnv.texture) this.rt.scene.environment = this.dayEnv
     this.nightEnv?.dispose()
     this.ch?.dispose()
+    this.fs?.dispose()
     this.hands?.dispose()
     this.lamp?.dispose()
     this.towa?.dispose()

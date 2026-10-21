@@ -37,7 +37,7 @@ import type { ChronoTarget } from '../../../chronicle/chrono'
 import { YearDialLogic } from './yearDialLogic'
 import { YearDialPanel } from './yearDialPanel'
 import { createStarKeychain } from './plazaProps'
-import { createUraFinal, type UraLike } from './uraFinal'
+import { UraBattle } from '../../../chronicle/uraBattle'
 import { SkyEvent, TimeBadge, groundY } from './stageKit'
 import linesJson from './lines_v7.json'
 import {
@@ -84,7 +84,7 @@ export class ChronicleFutureStage implements Stage {
   private sky!: SkyEvent
   private ring!: RingRecord
   private lens!: LensMount
-  private ura!: UraLike
+  private ura!: UraBattle
   private nightEnv: EnvTexture | null = null
   private dayEnv: THREE.Texture | null = null
   private keychain: THREE.Mesh | null = null
@@ -177,7 +177,8 @@ export class ChronicleFutureStage implements Stage {
     this.towa.holdLamp(this.lamp)
     this.towa.root.visible = false
     fs.root.add(this.towa.root)
-    this.ura = createUraFinal()
+    // 12 章の裏側（足場の当たり判定を足すので load で組む。x = +3000 の遠く）
+    this.ura = UraBattle.build({ root: fs.root, colliders: fs.colliders, scenario: 'final', quality: ctx.quality })
     ctx.progress(0.8, 'ソラを読み込み中…')
     this.sora = await soraP
     fs.root.add(this.sora.root)
@@ -186,7 +187,7 @@ export class ChronicleFutureStage implements Stage {
     this.spawnId = ctx.spawnId
     this.arrival = ctx.spawnId && ctx.spawnId.startsWith('v7_from_') ? ctx.spawnId : null
     this.step = step2086((n) => ctx.story.get(n))
-    return { root: fs.root, colliders: fs.colliders, claw: { targets: fs.claw.targets, movables: fs.claw.movables }, lights: fs.lights }
+    return { root: fs.root, colliders: fs.colliders, claw: { targets: fs.claw.targets, movables: fs.claw.movables }, lights: [...fs.lights, ...this.ura.lights] }
   }
 
   spawn(id: string | null): SpawnPoint {
@@ -842,9 +843,15 @@ export class ChronicleFutureStage implements Stage {
           this.handsCut++
           rt.shake(0.4)
           if (this.handsCut === 1) void this.talk(rt, 'ch12_hand_cut')
-        } else this.hands.passThrough(id)
+        } else {
+          this.hands.passThrough(id)
+          this.onPassThroughAny()
+        }
       },
-      onPassThrough: () => this.hands.passThrough(id),
+      onPassThrough: () => {
+        this.hands.passThrough(id)
+        this.onPassThroughAny()
+      },
     })
   }
 
@@ -1791,12 +1798,17 @@ export class ChronicleFutureStage implements Stage {
     await this.wait(2.6)
     this.lock(rt, false)
     this.setPhase('ura')
-    await this.ura.run(rt, { towa: this.towa, sora: { ringPos: v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z) }, doorSeconds: 60, lines: (k) => this.L(k) })
+    // 裏側へ（扉から出ると、広場へ転がり出る）
+    const out = this.spawnPoint('night_plaza')
+    await this.ura.run(rt, { towa: this.towa, lamp: this.lamp, sora: { ringPos: v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z) }, exitTo: { pos: out.pos.clone(), yaw: out.facing } })
     if (!this.alive) return
     door.close()
+    // ランプはトワの手へもどす（光はもう消えている）
+    this.towa.holdLamp(this.lamp)
+    this.lamp.root.position.set(0, 0, 0)
+    this.lamp.root.rotation.set(0, 0, 0)
+    this.lamp.root.visible = false
     if (!this.f('v7_orm_down')) this.set(rt, 'v7_orm_down')
-    // 広場へ転がり出る
-    this.teleportSpawn(rt, 'night_plaza')
   }
 
   private async sceneCh12Ending(rt: StageRuntime): Promise<void> {
@@ -1976,12 +1988,15 @@ export class ChronicleFutureStage implements Stage {
     this.lens.update(dt)
     this.sky.update(dt, rt)
     this.hands.update(dt, t)
-    this.lamp.update(dt, t)
     this.fx?.update(dt)
     this.flash?.update(dt)
     if (this.rt) this.updateSora(dt, rt)
-    if (this.towa.root.visible) this.towa.update(dt, 0)
+    // 裏側の間は、トワとランプの update を UraBattle がする（二重にしない）
     if (this.ura.active) this.ura.animate(dt, t)
+    else {
+      this.lamp.update(dt, t)
+      if (this.towa.root.visible) this.towa.update(dt, 0)
+    }
     if (this.fx) this.fx.setAspect(rt.camera.aspect)
   }
 
@@ -2041,9 +2056,8 @@ export class ChronicleFutureStage implements Stage {
   }
 
   music(rt: StageRuntime): MusicId | null {
-    if (this.ura.active) return 'ura'
     void rt
-    return musicOf(this.step, this.part)
+    return this.ura.music ?? musicOf(this.step, this.part)
   }
 
   onClawEvent(e: WireEvent, rt: StageRuntime): void {
@@ -2085,7 +2099,7 @@ export class ChronicleFutureStage implements Stage {
     return {
       step: this.step,
       arrival: this.arrival,
-      phase: this.phase,
+      goal: this.phase,
       busy: this.busy,
       part: this.part,
       lights: lightsLeft(this.f),
@@ -2096,6 +2110,7 @@ export class ChronicleFutureStage implements Stage {
       fWait: this.fWait?.label ?? null,
       sora: this.soraMode,
       duel: this.duel ? { thread: this.duel.thread, window: this.duel.window } : null,
+      ...this.ura.debug(),
     }
   }
 

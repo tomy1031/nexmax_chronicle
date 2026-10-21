@@ -19,7 +19,7 @@ import { TARGET_CATEGORY, isChronoTarget, type ClawTargetType } from '../player/
 import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
 import { CombatSystem } from '../combat/combatSystem'
 import { ChronoSystem } from '../chronicle/chrono'
-import { chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
+import { CHAPTER_ERA, chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
 import { ChapterCard } from '../chronicle/chapterCard'
 import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
@@ -624,7 +624,8 @@ export class Game {
       chapter: (n) => {
         if (a.dead) return Promise.resolve()
         const c = (n ?? chapterOf((k) => this.story.get(k))) as Chapter
-        if (c <= this.chapterShown) return Promise.resolve()
+        // 番号を指定しないときは、その章の時代にいるときだけ出す（前の時代の終わりで章が進んだとき）
+        if (c <= this.chapterShown || (n === undefined && CHAPTER_ERA[c] !== a.stage.key)) return Promise.resolve()
         this.chapterShown = c
         return this.chapterCard.show(c)
       },
@@ -748,7 +749,7 @@ export class Game {
           // 物語 v7：章が進んでいたら、着いた所で章のとびらを出してから場面を始める
           const f = (n: string) => this.story.get(n)
           const c = chapterOf(f)
-          if (v7Started(f) && c > this.chapterShown) {
+          if (v7Started(f) && c > this.chapterShown && CHAPTER_ERA[c] === a.stage.key) {
             this.chapterShown = c
             void this.chapterCard.show(c).then(() => {
               if (this.active === a && !a.dead) a.stage.revealed?.(a.rt)
@@ -931,7 +932,8 @@ export class Game {
     {
       const f = (n: string) => this.story.get(n)
       const idle = !card && !this.talk && !cineOn && !this.controlLocked && !this.travel.busy
-      if (v7Started(f) && chapterOf(f) > this.chapterShown && idle) {
+      const due = chapterOf(f)
+      if (v7Started(f) && due > this.chapterShown && CHAPTER_ERA[due] === a.stage.key && idle) {
         this.chapterIdle += dt
         if (this.chapterIdle > 1.5) {
           this.chapterIdle = 0

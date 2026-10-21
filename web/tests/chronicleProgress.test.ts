@@ -1,6 +1,6 @@
 // 物語 v7 の進み具合（chronicle/progress.ts）と、v7 の時空移動の道（game/travel.ts）
 import { describe, expect, it } from 'vitest'
-import { CHAPTER_TITLES, LIGHT_SPENDERS, LIGHTS_TOTAL, V7_FLAGS, chapterOf, dayCount, lightsLeft, riftClawUnlocked, v7Started } from '../src/chronicle/progress'
+import { CHAPTER_ERA, CHAPTER_TITLES, LIGHT_SPENDERS, LIGHTS_TOTAL, V7_FLAGS, chapterOf, dayCount, lightsLeft, riftClawUnlocked, v7Started } from '../src/chronicle/progress'
 import { STORY_BOOL_FLAGS, StoryState } from '../src/core/storyFlags'
 import { travelRule } from '../src/game/travel'
 
@@ -25,6 +25,13 @@ describe('光のつぶ', () => {
 })
 
 describe('章', () => {
+  it('章のとびらは、その章の時代に着いてから出す（前の時代の終わりで章が進んでも）', () => {
+    expect(CHAPTER_ERA[6]).toBe('2026')
+    expect(CHAPTER_ERA[7]).toBe('1726')
+    expect(CHAPTER_ERA[9]).toBe('2026')
+    expect(CHAPTER_ERA[11]).toBe('1186')
+    for (const c of [0, 1, 2, 3, 4, 5, 8, 10, 12, 13] as const) expect(CHAPTER_ERA[c]).toBe('2086')
+  })
   it('フラグだけから章が決まる（物語の順）', () => {
     expect(chapterOf(flags())).toBe(0)
     expect(chapterOf(flags('v7_prologue_seen'))).toBe(1)

@@ -124,6 +124,28 @@ export function chapterOf(f: Flags): Chapter {
   return 0
 }
 
+/**
+ * 章の舞台（その章のとびらを出す時代）。章を進めるフラグは前の時代の終わりに立つことがある
+ * （7 章の v7_search_done は 2026 で、9 章の v7_dial_seen・11 章の v7_towa_duel は 2086 で立つ）ので、
+ * とびらは着いた先の時代で出す
+ */
+export const CHAPTER_ERA: Readonly<Record<Chapter, '1186' | '1726' | '2026' | '2086'>> = {
+  0: '2086',
+  1: '2086',
+  2: '2086',
+  3: '2086',
+  4: '2086',
+  5: '2086',
+  6: '2026',
+  7: '1726',
+  8: '2086',
+  9: '2026',
+  10: '2086',
+  11: '1186',
+  12: '2086',
+  13: '2086',
+}
+
 /** v7 の物語を始めているか（旧版のセーブと分けるため） */
 export function v7Started(f: Flags): boolean {
   return V7_FLAGS.some((k) => f(k))

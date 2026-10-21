@@ -12,7 +12,7 @@ export const STAGE_INFO: Record<StageKey, StageInfo> = {
   '2086': { year: '2086年', place: 'ナンバタウン', label: '2086年　ナンバタウン' },
 }
 
-/** 起動時のステージ（URL の ?stage= も ?continue も無いとき）。1726年の縦切り試作をそのまま入口にしておく */
+/** 起動時のステージ（URL の ?stage= も ?continue も無いとき）。物語 v7 は 2086 年のはじめにから始まる */
 export const DEFAULT_STAGE: StageKey = '2086'
 
 /**
@@ -28,9 +28,9 @@ export function preloadStage(key: StageKey): Promise<unknown> {
     case '1970':
       return import('../stages/expo1970/stage')
     case '2026':
-      return import('../stages/namba2026/stage')
+      return import('../stages/namba2026/chronicle/stage')
     case '2086':
-      return import('./future2086Adapter')
+      return import('../stages/future2086/chronicle/stage')
   }
 }
 
@@ -50,12 +50,14 @@ export async function createStage(key: StageKey): Promise<Stage> {
       return new m.ExpoStage()
     }
     case '2026': {
-      const m = await import('../stages/namba2026/stage')
-      return new m.NambaStage()
+      // 物語 v7 の 6・9 章（旧版は stages/namba2026/stage.ts の NambaStage に残してある）
+      const m = await import('../stages/namba2026/chronicle/stage')
+      return new m.ChronicleNambaStage()
     }
     case '2086': {
-      const m = await import('./future2086Adapter')
-      return m.createFutureStage()
+      // 物語 v7 のはじめに・1〜5・8・10・12 章・結末・おわりに（旧版は future2086Adapter に残してある）
+      const m = await import('../stages/future2086/chronicle/stage')
+      return new m.ChronicleFutureStage()
     }
   }
 }

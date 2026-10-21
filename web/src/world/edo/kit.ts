@@ -57,7 +57,8 @@ export function orientAB(a: THREE.Vector3, b: THREE.Vector3, roll = 0): THREE.Ma
 export type BoxOpts = { rotY?: number; rotX?: number; rotZ?: number; tint?: THREE.ColorRepresentation; mat?: THREE.Material; r?: number; texM?: number; cast?: boolean; uAxis?: 0 | 1 | 2 }
 
 export function woodBox(c: Ctx, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, o: BoxOpts = {}): void {
-  const r = o.r ?? Math.min(0.05, Math.min(sx, sy, sz) * 0.18)
+  // 省電力の画質では面取りをやめて、ただの箱に（三角形が 4 分の 1 ほど）
+  const r = c.quality.level === 'low' ? 0 : (o.r ?? Math.min(0.05, Math.min(sx, sy, sz) * 0.18))
   c.b.add(rbox(sx, sy, sz, r), o.mat ?? c.m.wood, M(cx, cy, cz, o.rotX ?? 0, o.rotY ?? 0, o.rotZ ?? 0), {
     tint: o.tint ?? woodTint(c.rng),
     texM: o.texM ?? TEX_METERS.wood,
@@ -373,7 +374,7 @@ export function gableRoof(
     const [px, pz] = W(0, lz)
     const yy = eaveY + rise / 2
     // ローカル：X=棟方向、Z=勾配方向
-    c.b.add(rbox(length, th, slopeLen + 0.05, 0.05), mat, M(px, yy, pz, side * ang, rotY, 0), {
+    c.b.add(rbox(length, th, slopeLen + 0.05, c.quality.level === 'low' ? 0 : 0.05), mat, M(px, yy, pz, side * ang, rotY, 0), {
       tint,
       texM: 2.0,
       uAxis: 0,
@@ -385,7 +386,7 @@ export function gableRoof(
       for (let i = 0; i < n; i++) {
         const lx = -length / 2 + (i + 0.5) * (length / n)
         const [ex, ez] = W(lx, side * (half + 0.02))
-        c.b.add(new THREE.CylinderGeometry(0.075, 0.075, 0.08, 7, 1), c.m.roof, M(ex, eaveY + 0.02, ez, Math.PI / 2, rotY + (side < 0 ? Math.PI : 0), 0), {
+        c.b.add(new THREE.CylinderGeometry(0.075, 0.075, 0.08, c.quality.level === 'low' ? 5 : 7, 1), c.m.roof, M(ex, eaveY + 0.02, ez, Math.PI / 2, rotY + (side < 0 ? Math.PI : 0), 0), {
           tint: '#9aa3b4',
           uv: 'scale',
           uvScale: [0.1, 0.1],

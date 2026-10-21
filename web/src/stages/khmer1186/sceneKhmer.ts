@@ -73,6 +73,7 @@ import { ElephantHerd, type Elephant } from './elephant'
 import { Burst, Drift, Moon, SkyCrack, Torches } from './fxKhmer'
 import { PlaceholderPerson, Villagers } from './people'
 import { SUN_AFTERNOON, SUN_DAWN } from './environment'
+import { SwallowTargets } from './swallow'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -90,6 +91,8 @@ export type KhmerScene = {
   /** 南の塔のくずれた階段で落ちてくる石 */
   towerStones: FallingStone[]
   elephants: ElephantHerd
+  /** 夜に空の口が飲みこむ、村の古い石像と家 */
+  swallow: SwallowTargets
   /** 池をわたる象（北の塔への道の足場）と、象の道の象 */
   elephant: { baray: Elephant; road: Elephant }
   // ---------------------------------------------------------------- 物理（後から足す当たり判定）
@@ -181,6 +184,9 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
   // ---------------------------------------------------------------- 動く物
   const burst = new Burst(180, false)
   const sparks = new Burst(80, true)
+  // 夜に空の口が飲みこむ、村の古い石像と家
+  zone(c, 'village')
+  const swallow = new SwallowTargets(c, burst)
   const stoneMat = () => new THREE.MeshStandardMaterial({ map: m.sandstone.map, normalMap: m.sandstone.normalMap, roughness: 0.9, vertexColors: true })
   zone(c, 'temple')
   const stairs = new BigStairs(c, stoneMat, burst)
@@ -245,6 +251,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
   for (const id of TOWER_IDS) root.add(mirrors[id].group)
   for (const s of towerStones) root.add(s.mesh)
   root.add(villagers.mesh, chanda.group, grandma.group)
+  root.add(...swallow.objects)
 
   const rider = new PlatformRider()
   const torchLights = c.lights.filter((l) => l.color === '#ffa04a')
@@ -264,6 +271,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
     towerStones,
     elephants: herd,
     elephant: { baray, road },
+    swallow,
     bodies,
     rider,
     torches,
@@ -327,7 +335,10 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
       herd.update(dt)
       burst.update(dt, 3)
       sparks.update(dt, 0)
-      if (camera) moon.update(camera)
+      if (camera) {
+        moon.update(camera)
+        swallow.update(dt, camera, t)
+      }
     },
     dispose() {
       bodies.detach()

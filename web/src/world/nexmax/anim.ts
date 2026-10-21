@@ -77,12 +77,12 @@ export function addWeighted(out: Params, p: Params, w: number): void {
   for (const k of PARAM_KEYS) out[k] += p[k] * w
 }
 
-export type NexmaxPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave' | 'punch' | 'punchL' | 'hurt'
-export const ALL_POSES: NexmaxPose[] = ['idle', 'walk', 'run', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave', 'punch', 'punchL', 'hurt']
+export type NexmaxPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave' | 'punch' | 'punchL' | 'hurt' | 'sit'
+export const ALL_POSES: NexmaxPose[] = ['idle', 'walk', 'run', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave', 'punch', 'punchL', 'hurt', 'sit']
 
 /** 混ぜる単位。idle / walk / run は速さで連続的に変わる「地上」1 つにまとめる */
-export type Slot = 'ground' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave' | 'punch' | 'punchL' | 'hurt'
-export const SLOTS: Slot[] = ['ground', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave', 'punch', 'punchL', 'hurt']
+export type Slot = 'ground' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'crank' | 'wave' | 'punch' | 'punchL' | 'hurt' | 'sit'
+export const SLOTS: Slot[] = ['ground', 'dash', 'jump', 'fall', 'land', 'swing', 'pulled', 'fire', 'hold', 'crank', 'wave', 'punch', 'punchL', 'hurt', 'sit']
 export function slotOf(p: NexmaxPose): Slot {
   return p === 'idle' || p === 'walk' || p === 'run' ? 'ground' : p
 }
@@ -102,6 +102,7 @@ export const SLOT_TAU: Record<Slot, number> = {
   punch: 0.035,
   punchL: 0.035,
   hurt: 0.04,
+  sit: 0.22,
 }
 
 export type Ctx = {
@@ -632,5 +633,36 @@ export function evalSlot(slot: Slot, p: Params, c: Ctx): void {
       return evalPunch(p, c, true)
     case 'hurt':
       return evalHurt(p, c)
+    case 'sit':
+      return evalSit(p, c)
   }
+}
+
+/**
+ * すわる（ベンチ・段など）：root を座面の高さに置くと、腰が座面にのり、太ももは前へ、すねは下へたれる。
+ * 少し前かがみで下を向き、手はひざの上（4 章の「すわりこむ」）
+ */
+export function evalSit(p: Params, c: Ctx): void {
+  clearParams(p)
+  const breath = Math.sin(c.t * TAU * 0.26)
+  p.bodyY = -(HIP_Y - 0.07)
+  p.torsoPitch = -0.16 - 0.012 * breath
+  p.headPitch = 0.2 + 0.02 * Math.sin(c.t * 0.5)
+  p.headRoll = 0.03 * Math.sin(c.t * 0.37)
+  p.rShX = 0.62
+  p.lShX = 0.62
+  p.rShZ = 0.22
+  p.lShZ = 0.22
+  p.rShY = 0.2
+  p.lShY = 0.2
+  p.rEl = 0.55
+  p.lEl = 0.55
+  p.rHandZ = -0.1
+  p.lHandZ = -0.1
+  p.rHipZ = 0.1
+  p.lHipZ = 0.1
+  p.fist = 0.15
+  // 太ももをほぼ水平に前へ、すねは下へ（足は座面からたれる）
+  legIK(p, 'l', -L1 * 0.97, -L2 * 0.92, 0.1, 0)
+  legIK(p, 'r', -L1 * 0.97, -L2 * 0.92, 0.1, 0)
 }

@@ -4,7 +4,7 @@
 import type { Character, Pose } from '../world/characters'
 import type { ClawTargetType, WirePhase } from './clawLogic'
 
-export type RichPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'punch' | 'punchL' | 'hurt'
+export type RichPose = 'idle' | 'walk' | 'run' | 'dash' | 'jump' | 'fall' | 'land' | 'swing' | 'pulled' | 'fire' | 'hold' | 'punch' | 'punchL' | 'hurt' | 'sit'
 type LegacyPose = 'idle' | 'walk' | 'hold'
 
 export type PoseInput = {
@@ -59,6 +59,7 @@ export function legacyPose(p: RichPose, speed: number): LegacyPose {
     case 'idle':
     case 'land':
     case 'hurt':
+    case 'sit':
       return 'idle'
     case 'jump':
     case 'fall':

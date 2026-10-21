@@ -910,6 +910,8 @@ export class ChronicleFutureStage implements Stage {
     const dx = p.x - from.x
     const dz = p.z - from.z
     const d = Math.hypot(dx, dz) || 1
+    // 体力を 1 へらす（最後の 1 は残す：ここで倒れて場面のやり直しにならないように）。押し返しはこちらで
+    rt.combat.hurtPlayer(1, this.tmp.set(dx / d, 0, dz / d), 0, false)
     rt.player.burstMove((dx / d) * 7, (dz / d) * 7, 0.35)
     rt.hud.flash('danger')
     rt.shake(0.5)
@@ -1112,15 +1114,24 @@ export class ChronicleFutureStage implements Stage {
     this.hands.spawn('tower', v(TOWER.cx + 2, TOWER.deckY + 8, TOWER.cz - 2), { from: 'sky', size: 1.1 })
     await this.wait(0.6)
     await this.touchAndLoop(rt, 'ch2_touch', 'v7_rewind3')
-    // 四度目の朝：ベンチにすわりこむ
+    // 四度目の朝：ベンチにすわりこむ（座板の上に置いて、重力を止めてすわる）
     this.lock(rt, true)
     const b = this.ch.bench
-    this.teleport(rt, b.front, faceYaw(b.front, b.seat.pos))
+    this.teleport(rt, b.seat.pos.clone().setY(b.seat.pos.y + 0.03), faceYaw(b.seat.pos, b.front))
+    rt.player.beginExternal()
+    rt.setPlayerPose('sit')
     this.hideSora()
     await this.fade(false, 0.4)
-    void rt.cinematic({ look: b.seat.pos.clone().add(v(0, 0.4, 0)), from: b.front.clone().add(v(1.8, 1.4, 2.4)), hold: Infinity, inSec: 1.2, fov: 40 })
+    // ベンチの前から、すわりこんだネクマックスを少し見下ろす（ベンチの向きに合わせる）
+    const fwd = b.front.clone().sub(b.seat.pos).setY(0).normalize()
+    const side = v(-fwd.z, 0, fwd.x)
+    const benchCam = b.seat.pos.clone().addScaledVector(fwd, 1.5).addScaledVector(side, 2.0).setY(b.seat.pos.y + 1.0)
+    void rt.cinematic({ look: b.seat.pos.clone().add(v(0, 0.35, 0)), from: benchCam, hold: Infinity, inSec: 1.2, fov: 40 })
     await this.talk(rt, 'ch4_bench')
     rt.endCinematic()
+    rt.setPlayerPose(null)
+    rt.player.endExternal()
+    this.teleport(rt, b.front, faceYaw(b.seat.pos, b.front))
     this.placeSora('booth')
     this.lock(rt, false)
     await rt.chapter()

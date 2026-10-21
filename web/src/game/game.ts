@@ -172,6 +172,8 @@ export class Game {
   private oreGlow = 0
   private attackToastCooldown = 0
   private controlLocked = false
+  /** ステージが決めたネクマックスのポーズ（null なら動きから選ぶ） */
+  private poseOverride: 'sit' | null = null
   private readonly savedPlayer = new THREE.Vector3()
   private talk: { queue: DialogueQueue; resolve: () => void } | null = null
   private lastFrame: ActionFrame | null = null
@@ -449,6 +451,7 @@ export class Game {
     this.landTimer = 0
     this.fireTimer = 0
     this.controlLocked = false
+    this.poseOverride = null
     this.departT = 0
     this.endCineUi()
     this.hud.setPaused(false)
@@ -614,6 +617,9 @@ export class Game {
       },
       setControlLocked: (on) => {
         this.controlLocked = on
+      },
+      setPlayerPose: (pose) => {
+        this.poseOverride = pose
       },
       cinematic: (shot) => (a.dead ? Promise.resolve() : this.startCinematic(a, shot)),
       endCinematic: (fast) => this.cine.release(fast),
@@ -997,7 +1003,7 @@ export class Game {
     this.landTimer = Math.max(0, this.landTimer - dt)
     this.fireTimer = Math.max(0, this.fireTimer - dt)
     const w = claw.wire
-    const pose = choosePose({
+    const pose = this.poseOverride ?? choosePose({
       wirePhase: w.phase,
       targetType: w.target?.type ?? null,
       grounded: player.isExternal ? false : player.grounded || this.airTime < 0.12,

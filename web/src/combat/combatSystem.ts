@@ -11,7 +11,7 @@ import type { PlayerController } from '../player/controller'
 import type { ClawSystem } from '../player/clawSystem'
 import type { ClawTargetDef, WireEvent } from '../player/clawLogic'
 import type { Hud } from '../ui/hud'
-import { ATTACK_STEPS, AttackCombo, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind } from './combatLogic'
+import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind } from './combatLogic'
 import { EnemyModel, type EnemyStyle } from './enemyModels'
 import './combat.css'
 
@@ -935,11 +935,22 @@ export class CombatSystem {
     e.yaw = e.yaw + d * Math.min(1, rate * dt)
   }
 
-  /** プレイヤーが攻撃を受けた（無敵時間・回避・体力 0 の暗転までまとめて）。敵でないボスの攻撃からも呼べる */
-  hurtPlayer(damage: number, dir: THREE.Vector3, knock: number): void {
+  /**
+   * プレイヤーが攻撃を受けた（無敵時間・回避・体力 0 の暗転までまとめて）。敵でないボスの攻撃からも呼べる。
+   * lethal = false なら最後の 1 は残す（台本の場面の中で倒れてやり直しにならないように）
+   */
+  hurtPlayer(damage: number, dir: THREE.Vector3, knock: number, lethal = true): void {
     const pl = this.host.player
     if (this.dodgeState.invulnerable || this.health.invuln > 0) return
-    const res = this.health.damage(damage)
+    const n = lethal ? damage : Math.min(damage, this.health.hp - 1)
+    if (n <= 0) {
+      // 残り 1：へらさず、当たった手応えと無敵時間だけ
+      this.health.invuln = COMBAT_TUNING.invulnSec
+      this.hurtT = 0.35
+      this.host.hud.flash('danger')
+      return
+    }
+    const res = this.health.damage(n)
     if (res === 'ignored') return
     this.combo.cancel()
     this.hurtT = 0.35

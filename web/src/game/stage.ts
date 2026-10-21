@@ -124,6 +124,11 @@ export type StageRuntime = {
   /** プレイヤー操作を止める（イベント中） */
   setControlLocked(on: boolean): void
   /**
+   * ネクマックスのポーズを決める（'sit'：root を座面の高さに置くとすわる）。null で元に戻す（動きから選ぶ）。
+   * 時空移動・ステージの入れかえでも元に戻る
+   */
+  setPlayerPose(pose: 'sit' | null): void
+  /**
    * カメラの演出（cinematic.ts の CineShot）：操作を止め、プレイのカメラから shot へなめらかに寄って保持し、戻る。
    * その間はキー案内・照準を隠し、上下に黒帯、shot.marker があれば目印（光る輪・光の柱・名前の札）を出す。
    * 会話（dialogue）は同時に流せる（F は会話の早送り。会話が無く shot.skippable なら F・Space・J で戻りに入る）。

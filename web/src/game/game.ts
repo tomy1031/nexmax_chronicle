@@ -696,12 +696,13 @@ export class Game {
     dist.length = L.length
     for (let i = 0; i < L.length; i++) {
       order[i] = i
-      dist[i] = L[i].pos.distanceToSquared(center)
+      // 消えている明かり（強さ 0）は割り当てない
+      dist[i] = L[i].intensity > 0.01 ? L[i].pos.distanceToSquared(center) : Infinity
     }
     order.sort((x, y) => dist[x] - dist[y])
     for (let i = 0; i < this.lanternLights.length; i++) {
       const pl = this.lanternLights[i]
-      const s = i < order.length ? L[order[i]] : null
+      const s = i < order.length && dist[order[i]] !== Infinity ? L[order[i]] : null
       if (!s) {
         pl.intensity = 0
         continue
@@ -980,7 +981,7 @@ export class Game {
     stage.update(dt, frame, rt)
     if (this.cine.active) camRig.update(dt, ZERO_AXIS, player.position)
     else camRig.update(dt, frame.look, player.position, this.input.mouseDX, this.input.mouseDY)
-    this.applyCine(dt)
+    this.applyCine(dt, a)
 
     // ネクマックスの位置・向き・ポーズ
     const nexmax = this.nexmax
@@ -1068,9 +1069,10 @@ export class Game {
   }
 
   /** CameraRig の後：ショットを混ぜ、目印を置き、揺れを足す */
-  private applyCine(dt: number): void {
+  private applyCine(dt: number, a?: Active): void {
     if (this.cine.active) {
       const done = this.cine.apply(dt, this.camera)
+      if (!done && a) this.keepCineOutOfWalls(a)
       if (done) this.endCineUi()
       else if (this.cine.current?.marker) {
         // CameraRig の lookAt が古い姿勢で行列を作っているので、札の投影の前に作り直す
@@ -1082,6 +1084,20 @@ export class Game {
       }
     }
     this.cine.applyShake(dt, this.camera)
+  }
+
+  /** 演出のカメラが壁の向こうに入ったら、見る点の側へ寄せる（向きはそのまま、見る点を見たまま） */
+  private readonly cineFix = new THREE.Vector3()
+  private keepCineOutOfWalls(a: Active): void {
+    const look = this.cine.current?.look
+    if (!look) return
+    const dir = this.cineFix.subVectors(this.camera.position, look)
+    const len = dir.length()
+    if (len < 0.9) return
+    dir.divideScalar(len)
+    const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
+    const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
+    if (hit !== null) this.camera.position.copy(start).addScaledVector(dir, Math.max(0.4, hit - 0.25))
   }
 
   private cancelCinematic(): void {

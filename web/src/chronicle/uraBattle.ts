@@ -572,7 +572,8 @@ export class UraBattle {
     rt.shake(0.7)
     await this.heart.shatter()
     this.killShades(true)
-    await rt.dialogue(this.lines('f_after'))
+    // くずれていくのを、だまって見る
+    await this.clock!.wait(1.4)
     rt.endCinematic()
     rt.setControlLocked(false)
   }

@@ -150,7 +150,6 @@ export const URA_LINE_KEYS = [
   'f_wait',
   'f_pour',
   'f_strike',
-  'f_after',
   'f_grab',
   'f_escape',
   'f_escape_fail',

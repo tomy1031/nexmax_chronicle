@@ -971,7 +971,7 @@ export class ChronicleFutureStage implements Stage {
     this.showKeychain(rt, true)
     void this.cine(rt, { look: rt.player.position.clone().add(v(0, 0.7, 0)), hold: 2.6, inSec: 0.8, fov: 36 })
     await this.talk(rt, 'ch3_pocket')
-    await this.talkShot(rt, 'ch3_pocket', this.ch.stall.showcase, undefined, { fov: 38, label: '屋台の星のキーホルダー' }).catch(() => undefined)
+    await this.talkShot(rt, 'ch3_stall', this.ch.stall.showcase, undefined, { fov: 38, label: '屋台の星のキーホルダー' }).catch(() => undefined)
     this.showKeychain(rt, false)
     // 石の音（コチ、コチ）
     for (let i = 0; i < 4; i++) {
@@ -1542,9 +1542,9 @@ export class ChronicleFutureStage implements Stage {
       ['mem_wake', V7_ART.memLabWake, ['思い出', '研究所の目ざめ']],
       ['mem_garden', V7_ART.memGarden, ['思い出', '研究所の庭']],
       ['mem_lamp', V7_ART.memMotherLamp, ['思い出', 'トワのお母さんのランプ']],
-      ['mem_please', V7_ART.memPlease, ['思い出', '「時間をもどして」']],
-      ['mem_matane', V7_ART.memMatane, ['思い出', 'また明日ね']],
-      ['mem_sky', V7_ART.memNightSky, ['思い出', '仮面の人']],
+      ['mem_please', V7_ART.memPlease, ['思い出', 'お母さんの病室']],
+      ['mem_matane', V7_ART.memMatane, ['思い出', '最後の日の夕方']],
+      ['mem_sky', V7_ART.memNightSky, ['思い出', 'ある夜']],
     ]
     await this.fade(false, 0.3, '#fff')
     for (const [key, img, place] of mems) {
@@ -1973,7 +1973,6 @@ export class ChronicleFutureStage implements Stage {
     await this.playFlashback([{ speaker: 'ソラ', text: 'まずは、今日の思い出から！' }], V7_ART.epilogueMorning, ['おわり', 'ネクマックスと、時を裂く爪'])
     if (!this.alive) return
     this.set(rt, 'v7_epilogue')
-    rt.hud.banner('おわり　―　また明日ね', 'success', 4)
     this.setPhase('done')
     this.lock(rt, false)
   }

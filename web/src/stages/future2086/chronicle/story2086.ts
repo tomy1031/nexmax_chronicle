@@ -231,7 +231,7 @@ export const OBJECTIVES: Record<string, Objective> = {
   ura: { title: '裏側へ', sub: 'オルムの心臓' },
   ending: { title: '明日へ', sub: '' },
   epilogue: { title: '10月19日の朝', sub: 'NEXTMAKE の中庭へ行こう' },
-  done: { title: 'おわり', sub: 'ナンバタウンを自由に歩ける。また明日ね' },
+  done: { title: 'おわり', sub: 'ナンバタウンを自由に歩ける' },
 }
 
 /** 段階のはじめの目標（phase が決まっていないとき） */

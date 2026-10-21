@@ -123,6 +123,10 @@ export class ChronicleFutureStage implements Stage {
   private handT = 0
   private handHits = 0
   private handsCut = 0
+  /** 4 章：時計台で着いたことのあるいちばん上の足場（金具の番号。落ちたらここへもどす） */
+  private climbBest = -1
+  /** 12 章：まだ止まっていない手に J をした回数（ヒント用） */
+  private handPass = 0
   private readonly handClock: Record<string, number> = {}
   // ---- 年代ダイヤル
   private dial: { logic: YearDialLogic; resolve: () => void } | null = null
@@ -849,6 +853,7 @@ export class ChronicleFutureStage implements Stage {
     this.handT = 0
     this.handHits = 0
     this.handsCut = 0
+    this.handPass = 0
     const p = rt.player.position
     if (mode === 'escape' || mode === 'cut') {
       const ring = [v(4, 0, -3), v(-4.5, 0, -1), v(0.5, 0, 4.5)]
@@ -884,6 +889,8 @@ export class ChronicleFutureStage implements Stage {
         } else {
           this.hands.passThrough(id)
           this.onPassThroughAny()
+          // 12 章：まだ止まっていない手を 2 回ねらったら、止まるのを待つことを教える
+          if (this.handsMode === 'cut' && ++this.handPass === 2) rt.hud.toast('手がふりおろして、地面で止まったら J！ それまでは、はなれていよう', 4)
         }
       },
       onPassThrough: () => {
@@ -1099,21 +1106,43 @@ export class ChronicleFutureStage implements Stage {
     await this.talk(rt, 'ch4_climb')
     rt.endCinematic()
     // 見上げる（最初の金具が見えるように。下げすぎると、カメラが地面すれすれで壁に寄る）
-    rt.camRig.yaw = faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz))
+    rt.camRig.yaw = camYawToward(rt.player.position, TOWER.hooks[0].point)
     rt.camRig.pitch = -0.45
     this.lock(rt, false)
     // のぼる（黒い手が壁をなでる）。町の光は一段落として、塔の足場と金具を目立たせる
     this.fs.setAction(true)
     this.handsMode = 'climb'
     this.handT = 0
-    for (const h of this.ch.tower.hooks) h.enabled = true
+    // 金具は、いま立っている足場の上の板ごしに見上げることになるので、のぼる間は板にかくれても狙える。
+    // 時計の部分の金具は足場より少し外（西）にあるので、向きの条件（壁の外から）もはずす
+    // （次の 1 個しか狙えないので、ほかの物とまちがえない）。カメラも少し引いて、上の金具を照準に入れやすく
+    const facings = this.ch.tower.hooks.map((h) => h.facing)
+    for (const h of this.ch.tower.hooks) {
+      h.enabled = true
+      h.noLineOfSight = true
+      h.facing = undefined
+    }
+    const camDist = rt.camRig.distance
+    rt.camRig.distance = CLIMB_CAM_DIST
     this.setPhase('tower_climb', [{ pos: this.ch.tower.hooks[0].point.clone(), label: '金具' }])
     this.ch.tower.setNextHook(0)
     let shown = 0
+    this.climbBest = -1
     await this.until(
       () => {
         const hooks = this.ch.tower.hooks
+        // 足場から落ちた（着いたことのある足場より 2m 以上下で着地）：その足場へもどす
+        const best = this.climbBest >= 0 ? TOWER.hooks[this.climbBest].landing : null
+        if (best && rt.player.grounded && rt.player.position.y < best.y - 2 && !rt.claw.wire.isConnected()) {
+          this.teleport(rt, best.clone())
+          rt.hud.toast('おっと！ さっきの足場へもどったよ', 2.4)
+        }
         const i = hooks.findIndex((h) => (h.landing?.y ?? 0) > rt.player.position.y + 0.3)
+        // 着いた足場を覚える（いまいる足場の 1 つ前の金具）
+        if (rt.player.grounded && !rt.claw.wire.isConnected()) {
+          const on = (i >= 0 ? i : hooks.length) - 1
+          if (on >= 0 && rt.player.position.y > TOWER.hooks[on].landing.y - 0.4) this.climbBest = Math.max(this.climbBest, on)
+        }
         const next = i >= 0 ? hooks[i] : null
         this.marks = next ? [{ pos: next.point.clone().add(v(0, 0.4, 0)), label: next.id === 'clock_hook_top' ? 'てっぺん' : '金具' }] : []
         // 次につかむ金具だけを金色にして、ねらえるのもその 1 個だけ（いま立っている足場の金具に J が向かないように）。
@@ -1121,10 +1150,10 @@ export class ChronicleFutureStage implements Stage {
         if (!rt.claw.wire.isConnected()) {
           this.ch.tower.setNextHook(i >= 0 ? i : null)
           hooks.forEach((h, k) => (h.enabled = k === i))
-          // 足場に着いたら、次の金具の方を見上げる（方向キーで取り消せる）
+          // 足場に着いたら、次の金具の方を見上げる（金具の反対側から。方向キーで取り消せる）
           if (i >= 0 && i !== shown && rt.player.grounded) {
             shown = i
-            rt.camRig.turnTo(faceYaw(rt.player.position, v(TOWER.cx, 0, TOWER.cz)), -0.52)
+            rt.camRig.turnTo(camYawToward(rt.player.position, hooks[i].point), -0.52)
           }
         }
         return rt.player.position.y > TOWER.deckY - 0.5
@@ -1132,7 +1161,12 @@ export class ChronicleFutureStage implements Stage {
       () => this.teleport(rt, TOWER.hooks[TOWER.hooks.length - 1].landing.clone(), Math.PI),
     )
     this.ch.tower.setNextHook(null)
-    for (const h of this.ch.tower.hooks) h.enabled = true
+    this.ch.tower.hooks.forEach((h, k) => {
+      h.enabled = true
+      h.noLineOfSight = undefined
+      h.facing = facings[k]
+    })
+    rt.camRig.distance = camDist
     this.fs.setAction(false)
     this.handsMode = 'none'
     for (let i = 0; i < TOWER.sweeps.length; i++) this.ch.tower.setSweepWarn(i, 0)
@@ -1418,33 +1452,48 @@ export class ChronicleFutureStage implements Stage {
     this.setPhase('toolbox', [{ pos: SITE.toolbox.hand.clone().add(v(0, 1.0, 0)), label: '工具箱' }])
     if (rt.player.position.distanceTo(SITE.toolbox.hand) > 7) this.teleport(rt, v(15.6, 0, -41.4), faceYaw(v(15.6, 0, -41.4), SITE.toolbox.hand))
     let stopped = false
-    rt.chrono.add({
+    // 落ちている間だけ狙える（手の中や地面の工具箱に J をむだ撃ちして、止める力を使ったことにならないように）
+    const toolT: ChronoTarget = {
       id: 'chrono_toolbox',
       kind: 'freeze',
       label: '工具箱',
       point: site.toolbox.point,
       radius: 0.5,
-      enabled: true,
+      enabled: false,
       seconds: 4,
       onAct: () => {
         site.toolbox.freeze(true)
         if (site.toolbox.state === 'frozen') stopped = true
       },
       onThaw: () => site.toolbox.freeze(false),
-    })
+    }
+    rt.chrono.add(toolT)
+    let misses = 0
     for (;;) {
       if (!this.alive) return
       site.toolbox.reset()
       this.lock(rt, true)
+      // 落ちる前から、工具箱が画面のまん中に来るように
+      rt.camRig.turnTo(camYawToward(rt.player.position, SITE.toolbox.hand), 0.12)
       await this.talk(rt, 'ch10_toolbox')
       this.lock(rt, false)
-      site.toolbox.drop()
-      await this.until(() => stopped || site.toolbox.state === 'ground', () => {
-        site.toolbox.freeze(true)
-        stopped = true
-      })
+      // 2 回まちがえたら、もっとゆっくり落ちる
+      site.toolbox.drop(misses >= 2)
+      await this.until(
+        () => {
+          toolT.enabled = site.toolbox.state === 'falling'
+          return stopped || site.toolbox.state === 'ground'
+        },
+        () => {
+          site.toolbox.freeze(true)
+          stopped = true
+        },
+      )
+      toolT.enabled = false
       if (stopped) break
+      misses++
       await this.talk(rt, 'ch10_toolbox_again')
+      if (misses >= 2) rt.hud.toast('工具箱のほうを向いて待っていて、すべり落ちたら、すぐ J！', 4)
       await this.wait(0.6)
     }
     this.lock(rt, true)
@@ -1458,7 +1507,10 @@ export class ChronicleFutureStage implements Stage {
     site.setSeam(0.9)
     await this.talkShot(rt, 'ch10_seam', site.seamPoint, undefined, { fov: 48, label: 'ゆらぎ' })
     this.lock(rt, false)
+    // 裏側の足場は 12 秒（のぼる間に閉じたら、もう一度裂けばよい）。歯車の段で縁側から落ちても、
+    // もう一度ゆらぎを裂いてのぼれるように、ゆらぎは歯車の段が終わるまで残す
     let uraOpen = 0
+    let uraTalked = false
     rt.chrono.add({
       id: 'chrono_seam',
       kind: 'seam',
@@ -1467,33 +1519,37 @@ export class ChronicleFutureStage implements Stage {
       radius: 0.6,
       enabled: true,
       onAct: () => {
-        rt.chrono.slit(site.seamPoint.clone(), { width: 1.1, height: 2.4, seconds: 9 }).setOpen(1)
-        uraOpen = 9
+        rt.chrono.slit(site.seamPoint.clone(), { width: 1.1, height: 2.4, seconds: URA_STEP_SEC }).setOpen(1)
+        uraOpen = URA_STEP_SEC
         site.setUra(1)
-        void this.talk(rt, 'ch10_ura')
+        if (!uraTalked) void this.talk(rt, 'ch10_ura')
+        uraTalked = true
       },
     })
     const onBalcony = () => rt.player.position.y > SITE.balcony.y - 0.3 && rt.player.position.z < SITE.balcony.z1 + 0.2 && rt.player.position.x > SITE.balcony.x0
-    this.setPhase('seam', [{ pos: site.seamPoint.clone().add(v(0, 1.6, 0)), label: 'ゆらぎ' }])
+    const seamMark = () => [{ pos: site.seamPoint.clone().add(v(0, 1.6, 0)), label: 'ゆらぎ' }]
+    const balconyMark = () => [{ pos: v(SITE.balcony.x1 - 1, SITE.balcony.y + 1.2, (SITE.balcony.z0 + SITE.balcony.z1) / 2), label: '縁側' }]
+    /** 裏側の足場の残り時間を進める。開いている間は「縁側へ」、閉じたら「ゆらぎ」 */
+    let closed = 0
+    const tickUra = () => {
+      if (uraOpen <= 0) return
+      uraOpen -= this.lastDt
+      if (uraOpen > 0) return
+      site.setUra(0)
+      if (!onBalcony() && ++closed === 2) rt.hud.toast('ゆらぎを裂いたら、すぐに光る足場を Space でとびのって、縁側まで！', 4)
+    }
+    this.setPhase('seam', seamMark())
     await this.until(
       () => {
-        if (uraOpen > 0) {
-          this.setPhase('ura_climb', [{ pos: v(SITE.balcony.x1 - 1, SITE.balcony.y + 1.2, (SITE.balcony.z0 + SITE.balcony.z1) / 2), label: '縁側' }])
-          uraOpen -= this.lastDt
-          if (uraOpen <= 0) {
-            site.setUra(0)
-            this.setPhase('seam', [{ pos: site.seamPoint.clone().add(v(0, 1.6, 0)), label: 'ゆらぎ' }])
-          }
-        }
+        tickUra()
+        if (uraOpen > 0) this.setPhase('ura_climb', balconyMark())
+        else this.setPhase('seam', seamMark())
         return onBalcony()
       },
       () => this.teleport(rt, v(SITE.balcony.x1 - 1.2, SITE.balcony.y, (SITE.balcony.z0 + SITE.balcony.z1) / 2), Math.PI / 2),
     )
-    rt.chrono.remove('chrono_seam')
     if (!this.alive) return
     await this.wait(1.2)
-    site.setUra(0)
-    site.setSeam(0)
     // 3. 回る歯車を止めて足場に → からくり時計の足場へ
     this.lock(rt, true)
     await this.talkShot(rt, 'ch10_gear', site.gear.point, undefined, { fov: 50, label: 'からくりの大歯車' })
@@ -1505,20 +1561,42 @@ export class ChronicleFutureStage implements Stage {
       point: site.gear.point,
       radius: 1.2,
       enabled: true,
-      seconds: 8,
+      seconds: 10,
       onAct: () => site.gear.freeze(true),
       onThaw: () => site.gear.freeze(false),
     })
     const goal = site.goal
-    this.setPhase('gear', [
+    const gearMarks = () => [
       { pos: site.gear.point.clone().add(v(0, 2.0, 0)), label: '歯車' },
       { pos: goal.clone().add(v(0, 1.4, 0)), label: 'からくり時計' },
-    ])
+    ]
+    this.setPhase('gear', gearMarks())
+    let fell = false
     await this.until(
-      () => Math.hypot(rt.player.position.x - goal.x, rt.player.position.z - goal.z) < 1.6 && rt.player.position.y > goal.y - 0.4,
+      () => {
+        tickUra()
+        // 縁側から落ちた（足場の高さより下）：もう一度ゆらぎからのぼる
+        const below = rt.player.position.y < SITE.balcony.y - 1.0 && rt.player.grounded
+        if (below && !fell) rt.hud.toast('落ちちゃった！ もう一度ゆらぎを裂いて、縁側へのぼろう', 3)
+        if (below || (fell && rt.player.position.y < SITE.balcony.y - 0.3)) {
+          fell = true
+          if (uraOpen > 0) this.setPhase('ura_climb', balconyMark())
+          else this.setPhase('seam', seamMark())
+        } else if (fell && onBalcony()) {
+          fell = false
+          this.setPhase('gear', gearMarks())
+        }
+        // からくり時計の足場の上（板のどこでも）
+        const p = rt.player.position
+        const L = SITE.karakuri.ledge
+        return p.x > L.x0 - 0.2 && p.x < L.x1 + 0.2 && p.z > L.z0 - 0.2 && p.z < L.z1 + 0.2 && p.y > goal.y - 0.4
+      },
       () => this.teleport(rt, goal.clone(), Math.PI / 2),
     )
     rt.chrono.remove('chrono_gear')
+    rt.chrono.remove('chrono_seam')
+    site.setUra(0)
+    site.setSeam(0)
     rt.chrono.thaw()
     site.gear.freeze(false)
     if (!this.alive) return
@@ -1590,7 +1668,8 @@ export class ChronicleFutureStage implements Stage {
     rt.combat.setCheckpoint(v(13.4, 0, -40.8), Math.PI)
     this.duel = { thread: 0, window: 0, shots: [], fireT: 2.5, wave: 0 }
     rt.combat.showBossBar('トワ', 1)
-    this.spawnShades(rt, 3)
+    // 影は 2 → 2 → 3 匹（前は 3 → 3 → 4。子どもには影の数が多く、やられてばかりになる）
+    this.spawnShades(rt, 2)
     this.setPhase('duel', [{ pos: towaAt.clone().add(v(0, 2.4, 0)), label: 'トワ' }])
     void this.talk(rt, 'ch10_duel_cut')
     const thread: ChronoTarget = {
@@ -1610,7 +1689,7 @@ export class ChronicleFutureStage implements Stage {
         rt.hud.flash('success')
         rt.combat.setBossBar(1 - d.thread / 3)
         this.lamp.setDark(d.thread < 3)
-        if (d.thread < 3) this.spawnShades(rt, 2 + d.thread)
+        if (d.thread < 3) this.spawnShades(rt, 1 + d.thread)
       },
     }
     this.threadTarget = thread
@@ -1681,7 +1760,7 @@ export class ChronicleFutureStage implements Stage {
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 0.15, 0.9), toneMapped: false }))
       mesh.position.copy(this.lamp.center(new THREE.Vector3()))
       this.fs.root.add(mesh)
-      const vel = rt.player.position.clone().add(v(0, 0.7, 0)).sub(mesh.position).normalize().multiplyScalar(4.2)
+      const vel = rt.player.position.clone().add(v(0, 0.7, 0)).sub(mesh.position).normalize().multiplyScalar(SHOT_SPEED)
       const id = `shot_${Math.round(this.clock.time * 100)}`
       const shot = { mesh, vel, frozen: false, id, life: 6 }
       d.shots.push(shot)
@@ -2000,6 +2079,7 @@ export class ChronicleFutureStage implements Stage {
     if (this.flash && (frame.pressed.has('interact') || frame.pressed.has('jump') || frame.pressed.has('claw_fire'))) this.flash.skip()
     if (this.choice.open) this.choice.input(frame)
     this.updateDial(dt, frame, rt)
+    this.watchMisses(frame, rt)
     this.updateHands(dt, rt)
     this.updateClimb(dt, rt)
     this.updateDuel(dt, rt)
@@ -2007,6 +2087,21 @@ export class ChronicleFutureStage implements Stage {
     if (!this.duel) rt.combat.passive = this.busy || rt.talking || rt.inCinematic
     // 裏側（UraBattle）は出たあとも自分の時計で暗転を明けるので、active でなくても毎フレーム回す
     this.ura.update(dt, frame, rt)
+  }
+
+  /** J の空振り（狙える物が照準に無いのに J）を段階ごとに数えて、2 回目でヒント（その後も 4 回ごと） */
+  private missPhase = ''
+  private misses = 0
+  private watchMisses(frame: ActionFrame, rt: StageRuntime): void {
+    if (this.phase !== this.missPhase) {
+      this.missPhase = this.phase
+      this.misses = 0
+    }
+    if (this.busy || !frame.pressed.has('claw_fire') || rt.claw.wire.phase !== 'miss') return
+    const hint = MISS_HINTS[this.phase]
+    if (!hint) return
+    this.misses++
+    if (this.misses === 2 || (this.misses > 2 && this.misses % 4 === 2)) rt.hud.toast(hint, 4)
   }
 
   /** 時計台：黒い手が壁をなでる（予告の帯 → なでる）。当たったら一つ下の足場へ */
@@ -2037,8 +2132,9 @@ export class ChronicleFutureStage implements Stage {
       if (Math.abs(p.y + 0.6 - s.y) < 1.1 && p.x < T.x0 + 0.4 && p.x > T.x0 - 2.5 && Math.abs(p.z - zz) < 1.2 && !rt.claw.wire.isConnected()) {
         this.handClock.climbHit = 1
         this.knock(rt, v(s.x - 0.6, s.y, zz))
-        // 一つ下の足場へ
+        // 一つ下の足場へ（落ちたときにもどす足場も、そこまで下げる）
         const below = [...T.hooks].reverse().find((h) => h.landing.y < p.y - 0.5)
+        this.climbBest = below ? T.hooks.indexOf(below) : -1
         this.teleport(rt, (below ? below.landing : T.foot).clone())
       }
     }
@@ -2227,3 +2323,31 @@ export class ChronicleFutureStage implements Stage {
 }
 
 const KEY_STALL_X = 15.2
+
+/** J を 2 回空振りしたときのヒント（段階 phase ごと） */
+const MISS_HINTS: Record<string, string> = {
+  save_sora: '部屋から通路へ出て、黒い手が画面のまん中に来るように向いてから J',
+  tower_climb: '↑ キーでカメラを上に向けて、金色に光る金具を画面のまん中に入れてから J',
+  tower_ring: '↑ キーで空を見上げて、黒い輪を画面のまん中に入れてから J',
+  seam: '池の上の、うすく光る縦のすじ（ゆらぎ）のほうを向いて J',
+  gear: '縁側の西の端で、大歯車のほうを向いて J',
+  duel: '影を K でたおすと、ランプの黒い糸が光る。光ったら、糸をねらって J',
+  duel_thread: 'トワのランプの、光っている黒い糸をねらって J',
+  test_slit: 'わっかの前の、小さなゆらぎのほうを向いて J',
+  hands: '手が地面にささって止まっている間に、その手をねらって J',
+  sky_seam: '↑ キーで時計台の上の大きなゆらぎを見上げて J',
+}
+
+/** 10 章の決闘：影の弾の速さ（m/s）。ランプから 5m ほどの所で、当たるまで約 1.4 秒 */
+const SHOT_SPEED = 3.6
+
+/** 10 章の練習：ゆらぎを裂いたとき、裏側の足場が見えている秒数 */
+const URA_STEP_SEC = 12
+
+/** 時計台をのぼる間のカメラの距離（ふだんは 4.4。引くほど、上の金具が照準の中に入りやすい） */
+const CLIMB_CAM_DIST = 5.5
+
+/** カメラを p のうしろ（at の反対側）に置く向き：at が画面のまん中の方に来る（camRig.yaw の向き） */
+function camYawToward(p: THREE.Vector3, at: THREE.Vector3): number {
+  return Math.atan2(p.x - at.x, p.z - at.z)
+}

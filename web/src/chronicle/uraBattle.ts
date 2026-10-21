@@ -28,7 +28,7 @@ import type { QualitySettings } from '../render/quality'
 import { SceneClock } from './kit/clock'
 import { Curtain } from './kit/curtain'
 import { ChoiceBox } from './kit/choice'
-import { buildUraArena, UraEnvSwitch, type UraArena } from './visuals/ura'
+import { buildUraArena, URA_DEFAULT_PLATFORMS, UraEnvSwitch, type UraArena } from './visuals/ura'
 import { OrmHeart } from './visuals/heart'
 import { BlackHands } from './visuals/hands'
 import { SlitFx, type Slit } from './visuals/slit'
@@ -39,7 +39,7 @@ import { ShadeWisps, SHADE_STYLE, BIG_SHADE_STYLE } from './visuals/shade'
 import type { PersonCharacter, PersonPose } from './visuals/person'
 import { faceYaw } from './kit/walker'
 import linesJson from './ura_lines.json'
-import { doorLeft, doorWidthK, escortCanMove, fellBelow, insideDoor, isPlayStep, nextStep, uraObjective, veinsStepDone, URA_STEPS, type UraLineKey, type UraScenario, type UraStep } from './uraBattleLogic'
+import { doorLeft, doorWidthK, escortCanMove, fellBelow, insideDoor, isPlayStep, kidPlatforms, nextStep, uraObjective, veinsStepDone, URA_STEPS, type UraLineKey, type UraScenario, type UraStep } from './uraBattleLogic'
 
 export type { UraScenario, UraStep } from './uraBattleLogic'
 
@@ -61,7 +61,7 @@ export type UraRunOptions = {
   lamp?: Lamp
   /** final：扉の向こうのソラ（いまは台詞だけで使う。わっかの位置） */
   sora?: { ringPos: THREE.Vector3 }
-  /** 扉がもつ秒数（最後の「扉が閉じる前に帰る」。既定 khmer 35・final 40） */
+  /** 扉がもつ秒数（最後の「扉が閉じる前に帰る」。既定 khmer 45・final 50） */
   doorSeconds?: number
   /** 台詞（省略で ura_lines.json） */
   lines?: (key: string) => DialogueLine[]
@@ -70,6 +70,15 @@ export type UraRunOptions = {
 }
 
 const LINES = linesJson as Record<string, DialogueLine[]>
+
+/** J を 2 回空振りしたときのヒント（段ごと） */
+const MISS_HINT: Partial<Record<UraStep, string>> = {
+  free: 'チャンダの足の、黒いものをねらって J',
+  veins: '光をすうすじ（黒い管）が画面のまん中に来るように、カメラを回して J',
+  veins2: '光をすうすじ（黒い管）が画面のまん中に来るように、カメラを回して J',
+  heart: '大きな心臓が画面のまん中に来るように、カメラを回して J',
+  grabTowa: 'トワのそばまで行って、J',
+}
 const UP = new THREE.Vector3(0, 1, 0)
 const SHADE_TAG = 'ura'
 
@@ -145,6 +154,15 @@ export class UraBattle {
   private prevRespawn: (() => void) | null = null
   private readonly tmp = new THREE.Vector3()
   private readonly tmp2 = new THREE.Vector3()
+  /** 扉にまにあわなかった回数（2 回でヒント） */
+  private escapeFails = 0
+  /** khmer：チャンダの道をやり直すとき（やられた）は、進んだ所から続ける */
+  private escortAgain = false
+  /** 広場に着いた（やり直しの場所を広場の前へ移した） */
+  private arenaCp = false
+  /** J の空振り（段ごと。2 回目でヒント） */
+  private missStep: UraStep = 'idle'
+  private misses = 0
 
   private constructor(o: UraBuildOptions) {
     this.scenario = o.scenario
@@ -152,7 +170,8 @@ export class UraBattle {
     this.group.name = `ura_${o.scenario}`
     o.root.add(this.group)
     const q = typeof o.quality === 'string' ? o.quality : (o.quality?.level ?? 'medium')
-    this.arena = buildUraArena(this.group, o.colliders, this.origin, { quality: q })
+    // 飛び石は子ども向けに（すき間 0.85m ほど。扉へもどる道で、とびそこねて扉にまにあわない、をへらす）
+    this.arena = buildUraArena(this.group, o.colliders, this.origin, { quality: q, platforms: kidPlatforms(URA_DEFAULT_PLATFORMS) })
     const entry = this.arena.platforms.find((p) => p.id === 'entry') ?? this.arena.platforms[0]
     const field = this.arena.platforms.find((p) => p.id === 'arena') ?? this.arena.platforms[0]
     this.doorPos.set(entry.center.x - entry.w * 0.5 + 0.9, entry.center.y + 2.2, entry.center.z + entry.d * 0.5 - 1.0)
@@ -205,7 +224,11 @@ export class UraBattle {
       this.prevRespawn?.()
       this.retry = true
     }
-    this.doorTotal = o.doorSeconds ?? (this.scenario === 'khmer' ? 35 : 40)
+    this.doorTotal = o.doorSeconds ?? (this.scenario === 'khmer' ? 45 : 50)
+    this.escapeFails = 0
+    this.arenaCp = false
+    this.escortAgain = false
+    this.path = []
     let step: UraStep = URA_STEPS[this.scenario][0]
     while (step !== 'done' && !this.clock.dead) {
       this.stepV = step
@@ -303,12 +326,16 @@ export class UraBattle {
   private async escort(rt: StageRuntime): Promise<boolean> {
     const ally = this.o.ally
     this.killShades(false)
-    this.path = this.escortPath()
-    this.pathIdx = 0
-    this.waves = 0
-    if (ally) ally.root.position.copy(this.path[0])
+    const again = this.path.length > 0 && this.escortAgain
+    if (!again) {
+      this.path = this.escortPath()
+      this.pathIdx = 0
+      this.waves = 0
+      if (ally) ally.root.position.copy(this.path[0])
+    }
+    this.escortAgain = true
     this.allyMode = 'escort'
-    void rt.dialogue(this.lines('k_escort_start'))
+    if (!again) void rt.dialogue(this.lines('k_escort_start'))
     const ok = await this.clock!.until(() => this.pathIdx >= this.path.length - 1 || this.retry || this.cut)
     this.cut = false
     if (this.retry || !ok) {
@@ -604,12 +631,11 @@ export class UraBattle {
     const A = this.arena
     this.escaped = false
     this.killShades(false)
-    // 道をふさぐ影
-    const step1 = this.arena.platforms.find((p) => p.id === 'step2')?.center ?? A.entry
-    const step3 = this.arena.platforms.find((p) => p.id === 'step3')?.center ?? A.entry
-    this.spawnShade('mite', step1.clone().add(new THREE.Vector3(0.4, 0, 0)))
-    this.spawnShade('mite', step3.clone().add(new THREE.Vector3(-0.5, 0, 0)))
-    this.spawnShade('shield', A.center.clone().add(new THREE.Vector3(1.2, 0, 4.0)))
+    // 道をふさぐ影：入口の足場（扉の前の広い所）に 1 匹。せまい飛び石の上と、広場の出口には置かない
+    // （とびのる所で押し落とされたり、とぶ前にかまれたりすると、子どもには何がおきたかわからず、扉にまにあわない）
+    this.spawnShade('shield', A.entry.clone().add(new THREE.Vector3(1.6, 0, -1.2)))
+    // 扉の方へカメラを向ける（心臓の前からふり返る）
+    rt.camRig.turnTo(Math.atan2(rt.player.position.x - this.doorPos.x, rt.player.position.z - this.doorPos.z), 0.3)
     if (this.scenario === 'khmer') this.allyMode = 'follow'
     this.door?.setStability(this.scenario === 'final' ? 0.4 : 1)
     this.doorT = 0
@@ -624,6 +650,7 @@ export class UraBattle {
       return false
     }
     // まにあわなかった（または体力 0）：扉が開きなおして、広場の前からもう一度
+    this.escapeFails++
     rt.setControlLocked(true)
     await this.curtain!.set(true, 0.4, '#fff')
     const start = this.heartFront().add(new THREE.Vector3(0, 0, 2.5))
@@ -637,6 +664,9 @@ export class UraBattle {
     await this.curtain!.set(false, 0.5)
     rt.hud.banner('扉が、閉じてしまう……！ もう一度！', 'fail', 2)
     await rt.dialogue(this.lines(this.scenario === 'khmer' ? 'k_escape_fail' : 'f_escape_fail'))
+    // 2 回まにあわなかったら：道すじを教える
+    if (this.escapeFails >= 2) rt.hud.toast('光の扉は、来た道の先（入口の足場）。飛び石を Space でとんで、影はよけて走ろう！', 5)
+    rt.camRig.turnTo(Math.atan2(start.x - this.doorPos.x, start.z - this.doorPos.z), 0.3)
     rt.setControlLocked(false)
     return true
   }
@@ -705,10 +735,17 @@ export class UraBattle {
     const busy = !isPlayStep(step) || rt.inCinematic
     rt.combat.passive = busy || rt.talking
     const P = rt.player.position
-    // 落ちた：killY で足場へ戻ったら、体力を 1 へらす（0 にはしない）
+    // 落ちた：いちばん近い足場のまん中へもどして、体力を 1 へらす（0 にはしない）。
+    // （killY の「最後に立っていた所」は足場のふちのことがあり、もどったとたんに、またすべり落ちつづけることがある）
     const lowest = Math.min(...this.arena.platforms.map((p) => p.center.y))
-    if (fellBelow(P.y, lowest)) this.falling = true
-    else if (this.falling && P.y > lowest - 0.3) {
+    if (fellBelow(P.y, lowest)) {
+      if (!this.falling && !rt.player.isExternal) {
+        const top = this.arena.nearestTop(P, this.tmp2)
+        rt.claw.reset()
+        rt.player.teleport(top.clone().add(UP.clone().multiplyScalar(0.2)), rt.player.facing)
+      }
+      this.falling = true
+    } else if (this.falling && P.y > lowest - 0.3) {
       this.falling = false
       const h = rt.combat.health
       if (h.hp > 1) h.damage(1)
@@ -719,6 +756,14 @@ export class UraBattle {
         if (l) rt.say(l.speaker, l.text, 2.4)
       }
     }
+    // 広場に着いたら、やられたときのやり直しは広場の前から（入口の飛び石をもう一度わたらなくてよい）
+    if (!this.arenaCp && isPlayStep(step) && step !== 'escape' && this.onArena(P)) {
+      this.arenaCp = true
+      const cp = this.arenaFront()
+      rt.player.setCheckpoint(cp)
+      rt.combat.setCheckpoint(cp, 0)
+    }
+    this.watchMisses(frame, rt, step)
     // チャンダ
     const ally = this.o.ally
     this.allySpeed = 0
@@ -928,6 +973,33 @@ export class UraBattle {
     return this.heart.veins.filter((v) => !v.alive).length
   }
 
+  /** 広場の上にいるか */
+  private onArena(p: THREE.Vector3): boolean {
+    const a = this.arena.platforms.find((q) => q.id === 'arena')
+    if (!a) return false
+    return Math.abs(p.x - a.center.x) < a.w / 2 && Math.abs(p.z - a.center.z) < a.d / 2 && p.y > a.center.y - 0.5
+  }
+
+  /** 広場の手前（入口の側）のまん中：やり直しの場所 */
+  private arenaFront(): THREE.Vector3 {
+    const a = this.arena.platforms.find((q) => q.id === 'arena')
+    const c = this.arena.center
+    return new THREE.Vector3(c.x, c.y, c.z + (a ? a.d * 0.5 - 1.2 : 4))
+  }
+
+  /** J の空振り（狙える物が照準に無いのに J）を段ごとに数えて、2 回目でヒント（その後も 4 回ごと） */
+  private watchMisses(frame: ActionFrame, rt: StageRuntime, step: UraStep): void {
+    if (step !== this.missStep) {
+      this.missStep = step
+      this.misses = 0
+    }
+    if (!frame.pressed.has('claw_fire') || rt.claw.wire.phase !== 'miss' || rt.inCinematic) return
+    const hint = MISS_HINT[step]
+    if (!hint) return
+    this.misses++
+    if (this.misses === 2 || (this.misses > 2 && this.misses % 4 === 2)) rt.hud.toast(hint, 4)
+  }
+
   /** 入口の足場のまん中（扉は左おく） */
   private spawnPoint(): THREE.Vector3 {
     return this.arena.entry.clone().add(new THREE.Vector3(0.4, 0, -0.6))
@@ -1009,16 +1081,15 @@ export class UraBattle {
 
   private spawnWave(i: number): void {
     const P = (id: string) => this.arena.platforms.find((p) => p.id === id)?.center ?? this.arena.center
+    // 影は 1 → 2 → 2 匹（前は 2 → 2 → 3。子どもにはチャンダを守りながらの数が多すぎた）
     if (i === 0) {
       this.spawnShade('mite', P('step2').clone().add(new THREE.Vector3(0.6, 0, 0.3)))
-      this.spawnShade('mite', P('step2').clone().add(new THREE.Vector3(-0.6, 0, -0.4)))
     } else if (i === 1) {
       this.spawnShade('shield', P('step3').clone().add(new THREE.Vector3(0.6, 0, 0)))
       this.spawnShade('mite', this.arena.center.clone().add(new THREE.Vector3(-1.5, 0, 4)))
     } else {
       this.spawnShade('mite', this.arena.center.clone().add(new THREE.Vector3(2, 0, -1)))
-      this.spawnShade('mite', this.arena.center.clone().add(new THREE.Vector3(-2.2, 0, -2)))
-      this.spawnShade('shield', this.arena.center.clone().add(new THREE.Vector3(0, 0, -3), ), true)
+      this.spawnShade('shield', this.arena.center.clone().add(new THREE.Vector3(0, 0, -3)), true)
     }
   }
 

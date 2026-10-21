@@ -54,7 +54,8 @@ export type NextmakeSite = {
     point: THREE.Vector3
     readonly state: ToolboxState
     reset(): void
-    drop(): void
+    /** ソラの手からすべり落ちる（slow：2 回まちがえたあとの、もっとゆっくりの落ち方） */
+    drop(slow?: boolean): void
     freeze(on: boolean): void
   }
   /** からくり時計の足場の上面の中心（練習のゴール） */
@@ -427,17 +428,18 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
     for (const [x, z] of [
       [7.3, KL.z0 + 0.1],
       [7.3, KL.z1 - 0.1],
-      [8.45, KL.z0 + 0.1],
-      [8.45, KL.z1 - 0.1],
+      [KL.x1 - 0.4, KL.z0 + 0.1],
+      [KL.x1 - 0.4, KL.z1 - 0.1],
     ] as const) {
       woodBox(cc, x, ly / 2, z, 0.2, ly, 0.2, { tint: WOOD.aged })
       cc.col.box(x, ly / 2, z, 0.22, ly, 0.22)
     }
     // 筋かい
-    for (const z of [KL.z0 + 0.1, KL.z1 - 0.1]) cc.b.add(rbox(0.08, 3.4, 0.08, 0.02), cc.m.wood, M(7.875, ly / 2, z, 0, 0, 0.32), { tint: WOOD.aged })
+    for (const z of [KL.z0 + 0.1, KL.z1 - 0.1]) cc.b.add(rbox(0.08, 3.4, 0.08, 0.02), cc.m.wood, M((7.3 + KL.x1 - 0.4) / 2, ly / 2, z, 0, 0, 0.32), { tint: WOOD.aged })
     // 足場の板
-    for (let i = 0; i < 9; i++) {
-      const z = KL.z0 + 0.2 + i * ((KL.z1 - KL.z0 - 0.4) / 8)
+    const planks = Math.round((KL.z1 - KL.z0) / 0.42)
+    for (let i = 0; i < planks; i++) {
+      const z = KL.z0 + 0.2 + i * ((KL.z1 - KL.z0 - 0.4) / (planks - 1))
       woodBox(cc, (KL.x0 + KL.x1) / 2, ly - 0.05, z, KL.x1 - KL.x0, 0.1, 0.4, { tint: WOOD.warm })
     }
     cc.col.box((KL.x0 + KL.x1) / 2, ly - 0.08, (KL.z0 + KL.z1) / 2, KL.x1 - KL.x0, 0.16, KL.z1 - KL.z0)
@@ -634,6 +636,7 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
   tool.position.copy(S.toolbox.hand)
   gC.add(tool)
   let toolState: ToolboxState = 'held'
+  let toolGrav = 2.6
   const toolVel = v(0, 0, 0)
   const toolPoint = tool.position.clone()
 
@@ -775,10 +778,11 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
         tool.rotation.set(0, 0.3, 0)
         toolVel.set(0, 0, 0)
       },
-      drop() {
+      drop(slow = false) {
         toolState = 'falling'
-        // 子どもでも間に合うように、ふわっと上がってから、ゆっくり落ちる（約 1.3 秒）
-        toolVel.set(-0.3, 1.8, 0.1)
+        // 子どもでも間に合うように、ふわっと上がってから、ゆっくり落ちる（約 2.1 秒。slow：約 3 秒）
+        toolVel.set(-0.25, slow ? 2.4 : 2.2, 0.08)
+        toolGrav = slow ? 1.75 : 2.6
       },
       freeze(on: boolean) {
         if (on && toolState === 'falling') toolState = 'frozen'
@@ -808,7 +812,7 @@ export function buildNextmakeSite(fs: FutureScene, quality: QualitySettings, roo
       }
       // 工具箱
       if (toolState === 'falling') {
-        toolVel.y -= 4.2 * dt
+        toolVel.y -= toolGrav * dt
         tool.position.addScaledVector(toolVel, dt)
         tool.rotation.x += dt * 3.2
         tool.rotation.z += dt * 1.6

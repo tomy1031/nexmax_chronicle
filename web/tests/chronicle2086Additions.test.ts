@@ -58,6 +58,19 @@ describe('時計台', () => {
       from = h.landing.clone()
     }
   })
+  it('次の金具は真上すぎない（見上げる角が 72° より小さい。カメラを上げきったときの照準に入る）', () => {
+    let from = TOWER.foot.clone()
+    for (const h of TOWER.hooks) {
+      const chest = from.clone().setY(from.y + CHEST)
+      const flat = Math.hypot(h.point.x - chest.x, h.point.z - chest.z)
+      const up = h.point.y - chest.y
+      expect((Math.atan2(up, flat) * 180) / Math.PI).toBeLessThan(72)
+      from = h.landing.clone()
+    }
+  })
+  it('のぼり始める所は、壁から 2.5m 以上はなれている（最初の金具が足場の板にかくれない）', () => {
+    expect(TOWER.x0 - TOWER.foot.x).toBeGreaterThan(2.5)
+  })
   it('金具は通りの側（西）を向いた壁にある', () => {
     for (const h of TOWER.hooks) expect(h.point.x).toBeLessThan(TOWER.x0)
   })
@@ -106,6 +119,17 @@ describe('中庭の練習（止める・裂く）', () => {
     expect(SITE.karakuri.ledgeY - top).toBeLessThanOrEqual(JUMP_H)
     expect(SITE.balcony.x0 - (SITE.gear.axle.x + 0.36)).toBeLessThan(1.6)
     expect(SITE.gear.axle.x - 0.36 - SITE.karakuri.ledge.x1).toBeLessThan(1.6)
+  })
+  it('止めた歯の上から西へまっすぐ跳べば、からくり時計の足場に乗る（奥行きが重なり、すき間は 1m ほど）', () => {
+    const L = SITE.karakuri.ledge
+    expect(SITE.gear.axle.z).toBeGreaterThan(L.z0 + 0.2)
+    expect(SITE.gear.axle.z).toBeLessThan(L.z1)
+    expect(SITE.gear.axle.x - 0.36 - L.x1).toBeLessThan(1.0)
+    // 回る歯の先（半径 r + 0.22）は、足場の板の下面（ledgeY − 0.16）より下を通る
+    const tip = SITE.gear.r + 0.22
+    const dx = SITE.gear.axle.x - L.x1
+    const yAtEdge = SITE.gear.axle.y + Math.sqrt(Math.max(0, tip * tip - dx * dx))
+    expect(yAtEdge).toBeLessThan(SITE.karakuri.ledgeY - 0.16)
   })
   it('ほこらは東を向き、中庭の中にある', () => {
     expect(Math.sin(SITE.shrine.yaw)).toBeCloseTo(1, 6)

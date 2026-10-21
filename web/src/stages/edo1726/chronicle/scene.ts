@@ -45,6 +45,35 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 /** もやの粒の数（画質ごと） */
 const MIST: Record<QualitySettings['level'], number> = { low: 90, medium: 160, high: 220 }
 
+/**
+ * 暖簾・幟（布の材質）は当たり判定が無いので、カメラが布に入ると画面が布でふさがる。
+ * カメラのすぐ近く（0.5〜1.6 m）の布は、網点で消していく。布の材質はこのステージの材質ライブラリの物なので、
+ * ほかの時代には影響しない（影は変わらない）。
+ */
+function fadeClothNearCamera(root: THREE.Object3D): void {
+  const cloth = new Set<THREE.MeshStandardMaterial>()
+  root.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
+    if (m && !Array.isArray(m) && m.isMeshStandardMaterial && m.customProgramCacheKey() === 'cloth') cloth.add(m)
+  })
+  for (const m of cloth) {
+    const prev = m.onBeforeCompile.bind(m)
+    m.onBeforeCompile = (shader, renderer) => {
+      prev(shader, renderer)
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <clipping_planes_fragment>',
+        `#include <clipping_planes_fragment>
+        {
+          float nearK = smoothstep(0.5, 1.6, length(vViewPosition));
+          float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+          if (nearK < ign) discard;
+        }`,
+      )
+    }
+    m.customProgramCacheKey = () => 'cloth-near'
+  }
+}
+
 export async function buildChronicleEdo(mats: MaterialLibrary, quality: QualitySettings): Promise<ChronicleEdoWorld> {
   // 書・文字盤・扁額の字を描く前に、足した字のフォントを読む
   await loadEdo7Fonts()
@@ -68,6 +97,7 @@ export async function buildChronicleEdo(mats: MaterialLibrary, quality: QualityS
   const kg = kagaribi as unknown as Kagaribi
   const root = edo.root
   root.add(dl.root, dl.fx, kg.group)
+  fadeClothNearCamera(root)
   // 時の神さまのほこら（1726年：建てたばかり）
   const shrine = new TimeShrine({ age: 0, mats: shrineMaterialsFrom(mats), lanterns: true })
   shrine.root.position.set(C.SHRINE.x, 0, C.SHRINE.z)
@@ -90,7 +120,8 @@ export async function buildChronicleEdo(mats: MaterialLibrary, quality: QualityS
     spawns: CHRONICLE_SPAWNS,
     spots: WORKSHOP_SPOTS,
     createSky(t) {
-      sky = new EdoSkyCycle({ ...t, lights: edo.lights.filter((l) => !kg.owns(l)) })
+      // かがり火と人形の顔の補助灯は、自分で強さを決める（時間帯の倍率から外す）
+      sky = new EdoSkyCycle({ ...t, lights: edo.lights.filter((l) => !kg.owns(l) && l !== dl.faceLight) })
       root.add(sky.nightSky.group)
       return sky
     },

@@ -305,7 +305,10 @@ export class ChronicleEdoStage implements Stage {
     this.oharu.root.visible = true
     this.place('oharu', OHARU_CHASE[0], DOLL_PATH[1], 'run')
     void this.walk('oharu', [OHARU_CHASE[1]], 0.7, DOLL_PATH[2])
-    void rt.cinematic({ look: this.tea.position, hold: 3.2, inSec: 1.0, outSec: 1.0, fov: 40 })
+    // 路地を下りてくる人形を、ネクマックスの右うしろから見る（ほこらの石灯籠より手前に置く）
+    const p = rt.player.position
+    const from = v(Math.min(-9.9, Math.max(-11.9, p.x + 0.9)), 1.75, Math.min(24.3, p.z + 1.9))
+    void rt.cinematic({ look: this.tea.position, from, hold: 3.2, inSec: 1.0, outSec: 1.0, fov: 44 })
     await rt.dialogue(lines.lines('doll_comes'))
   }
 
@@ -325,8 +328,21 @@ export class ChronicleEdoStage implements Stage {
     this.tea.carry()
     this.look.oharu = p
     rt.player.turnToward(this.oharu.root.position.x - p.x, this.oharu.root.position.z - p.z, 1, 1)
-    const mid = v((p.x + this.oharu.root.position.x) / 2, 0.85, (p.z + this.oharu.root.position.z) / 2)
-    void rt.cinematic({ look: mid, from: v(mid.x + 2.6, 1.35, mid.z + 0.6), fromTo: v(mid.x + 2.2, 1.3, mid.z + 0.4), hold: Infinity, inSec: 1.2, panSec: 10, fov: 42 })
+    const o = this.oharu.root.position
+    const mid = v((p.x + o.x) / 2, 0.95, (p.z + o.z) / 2)
+    // 路地はせまいので横からは撮れない。ネクマックスの頭ごしに、こちらを向いたおはるの顔を見る
+    const ax = o.x - p.x
+    const az = o.z - p.z
+    const al = Math.max(0.01, Math.hypot(ax, az))
+    const dx = ax / al
+    const dz = az / al
+    // 横へのずらしは路地のまんなか（x = -10.9）の側へ
+    const sd = (p.x > -10.6 ? -1 : 1) * Math.sign(-dz || 1)
+    const sx = -dz * sd
+    const sz = dx * sd
+    const meetFrom = v(p.x - dx * 2.1 + sx * 0.55, 1.68, p.z - dz * 2.1 + sz * 0.55)
+    const meetTo = v(p.x - dx * 1.85 + sx * 0.5, 1.62, p.z - dz * 1.85 + sz * 0.5)
+    void rt.cinematic({ look: mid, from: meetFrom, fromTo: meetTo, hold: Infinity, inSec: 1.2, panSec: 10, fov: 42 })
     await rt.dialogue(lines.lines('oharu_meet'))
     rt.endCinematic()
     rt.story.set('v7_met_oharu', true)
@@ -794,11 +810,12 @@ export class ChronicleEdoStage implements Stage {
     rt.claw.reset()
     this.sub.carryBox = false
     sh.setDoors(1)
+    // 人物は左右へひらく（背中で箱と錠前を隠さない）。カメラは正面のやや上から、まんなかに箱と錠前
     const front = sh.frontWorld(1.6)
-    this.place('genbei', front.clone().add(v(0.3, 0, -1.2)), sh.boxWorld(), 'idle')
-    this.place('oharu', front.clone().add(v(0.4, 0, 1.2)), sh.boxWorld(), 'idle')
+    this.place('genbei', front.clone().add(v(0.3, 0, -1.8)), sh.boxWorld(), 'idle')
+    this.place('oharu', front.clone().add(v(0.4, 0, 1.8)), sh.boxWorld(), 'idle')
     const bw = sh.boxWorld()
-    void rt.cinematic({ look: bw, from: bw.clone().add(v(2.4, 0.5, -0.9)), hold: Infinity, inSec: 1.2, panSec: 18, fov: 40, marker: { pos: bw.clone().add(v(0, 0.3, 0)), label: '時計じかけの錠前', color: '#ffd447' } })
+    void rt.cinematic({ look: bw, from: bw.clone().add(v(3.6, 0.85, -0.4)), hold: Infinity, inSec: 1.2, panSec: 18, fov: 46, marker: { pos: bw.clone().add(v(0, 0.3, 0)), label: '時計じかけの錠前', color: '#ffd447' } })
     await this.clock.wait(0.6)
     sh.placeBox(true)
     sh.box.contents.add(this.clawProp.root)
@@ -1144,7 +1161,13 @@ export class ChronicleEdoStage implements Stage {
     if (this.busy) return
     switch (this.step) {
       case 'arrive':
+        // 人形がまだ歩き出していなければ、路地を下りてくる途中から（会話を飛ばしたとき）
+        if (!this.tea.root.visible || this.tea.mode !== 'walk') {
+          this.tea.walkPath([DOLL_PATH[1], DOLL_PATH[2]], 0.55)
+          this.place('oharu', OHARU_CHASE[1], DOLL_PATH[2], 'idle')
+        }
         this.tea.root.visible = true
+        this.oharu.root.visible = true
         void this.runMeet(rt)
         break
       case 'workshop':

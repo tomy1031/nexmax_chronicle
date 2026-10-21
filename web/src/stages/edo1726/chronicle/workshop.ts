@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { Batch, M, rbox } from '../../../render/batch'
 import { ColliderList } from '../../../world/colliders'
 import { WOOD, crate, barrel, deck, gableRoof, lantern, noren, ropeCoil, shedRoof, signboard, woodBox, woodTint, type Ctx } from '../../../world/edo/kit'
-import { range, pick } from '../../../render/noise'
+import { range, pick, mulberry32 } from '../../../render/noise'
 import { C, WORKSHOP_SPOTS } from './layout'
 import { andon, clockMovement, gearGeometry, shide, yaguraClock } from './parts'
 import { paintSpread } from './pages'
@@ -51,7 +51,8 @@ export type WorkshopParts = {
 // ---------------------------------------------------------------- 建物（静的）
 
 export function buildWorkshop(c: Ctx, root: THREE.Group): WorkshopParts {
-  buildShell(c)
+  const wm = workshopMaterials(c)
+  buildShell(c, wm)
   buildFacade(c)
   buildInterior(c)
   const book = new GenbeiBook(c)
@@ -76,8 +77,33 @@ export function buildWorkshop(c: Ctx, root: THREE.Group): WorkshopParts {
   }
 }
 
+/**
+ * 工房の中だけの材質（町の MaterialLibrary は書きかえない）。絵本の厚塗りに寄せて、細かな汚れより大きな色面：
+ * 中の漆喰はクリーム色の平らな面（まだらの絵を外し、凹凸もごく弱く）、床板は木目の凹凸を弱く。
+ */
+type WorkshopMats = { plaster: THREE.MeshStandardMaterial; floor: THREE.MeshStandardMaterial }
+
+function workshopMaterials(c: Ctx): WorkshopMats {
+  const plaster = (c.m.plaster as THREE.MeshStandardMaterial).clone()
+  plaster.map = null
+  plaster.aoMap = null
+  plaster.roughnessMap = null
+  plaster.metalnessMap = null
+  plaster.metalness = 0
+  plaster.roughness = 0.95
+  plaster.color.set('#e6cfa8')
+  // 昼の空の青い照り返しで白っぽく冷えないよう、環境光の映りを少し弱める
+  plaster.envMapIntensity = 0.7
+  plaster.normalScale.set(0.15, 0.15)
+  plaster.name = 'workshop_plaster'
+  const floor = (c.m.wood as THREE.MeshStandardMaterial).clone()
+  floor.normalScale.set(0.2, 0.2)
+  floor.name = 'workshop_floor'
+  return { plaster, floor }
+}
+
 /** 土台・壁・柱・天井・屋根と当たり判定 */
-function buildShell(c: Ctx): void {
+function buildShell(c: Ctx, wm: WorkshopMats): void {
   const postT = woodTint(c.rng, WOOD.dark, 0.08)
   const plasterT = '#fff6ea'
   const wall = (x: number, y: number, z: number, sx: number, sy: number, sz: number, tint = plasterT) => c.b.add(rbox(sx, sy, sz, 0.02), c.m.plaster, M(x, y, z), { tint, texM: 3 })
@@ -86,7 +112,7 @@ function buildShell(c: Ctx): void {
   c.b.add(rbox(X1 - X0, 0.24, 0.5, 0.04), c.m.stoneWall, M(CX, 0.12 - 0.2, Z0 + 0.25), { tint: '#e9e2d6', texM: 3 })
   // 床：戸口の前は土間（たたき）、奥は板の間
   c.b.add(rbox(X1 - X0 - 0.3, 0.06, 1.7, 0.01), c.m.plaster, M(CX, 0.0, Z0 + 1.0), { tint: '#9a7a5c', texM: 2 })
-  deck(c, X0 + 0.15, X1 - 0.15, Z0 + 1.85, Z1 - 0.15, 0.06, { alongX: true, posts: false, tint: WOOD.warm })
+  deck({ ...c, m: { ...c.m, wood: wm.floor } }, X0 + 0.15, X1 - 0.15, Z0 + 1.85, Z1 - 0.15, 0.06, { alongX: true, posts: false, tint: WOOD.warm })
   // 上がり框（土間と板の間のさかい）
   woodBox(c, CX, 0.03, Z0 + 1.85, X1 - X0 - 0.3, 0.07, 0.12, { tint: WOOD.dark })
   // 西と東の壁（外は漆喰、内は漆喰＋腰板）
@@ -120,6 +146,23 @@ function buildShell(c: Ctx): void {
     c.b.add(rbox(0.06, 0.7, 1.1, 0.01), c.m.wood, M(X1 + 0.03, 2.7, z), { tint: WOOD.dark, texM: 1.6 })
     c.b.add(rbox(0.03, 0.56, 0.96, 0), c.m.shoji, M(X1 + 0.02, 2.7, z), { texM: 1, cast: false })
     for (let k = 0; k < 7; k++) c.b.add(rbox(0.05, 0.6, 0.035, 0), c.m.wood, M(X1 + 0.07, 2.7, z - 0.45 + k * 0.15), { tint: WOOD.dark, texM: 1 })
+  }
+  // 中の壁の面：外は町と同じ漆喰のまま、中だけ工房の漆喰（クリーム色の平らな面）を重ねる
+  {
+    const skin = (x: number, y: number, z: number, w: number, h: number, rotY: number) =>
+      c.b.add(new THREE.PlaneGeometry(w, h), wm.plaster, M(x, y, z, 0, rotY, 0), { tint: plasterT, texM: 2, cast: false })
+    const zm = (Z0 + Z1) / 2
+    const zl = Z1 - Z0
+    skin(X0 + 0.165, H1 / 2, zm, zl, H1, Math.PI / 2)
+    skin(X1 - 0.165, H1 / 2, zm, zl, H1, -Math.PI / 2)
+    skin((X0 + bd.x0) / 2, H1 / 2, Z1 - 0.165, bd.x0 - X0, H1, Math.PI)
+    skin((bd.x1 + X1) / 2, H1 / 2, Z1 - 0.165, X1 - bd.x1, H1, Math.PI)
+    skin((bd.x0 + bd.x1) / 2, (doorH + H1) / 2, Z1 - 0.165, bd.x1 - bd.x0, H1 - doorH, Math.PI)
+    // 表の格子と戸口の上（中から見える漆喰）
+    const d = W.door
+    skin((X0 + d.x0) / 2, (2.4 + H1) / 2, Z0 + 0.285, d.x0 - X0, H1 - 2.4, 0)
+    skin((d.x1 + X1) / 2, (2.4 + H1) / 2, Z0 + 0.285, X1 - d.x1, H1 - 2.4, 0)
+    skin((d.x0 + d.x1) / 2, (2.5 + H1) / 2, Z0 + 0.285, d.x1 - d.x0, H1 - 2.5, 0)
   }
   // 柱（四隅と表の柱）
   for (const [x, z] of [
@@ -247,12 +290,23 @@ function buildInterior(c: Ctx): void {
   }
   woodBox(c, bx, 0.28, bz, B.x1 - B.x0 - 0.2, 0.05, B.z1 - B.z0 - 0.2, { tint: woodTint(rng, WOOD.aged) })
   c.col.box(bx, B.y / 2, bz, B.x1 - B.x0, B.y, B.z1 - B.z0)
-  // 台の上：組みかけの和時計・歯車・ぜんまい・道具・万力・木くず
+  // 台の上：組みかけの和時計・歯車・ぜんまい・道具・万力・木くず。
+  // 小物は台いっぱいに散らさず、組みかけの和時計とからくりのうでのあいだにまとめる（顔とからくりが主役）
   clockMovement(c, B.x0 + 0.45, B.y, bz - 0.15, 1.3, 0.3)
   clockMovement(c, B.x0 + 1.2, B.y, bz + 0.25, 1.0, -0.4)
-  for (let i = 0; i < 9; i++) {
-    const r = range(rng, 0.03, 0.09)
-    c.b.add(gearGeometry(r, 0.012, Math.round(8 + r * 120)), c.m.brass, M(range(rng, B.x0 + 0.2, B.x1 - 0.8), B.y + 0.007, range(rng, B.z0 + 0.12, B.z1 - 0.12), -Math.PI / 2, 0, range(rng, 0, 6)))
+  // 町の乱数の並びを変えない（あとで建てる物の置き方が変わらないよう、前と同じ数だけ進める）
+  const skip = (n: number) => {
+    for (let i = 0; i < n; i++) rng()
+  }
+  const lr = mulberry32(1726)
+  skip(9 * 4)
+  for (const [x, z, r] of [
+    [B.x0 + 1.62, bz - 0.22, 0.085],
+    [B.x0 + 1.78, bz - 0.06, 0.05],
+    [B.x0 + 1.56, bz + 0.02, 0.04],
+    [B.x0 + 1.86, bz + 0.16, 0.065],
+  ] as const) {
+    c.b.add(gearGeometry(r, 0.012, Math.round(8 + r * 120)), c.m.brass, M(x, B.y + 0.007, z, -Math.PI / 2, 0, range(lr, 0, 6)))
   }
   // ぜんまい（渦巻き）
   for (let i = 0; i < 2; i++) {
@@ -276,10 +330,13 @@ function buildInterior(c: Ctx): void {
   }
   woodBox(c, B.x1 - 0.95, B.y + 0.02, B.z1 - 0.2, 0.3, 0.04, 0.04, { tint: WOOD.dark, rotY: 0.5 })
   c.b.add(rbox(0.07, 0.07, 0.11, 0.01), c.m.iron, M(B.x1 - 1.08, B.y + 0.04, B.z1 - 0.12, 0, 0.5, 0))
-  // 木くず
-  for (let i = 0; i < 14; i++) {
-    c.b.add(new THREE.TorusGeometry(0.012, 0.003, 4, 8, Math.PI * 1.4), c.m.wood, M(range(rng, B.x0, B.x1 - 0.5), B.y + 0.006, range(rng, B.z0 + 0.05, B.z1 - 0.05), Math.PI / 2, 0, range(rng, 0, 6)), { tint: WOOD.fresh, cast: false })
+  // 木くず（組みかけの和時計の足もとに少し）
+  skip(14 * 3)
+  for (let i = 0; i < 6; i++) {
+    c.b.add(new THREE.TorusGeometry(0.012, 0.003, 4, 8, Math.PI * 1.4), c.m.wood, M(B.x0 + 0.75 + range(lr, -0.25, 0.25), B.y + 0.006, bz + range(lr, -0.3, 0.3), Math.PI / 2, 0, range(lr, 0, 6)), { tint: WOOD.fresh, cast: false })
   }
+  // 作業台の上の補助灯（源兵衛の顔と、台の上のからくりを同じ明かりで見せる）
+  c.lights.push({ pos: new THREE.Vector3(-17.2, 2.4, 17.6), color: '#ffe6be', intensity: 2.4, dist: 5 })
   // 腰かけ
   woodBox(c, bx - 0.4, 0.22, B.z1 + 0.55, 0.42, 0.06, 0.32, { tint: WOOD.warm })
   for (const dx of [-0.16, 0.16]) woodBox(c, bx - 0.4 + dx, 0.11, B.z1 + 0.55, 0.06, 0.22, 0.28, { tint: WOOD.dark })

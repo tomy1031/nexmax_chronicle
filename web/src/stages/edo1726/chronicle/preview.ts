@@ -47,13 +47,14 @@ const CAMS: Record<string, Preset> = {
   arrive: { pos: v(-9.2, 1.5, 27.0), look: v(-11.0, 1.2, 18.0), fov: 54, nexmax: { pos: ARRIVE_RING, face: v(-10.9, 0, 14) }, oharu: { pos: v(-10.8, 0, 17.6), face: v(-10.9, 0, 23), pose: 'run' } },
   court: { pos: v(-1.2, 2.6, 22.2), look: v(-10.6, 0.8, 27.0), fov: 54, nexmax: { pos: v(-7.6, 0, 26.0), face: v(-11, 0, 26.2) } },
   shrine: { pos: v(-7.4, 1.35, 24.9), look: v(-11.6, 1.05, 26.3), fov: 48, nexmax: { pos: v(-8.9, 0, 26.6), face: v(-11, 0, 26.2) } },
+  // 正面から：まんなかに箱と錠前、人物は左右へ（背中で目的物を隠さない）
   shrine_dawn: {
-    pos: v(-7.0, 1.3, 24.6),
-    look: v(-11.6, 1.05, 26.3),
+    pos: v(-6.6, 1.65, 26.2),
+    look: v(-11.2, 1.1, 26.2),
     fov: 50,
     time: 'dawn',
-    nexmax: { pos: v(-8.9, 0, 26.9), face: v(-11, 0, 26.2) },
-    oharu: { pos: v(-9.2, 0, 25.0), face: v(-11, 0, 26.2) },
+    nexmax: { pos: v(-9.1, 0, 24.8), face: v(-11, 0, 26.2) },
+    oharu: { pos: v(-9.8, 0, 28.0), face: v(-11, 0, 26.2) },
     setup: (w) => {
       w.shrine.placeBox(true)
       w.shrine.setMorningLight(1, true)

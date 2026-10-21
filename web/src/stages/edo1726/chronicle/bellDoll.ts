@@ -14,9 +14,9 @@ import type { MaterialLibrary } from '../../../render/materials'
 import { drawLettering, drawWaveCrest, makeCanvas, tex } from '../../../render/textures'
 import type { ClawTargetDef } from '../../../player/clawLogic'
 import type { ColliderList } from '../../../world/colliders'
-import { WOOD, woodBox, woodTint, gableRoof, type Ctx } from '../../../world/edo/kit'
+import { WOOD, woodBox, woodTint, gableRoof, type Ctx, type LightSpot } from '../../../world/edo/kit'
 import { gearGeometry } from './parts'
-import { addOutlines } from './outline'
+import { addOutlines, OUTLINE_PX } from './outline'
 import { softGlowTexture } from './workshop'
 
 export const GEAR_NAMES = ['右の肩', '左のひざ', '胸'] as const
@@ -28,6 +28,10 @@ type DollState = 'idle' | 'chime' | 'possessing' | 'stepdown' | 'stand' | 'walk'
 
 /** 大きさ：ふだん（台座の上）とのりうつられたとき */
 const NORMAL_SCALE = 0.86
+/** 顔の前の補助灯の強さ（のりうつっているとき） */
+const FACE_LIGHT = 4
+/** 弱点の歯車の真ちゅうの色 */
+const GEAR_BRASS = new THREE.Color('#c28f42')
 const POSSESSED_SCALE = 1.1
 /** 台座の高さ・寸法 */
 export const PEDESTAL = { w: 5.4, h: 2.0, d: 4.2 }
@@ -409,6 +413,8 @@ export class TimeBellDoll {
   possessed = false
   /** 怒り（順番をまちがえたとき）：攻撃が速くなる 1〜1.6 */
   rage = 1
+  /** 顔の前を照らす暖色の補助灯（町の点光源の候補。のりうつっている間だけ点く。人形について動く） */
+  readonly faceLight: LightSpot = { pos: new THREE.Vector3(), color: '#ffe0b5', intensity: 0, dist: 16 }
 
   private readonly mats: Mats
   private readonly body = new THREE.Group()
@@ -463,6 +469,7 @@ export class TimeBellDoll {
   constructor(c: Ctx, pos: THREE.Vector3, yaw: number, mistCount = 220) {
     this.mats = dollMaterials(c.m)
     this.mist = new DollMist(mistCount)
+    c.lights.push(this.faceLight)
     this.dialHand = this.buildPedestal(c, pos, yaw)
     this.home.set(pos.x, pos.y + PEDESTAL.h, pos.z)
     this.root.position.copy(this.home)
@@ -484,8 +491,8 @@ export class TimeBellDoll {
     this.gears.push(this.buildGear(this.torso, v(1.18, 2.42, -0.52), 0.5, 16, new THREE.Euler(-0.2, -0.585, 0), 0))
     this.gears.push(this.buildGear(this.legL.knee, v(0, 0, -0.4), 0.42, 14, new THREE.Euler(0, 0, 0), 1))
     this.gears.push(this.buildGear(this.torso, v(0, 1.4, -0.86), 0.5, 18, new THREE.Euler(0, 0, 0), 2))
-    // 輪郭線（体の大きな部品だけ。歯車・金具は線なし）
-    addOutlines(this.body, 0.025, '#2a1410', (m) => m.material !== this.mats.gold && !this.mats.gears.includes(m.material as THREE.MeshStandardMaterial) && m.material !== this.mats.iron)
+    // 輪郭線（体の大きな部品だけ。歯車・金具は線なし）。人物と同じ画面の太さ（近くで太くなりすぎない）
+    addOutlines(this.body, 0.006, '#2a1410', (m) => m.material !== this.mats.gold && !this.mats.gears.includes(m.material as THREE.MeshStandardMaterial) && m.material !== this.mats.iron, OUTLINE_PX.figure)
     this.targets = this.gears.map((_g, i) => ({
       id: `bell_doll_gear_${i}`,
       type: 'hold_mechanism' as const,
@@ -1091,26 +1098,37 @@ export class TimeBellDoll {
     this.gears.forEach((g, i) => {
       if (!this.gearStopped[i]) g.rotation.z += dt * speed * (i % 2 ? -1 : 1) * (1 - this.gearStrain[i] * 0.85)
       else g.rotation.z += (Math.round(g.rotation.z / 0.4) * 0.4 - g.rotation.z) * Math.min(1, dt * 8)
-      const hl = this.highlight === i && !this.gearStopped[i] ? 0.6 + 0.4 * Math.sin(this.t * 6) : 0
+      // 次につかむ 1 個（highlight）をいちばん明るく。止めた歯車は青くひかえめに（今の 1 個と競わない）
+      const hl = this.highlight === i && !this.gearStopped[i] ? 0.8 + 0.2 * Math.sin(this.t * 6) : 0
       const stopped = this.gearStopped[i] ? 1 : 0
       const rm = this.gearRings[i].material as THREE.MeshBasicMaterial
-      rm.opacity = Math.max(hl, stopped * 0.7, this.gearStrain[i] * 0.9)
-      rm.color.setRGB(stopped ? 0.35 : 2.4, stopped ? 1.1 : 1.9 - this.gearStrain[i] * 0.8, stopped ? 2.8 : 0.6)
+      rm.opacity = Math.max(hl, stopped * 0.4, this.gearStrain[i] * 0.9)
+      rm.color.setRGB(stopped ? 0.3 : 2.6, stopped ? 0.75 : 2.0 - this.gearStrain[i] * 0.8, stopped ? 1.6 : 0.6)
       this.gearRings[i].rotation.z = this.t * (stopped ? 0 : 1.5)
-      ;(this.gearGlow[i].material as THREE.SpriteMaterial).opacity = hl * 0.6 + this.gearStrain[i] * 0.5
+      ;(this.gearGlow[i].material as THREE.SpriteMaterial).opacity = hl * 0.8 + this.gearStrain[i] * 0.5
       const gm = this.mats.gears[i]
-      gm.emissive.setRGB(1, 0.75, 0.25).multiplyScalar(hl * 0.8 + this.gearStrain[i] * 0.6)
-      if (stopped) gm.emissive.setRGB(0.15, 0.3, 0.6)
+      gm.emissive.setRGB(1, 0.75, 0.25).multiplyScalar(hl * 1.1 + this.gearStrain[i] * 0.6)
+      // 止めた歯車は色を落とす（真ちゅうの照り返しで、今の 1 個より目立たないように）
+      gm.color.copy(GEAR_BRASS).multiplyScalar(stopped ? 0.45 : 1)
+      if (stopped) gm.emissive.setRGB(0.06, 0.12, 0.26)
     })
     this.key.rotation.z += dt * (this.state === 'down' ? 0 : this.possessed ? 3.2 : 0.8)
     this.pedestalGears.forEach((g, i) => (g.rotation.x += dt * (i ? -0.5 : 0.5)))
-    // のりうつり：色を暗く、ひびをすみれ色に、目を光らせる、もや
+    // のりうつり：色を少し沈め、ひびをすみれ色に、目を光らせる、もや。
+    // 顔・手・衣装の色が夜でも読めるよう、暗くしすぎない（ひびは模様。体の色をうばわない）
     const pk = this.possessK
     const pulse = 0.65 + 0.35 * Math.sin(this.t * 3.1)
-    const dark = 1 - 0.32 * pk
+    const dark = 1 - 0.12 * pk
     for (const m of [this.mats.kimono, this.mats.hakama, this.mats.skin, this.mats.lacquer, this.mats.wood, this.mats.gold, this.mats.bronze, this.mats.white]) {
-      m.color.setRGB(dark, dark * (1 - 0.12 * pk), dark * (1 + 0.05 * pk))
-      m.emissive.setRGB(0.55, 0.12, 1.0).multiplyScalar(pk * pulse * 1.1)
+      m.color.setRGB(dark, dark * (1 - 0.08 * pk), dark * (1 + 0.04 * pk))
+      m.emissive.setRGB(0.55, 0.12, 1.0).multiplyScalar(pk * pulse * 0.45)
+    }
+    // 顔の前の補助灯：人形の正面、胸と顔のあいだの高さ
+    {
+      const yaw = this.root.rotation.y
+      const ahead = 3.4 * this.scale
+      this.faceLight.pos.set(this.root.position.x - Math.sin(yaw) * ahead, this.root.position.y + this.height * 0.6, this.root.position.z - Math.cos(yaw) * ahead)
+      this.faceLight.intensity = FACE_LIGHT * pk
     }
     for (const e of this.eyes) e.visible = pk > 0.3
     for (const d of this.eyeDots) d.visible = pk <= 0.3

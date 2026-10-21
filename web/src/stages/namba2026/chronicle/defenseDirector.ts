@@ -64,6 +64,8 @@ export class DefenseDirector {
   private bigCorner = 0
   private bigLitT = 0
   private bigDarkHp = 0
+  /** やられる前の大きな影の体力（体力 0 で戻っても満タンにしない） */
+  private bigLastHp = 0
   private aimCd = 0
   private lowSaid = false
   private seq = 0
@@ -257,6 +259,7 @@ export class DefenseDirector {
     // 大きな影
     const h = this.big
     if (h) {
+      if (h.alive && !rt.combat.downed) this.bigLastHp = h.brain.hp
       this.aimCd = Math.max(0, this.aimCd - dt)
       if (!h.alive) {
         // 倒れた（onDefeated でも呼ばれる）
@@ -367,6 +370,14 @@ export class DefenseDirector {
       return
     }
     if (this.big && e.target === this.big.def && this.phase === 'big_dark') this.say?.('big_dark_hit')
+  }
+
+  /** プレイヤーが体力 0 から戻った：大きな影の体力は、やられる前のまま（シェルは満タンにもどす） */
+  onPlayerRespawn(): void {
+    const h = this.big
+    if (!h || !h.alive) return
+    h.brain.hp = Math.min(h.brain.hp, this.bigLastHp)
+    this.bigDarkHp = Math.min(this.bigDarkHp, h.brain.hp)
   }
 
   /** 戦闘の敵が倒れた */

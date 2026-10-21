@@ -38,9 +38,11 @@ const POSSESSED_SCALE = 1.1
 /** 台座の高さ・寸法 */
 export const PEDESTAL = { w: 5.4, h: 2.0, d: 4.2 }
 /** 時間（秒） */
-const T = { windup: 1.15, slam: 0.22, recover: 1.3, bellUp: 1.0, bellHit: 0.25, possess: 2.6, stepdown: 1.4, collapse: 3.2 }
+// ふりおろし：予告の円（windup）からたたきつけ（slam）まで、怒りがいちばん上（1.3 倍）でも 1.2 秒より長く
+const T = { windup: 1.35, slam: 0.22, recover: 1.3, bellUp: 1.0, bellHit: 0.25, possess: 2.6, stepdown: 1.4, collapse: 3.2 }
 /** 衝撃波：広がる速さ（m/s）・最大の半径・輪の高さ */
-export const BELL_WAVE = { speed: 7.5, maxR: 19, height: 0.7, width: 0.9 }
+// 輪がゆっくり広がるほど、ジャンプのタイミングを合わせやすい
+export const BELL_WAVE = { speed: 6.0, maxR: 19, height: 0.7, width: 0.9 }
 /** ふりおろしの予告の円の半径（のりうつったときの大きさで） */
 export const SWING_RADIUS = 2.4
 

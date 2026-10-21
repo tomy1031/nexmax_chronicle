@@ -51,6 +51,8 @@ export type EdoSub = {
   boss?: 'before' | 'fight' | 'claw' | 'over'
   /** 次につかむ歯車（0〜2） */
   nextGear?: number
+  /** ボス戦：順番をまちがえた回数（2 回で、照準の切りかえを教える） */
+  mistakes?: number
   /** dawn：箱を運んでいる・箱を運ぶ番 */
   carryBox?: boolean
   boxReady?: boolean
@@ -72,6 +74,8 @@ export function edoObjective(step: EdoStep, s: EdoSub = {}): { title: string; su
     case 'night':
       if (s.boss === 'fight') {
         const g = s.nextGear ?? 0
+        if (g >= 3) return { title: '三つの歯車が止まった！', sub: '時の鐘人形が動けなくなった' }
+        if ((s.mistakes ?? 0) >= 2) return { title: `${GEAR_LABELS[g]}の歯車を止めよう`, sub: '照準の名前を見て、ちがったら R で切りかえて J' }
         return { title: `${GEAR_LABELS[g]}の歯車を止めよう`, sub: '光る歯車を J でつかんで、はなさない' }
       }
       if (s.boss === 'claw') return { title: '爪で、胸の影を裂こう', sub: '時の鐘人形のそばで F' }
@@ -141,8 +145,11 @@ export class GearOrder {
     return i
   }
 
-  /** 怒り（攻撃の速さ）：まちがえるほど速く（1〜1.6） */
+  /**
+   * 怒り（攻撃の速さ）：まちがえるほど速く（1〜1.3）。子ども向けに上がり方はゆるく：
+   * 腕のふりおろしは、予告の円が出てから当たるまで 1.2 秒より短くしない（bellDoll の T.windup と合わせる）
+   */
   get rage(): number {
-    return Math.min(1.6, 1 + this.mistakes * 0.2)
+    return Math.min(1.3, 1 + this.mistakes * 0.1)
   }
 }

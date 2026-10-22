@@ -125,7 +125,7 @@ export const SPOTS_V7 = {
   matsuiWait: { pos: v(14.1, 0, 9.3), face: v(16.5, 0, 11.0) },
   saekiWait: { pos: v(13.2, 0, 8.9), face: v(16.5, 0, 11.0) },
   /** 6 章：路地のかんばんの前（三人で） */
-  matsuiAlley: { pos: v(17.35, 0, 14.25), face: v(15.68, 0, 16.6) },
+  matsuiAlley: { pos: v(17.4, 0, 17.7), face: v(15.68, 0, 16.6) },
   saekiAlley: { pos: v(16.45, 0, 18.25), face: v(15.68, 0, 16.6) },
   /** 9 章：かけつける（表の通り → 路地） */
   matsuiRunIn: [v(16.6, 0, 9.4), v(16.9, 0, 14.0)],

@@ -246,6 +246,8 @@ export class BeastFight {
       }
     }
     if (rt.player.grounded) this.groundP = rt.player.position.y
+    // よろいがなくなったら、クローではねらえない（④ は K でパンチ）。はがした板が手元へ飛んでくる間は待つ
+    if (this.plates <= 0 && h.def.enabled && !this.grabbed && rt.claw.wire.phase === 'idle') h.def.enabled = false
     this.updatePlates(dt)
     if (rt.combat.downed) return
     if (this.grace > 0) this.grace -= dt
@@ -581,6 +583,7 @@ export class BeastFight {
   }
 
   private beginRoar(): void {
+    this.h.def.enabled = false
     this.angry = true
     this.angryT = 0
     this.fx.clear()
@@ -664,7 +667,8 @@ export class BeastFight {
     if (m.k !== 'grab') return
     this.grabbed = false
     this.armDef.enabled = false
-    this.h.def.enabled = true
+    // よろいがなくなったあとは、クローでは飛び込まない（K でパンチ。動きまわる獣への飛び込みが終わらなくなるのも防ぐ）
+    this.h.def.enabled = this.plates > 0
     const s = this.host.saeki
     s.root.position.y = 0
     void this.host.walker.walkTo(s, [this.host.saekiSafe], 2.6, this.h.pos)

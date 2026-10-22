@@ -158,7 +158,8 @@ export class BeastFx {
     // 衝撃の輪
     const wg = new THREE.CylinderGeometry(1, 1, 1, 56, 1, true)
     wg.translate(0, 0.5, 0)
-    this.waveMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.5, 2.6), transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })
+    // 昼の明るい地面の上でも見えるように、ふつうの重ね方（加算にしない）
+    this.waveMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.95, 0.3, 1.7), transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })
     this.wave = new THREE.Mesh(wg, this.waveMat)
     this.wave.visible = false
     this.wave.renderOrder = 5
@@ -242,7 +243,7 @@ export class BeastFx {
     this.waveRadius = radius
     this.wave.scale.set(radius, height, radius)
     this.waveFloor.scale.setScalar(radius)
-    this.waveMat.opacity = alpha * 0.85
+    this.waveMat.opacity = alpha * 0.6
     this.waveFloorMat.opacity = alpha
   }
 

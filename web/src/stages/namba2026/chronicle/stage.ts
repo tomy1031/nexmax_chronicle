@@ -499,7 +499,8 @@ export class ChronicleNambaStage implements Stage {
     this.antics.emote(s, 'note', 2.0)
     await rt.dialogue(N.slice(2))
     // うしろの板を見せる（ネクマックスがうしろを向く）
-    const back = Math.atan2(p.x - mAt.x, p.z - mAt.z)
+    // うしろを向く（前 = 社長から遠ざかる向き）
+    const back = Math.atan2(-(p.x - mAt.x), -(p.z - mAt.z))
     rt.player.teleport(p, back)
     const plateAt = v(p.x, 0.62, p.z)
     void rt.cinematic({ look: plateAt, from: v(p.x + (mAt.x - p.x) * 0.55, 1.05, p.z + (mAt.z - p.z) * 0.55), hold: Infinity, inSec: 0.9, fov: 38, arc: 0 })
@@ -509,8 +510,10 @@ export class ChronicleNambaStage implements Stage {
     this.antics.emote(m, 'bang', 1.8)
     await rt.dialogue(PL.slice(0, 1))
     rt.player.teleport(p, Math.atan2(-(mAt.x - p.x), -(mAt.z - p.z)))
+    // 社長のアップ：社長とネクマックスを結ぶ線の横から（ネクマックスの頭でふさがない）
     const toP = this.tmp.set(p.x - mAt.x, 0, p.z - mAt.z).normalize()
-    void rt.cinematic({ look: v(mAt.x, 1.35, mAt.z), from: v(mAt.x + toP.x * 2.1 - toP.z * 0.8, 1.55, mAt.z + toP.z * 2.1 + toP.x * 0.8), hold: Infinity, inSec: 0.8, fov: 44 })
+    const sideK = -sgn
+    void rt.cinematic({ look: v(mAt.x, 1.45, mAt.z), from: v(mAt.x + toP.x * 1.1 - toP.z * 1.7 * sideK, 1.6, mAt.z + toP.z * 1.1 + toP.x * 1.7 * sideK), hold: Infinity, inSec: 0.8, fov: 46 })
     this.antics.play(m, 'leanBack', 1.2)
     this.antics.emote(m, 'bangq', 2.4)
     await rt.dialogue(PL.slice(1, 2))
@@ -562,7 +565,7 @@ export class ChronicleNambaStage implements Stage {
     // 「未来の僕、ちゃんと君を作れたんやな。……いや、まだ作ってへんのか！」：頭をかかえる
     const mp = this.matsui.root.position
     this.walker.face(this.matsui, rt.player.position)
-    void rt.cinematic({ look: v(mp.x, 1.35, mp.z), from: v(mp.x + 1.6, 1.6, mp.z - 1.9), hold: Infinity, inSec: 0.9, fov: 46, arc: 0 })
+    void rt.cinematic({ look: v(mp.x, 1.5, mp.z), from: v(mp.x + 2.1, 1.7, mp.z - 2.3), hold: Infinity, inSec: 0.9, fov: 48, arc: 0 })
     const SP = lines.lines('sketch_paradox')
     this.antics.emote(this.matsui, 'note', 1.8)
     await rt.dialogue(SP.slice(0, 1))
@@ -685,7 +688,7 @@ export class ChronicleNambaStage implements Stage {
     await rt.dialogue(L.slice(0, 1))
     this.closeRecord(rt)
     rt.setControlLocked(true)
-    const m = this.walker.walkTo(this.matsui, [v(16.6, 0, 10.6), SPOTS_V7.matsuiAlley.pos], 2.6, KANBAN.c.pos)
+    const m = this.walker.walkTo(this.matsui, [v(16.6, 0, 10.6), v(17.65, 0, 13.6), v(17.65, 0, 16.2), SPOTS_V7.matsuiAlley.pos], 2.6, KANBAN.c.pos)
     const s = this.walker.walkTo(this.saeki, [v(16.3, 0, 10.6), v(16.9, 0, 13.0), v(17.4, 0, 16.6), SPOTS_V7.saekiAlley.pos], 2.6, KANBAN.c.pos)
     void rt.cinematic({ look: v(16.3, 1.1, 15.8), from: v(17.5, 1.9, 12.0), hold: Infinity, inSec: 1.2, fov: 54 })
     await Promise.race([Promise.all([m, s]), this.clock.wait(6)])
@@ -713,13 +716,14 @@ export class ChronicleNambaStage implements Stage {
     const c = this.ns.idos.c
     const qr = this.qr as KanbanQr
     rt.player.turnToward(c.plate.x - rt.player.position.x, c.plate.z - rt.player.position.z, 1, 1)
-    void rt.cinematic({ look: v(c.plate.x, 1.1, c.plate.z), from: v(17.6, 1.7, 13.4), hold: Infinity, inSec: 1.0, fov: 50 })
+    void rt.cinematic({ look: v(c.plate.x, 1.1, c.plate.z), from: v(16.85, 1.75, 12.9), hold: Infinity, inSec: 1.0, fov: 50 })
     await rt.dialogue(lines.lines('depart_touch'))
     // QR を読む：板の前に大きな QR がうかび、目から光
     const hc = qr.holoCenter
-    void rt.cinematic({ look: hc.clone(), from: v(Math.min(17.75, hc.x + 1.4), hc.y + 0.1, hc.z - 1.6), hold: Infinity, inSec: 0.8, fov: 46, arc: 0 })
+    void rt.cinematic({ look: hc.clone(), from: v(hc.x + 0.7, hc.y - 0.05, hc.z - 2.2), hold: Infinity, inSec: 0.8, fov: 44, arc: 0 })
     qr.setHolo(1)
-    for (let i = 0; i < 6; i++) {
+    // うかぶ QR に目から光が当たって、読み取りの線が走る（記録のパネルは、そのあと）
+    for (let i = 0; i < 16; i++) {
       c.setScan(this.eyePos(rt), Math.min(1, (i + 1) / 3))
       await this.clock.wait(0.1)
     }
@@ -746,7 +750,7 @@ export class ChronicleNambaStage implements Stage {
     this.panelFx.start(this.edoView())
     rt.hud.setIdoGlitch(0.35)
     this.surgeC?.setLevel(0.65)
-    void rt.cinematic({ look: v(c.plate.x, 1.1, c.plate.z), from: v(17.6, 1.7, 13.4), hold: Infinity, inSec: 0.9, fov: 52 })
+    void rt.cinematic({ look: v(c.plate.x, 1.1, c.plate.z), from: v(16.85, 1.75, 12.9), hold: Infinity, inSec: 0.9, fov: 52 })
     await this.clock.wait(1.0)
     await rt.dialogue(lines.lines('depart_go'))
     this.surgeC?.setLevel(1)

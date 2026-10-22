@@ -7,6 +7,8 @@ import type { Flags } from '../../../chronicle/progress'
 export type Step2086 =
   | 'prologue' // はじめに（2071 の回想）
   | 'ch1_booth' // 1章：お祭りの朝 → ソラのブース → 共鳴レンズ
+  | 'ch1_antenna' // 1章：北の回廊の中継アンテナ（金具 → 光る輪 → 線をつなぐ → 大画面に「開場」）
+  | 'ch1_qr' // 1章：ブースへもどる → 展示の台の QR を読む（300 年前の路地）
   | 'ch1_keychain' // 1章：光のつぶの話 → 夕方 → 屋台で星のキーホルダー
   | 'ch1_promise' // 1章：夜のお祭りへ（約束）
   | 'ch2_night' // 2章：時計台のトワ → 空のひび → 黒い手から逃げきる → 朝へ
@@ -32,6 +34,8 @@ export type Step2086 =
 export const STEPS_2086: readonly Step2086[] = [
   'prologue',
   'ch1_booth',
+  'ch1_antenna',
+  'ch1_qr',
   'ch1_keychain',
   'ch1_promise',
   'ch2_night',
@@ -80,7 +84,9 @@ export function step2086(f: Flags): Step2086 {
   if (f('v7_rewind1')) return 'ch3_morning'
   if (f('v7_promise')) return 'ch2_night'
   if (f('v7_keychain')) return 'ch1_promise'
-  if (f('v7_lens_done')) return 'ch1_keychain'
+  if (f('v7_qr_demo')) return 'ch1_keychain'
+  if (f('v7_antenna_done')) return 'ch1_qr'
+  if (f('v7_lens_done')) return 'ch1_antenna'
   if (f('v7_prologue_seen')) return 'ch1_booth'
   return 'prologue'
 }
@@ -133,6 +139,8 @@ export function spawnFor(step: Step2086, arrival: string | null = null): string 
     case 'prologue':
     case 'ch1_booth':
       return 'start'
+    case 'ch1_antenna':
+    case 'ch1_qr':
     case 'ch1_keychain':
       return 'booth'
     case 'ch1_promise':
@@ -170,11 +178,21 @@ export function dialVisible(f: Flags): boolean {
   return f('v7_back1')
 }
 
-/** 共鳴レンズがわっかにはまっているか（その日の中だけ。ループの朝ははずれる。8章からはずっと） */
+/**
+ * 共鳴レンズがわっかにはまっているか（その日の中だけ。ループの朝ははずれる。5章の扉からはずっと）。
+ * 一度目の 10月18日は、レンズをわたしたあと（アンテナ〜夜）はずっとはまっている（セーブから再開しても）
+ */
 export function lensMounted(step: Step2086, lensDoneToday: boolean): boolean {
   const i = STEPS_2086.indexOf(step)
   if (i >= STEPS_2086.indexOf('ch5_door')) return true
+  if (i >= STEPS_2086.indexOf('ch1_antenna') && i <= STEPS_2086.indexOf('ch2_night')) return true
   return lensDoneToday
+}
+
+/** 会場の大画面に「開場」が出ているか（一度目の朝は、アンテナをつなぐまで「映像信号なし」） */
+export function screenOn(step: Step2086, antennaDoneToday: boolean): boolean {
+  if (step === 'ch1_booth' || step === 'ch1_antenna') return antennaDoneToday
+  return true
 }
 
 export function musicOf(step: Step2086, part: DayPart): MusicId {
@@ -192,28 +210,44 @@ export const OBJECTIVES: Record<string, Objective> = {
   morning: { title: 'お祭りの朝', sub: '街頭ビジョンを見よう' },
   go_sora: { title: 'ソラのブースへ行く', sub: '広場の西。イドーのわっかのところ' },
   balloon: { title: 'ソラのブースへ行く', sub: '（風船を J で取ってあげてもいい）' },
+  balloon_take: { title: '男の子の風船を取ってあげよう', sub: '電灯の風船を見上げて J で引きよせる' },
+  balloon_give: { title: '風船を男の子にわたそう', sub: '男の子のそばで F' },
   lens: { title: '共鳴レンズを取る', sub: '箱の山のいちばん上。J で引きよせる' },
   lens_give: { title: 'レンズをソラにわたす', sub: 'ソラのそばで F' },
+  antenna_hook: { title: '北の回廊の中継アンテナへ', sub: '回廊のふちの金具に J で飛びつく' },
+  antenna_swing: { title: '切れた橋をわたる', sub: '回廊を北へ。アーチの光る輪に J → WASD でこぐ → Space で飛びうつる' },
+  antenna_fix: { title: '中継アンテナの線をつなぐ', sub: 'アンテナの前で F' },
+  back_booth: { title: 'ソラのブースへもどる', sub: '広場の西' },
+  qr_demo: { title: '展示の台の QR を読む', sub: '台の前で F' },
   keychain: { title: '屋台で星のキーホルダーを買う', sub: '東の屋台の列のいちばん南。F で買う' },
   night_walk: { title: 'ソラとお祭りを回る', sub: '夜の広場を歩こう' },
-  escape: { title: '黒い手からにげる', sub: '8時41分まで。手は石だけをねらってくる' },
+  protect: { title: '黒い手から、ソラを守ろう', sub: '黒い手に J' },
+  flee: { title: 'ソラと南のゲートへにげよう', sub: '広場の南の入口へ。Shift でダッシュ' },
   loop_greet: { title: 'ソラに会う', sub: '同じ朝……？' },
   pocket: { title: 'ポケットを見る', sub: 'F' },
-  hide: { title: '地下にかくれる', sub: '北の通りの西側、地下通路の入口から、奥の部屋へ' },
-  hide_wait: { title: 'じっとかくれる', sub: '夜まで待つ' },
-  save_sora: { title: 'ソラを助ける！', sub: '黒い手に J → ソラのところへ走る' },
+  hide: { title: 'ひとりになれる所へ', sub: '北の通りの西側の、地下通路。その奥の部屋' },
+  hide_wait: { title: 'じっとかくれる', sub: '夜まで' },
+  save_sora: { title: 'ソラを助ける！', sub: 'ソラをつかんだ黒い手に J' },
+  save_run: { title: 'ソラの前に飛び出す', sub: 'ソラのところへ走る' },
   tower_go: { title: '時計台の下へ行く', sub: '北の通りの入口（アーチの先）' },
-  tower_climb: { title: '時計台にのぼる', sub: '金色の金具に J で飛びつく。壁の帯が光ったら、黒い手が来る前に次の金具へ' },
+  tower_gears: { title: '時計台にのぼる', sub: '回る大歯車に Space でとびのって、上の足場へ' },
+  tower_gearhook: { title: '時計台にのぼる', sub: '回る歯車の金具が上に来て、金色に光ったら J' },
+  tower_wall: { title: '時計台にのぼる', sub: '壁から黒い手！ 赤い輪から、はなれて。渡り廊下の南の端へ' },
+  tower_hand: { title: '時計台にのぼる', sub: '大きな針が来て止まったら、のって、向こうの足場へ' },
+  tower_hook: { title: '時計台にのぼる', sub: '足場の南の端から、金色の金具に J' },
+  tower_gearhook2: { title: '時計台にのぼる', sub: '回る歯車の金具が上に来て、金色に光ったら J' },
+  tower_debris: { title: '時計台にのぼる', sub: '赤い輪に、がれきが落ちてくる。止まらずに、回廊の南の端へ' },
+  tower_top: { title: '時計台のてっぺんへ', sub: 'てっぺんの金色の金具に J' },
   tower_ring: { title: '黒い輪に J を撃つ', sub: '空の黒い輪をねらう' },
   confide: { title: 'ソラに全部話す', sub: 'ソラのブースへ' },
   show_keychain: { title: 'キーホルダーを見せる', sub: 'F' },
-  door: { title: 'わっかで 60 年前の記録をひらく', sub: 'わっかの前で F' },
-  ring_go: { title: 'わっかへ', sub: 'わっかの前で F' },
+  qr_door: { title: '展示の台の QR を読む', sub: '60年前の記録。台の前で F' },
   back_talk: { title: 'ソラに話す', sub: '' },
   to_site: { title: '路地のあとへ走る', sub: '北の通りのさらに北、東側（NEXTMAKE）' },
   kanban: { title: 'かんばんの記録を見る', sub: '古い石のかんばんの前で F' },
   to_ring_dial: { title: 'ソラのわっかへもどる', sub: 'ブースへ' },
   dial: { title: '年代ダイヤルを回す', sub: '← → で回し、石の音と記録の音がそろったら F' },
+  qr_dial: { title: '展示の台の QR を読む', sub: 'ダイヤルでえらんだ年の記録。台の前で F' },
   to_court: { title: '路地のあとへ', sub: 'NEXTMAKE の場所へ' },
   lock: { title: 'ほこらの錠前', sub: 'ほこらの前で F' },
   toolbox: { title: '落ちる工具箱を止める', sub: '時空裂きのクロー：動いている物に J' },
@@ -225,6 +259,7 @@ export const OBJECTIVES: Record<string, Objective> = {
   duel_thread: { title: 'ランプの黒い糸を裂く', sub: 'トワとランプをつなぐ糸が光ったら J（3 回）' },
   relief: { title: 'カンボジアの記録', sub: 'ソラと話す' },
   dial1186: { title: '年代ダイヤルを 1186 年へ', sub: 'わっかの前で F → 回してそろえる' },
+  qr1186: { title: '遺跡のかんばんの QR を読む', sub: '展示の台の前で F' },
   test_slit: { title: '小さな切れ目を裂く', sub: 'ソラのわっかの前のゆらぎに J' },
   hands: { title: '黒い手を裂く', sub: 'ふりおろして止まった手に J（3 本）' },
   sky_seam: { title: '空を大きく裂く', sub: '時計台の上の大きなゆらぎに J' },
@@ -241,6 +276,10 @@ export function defaultPhase(step: Step2086): string {
       return 'prologue'
     case 'ch1_booth':
       return 'go_sora'
+    case 'ch1_antenna':
+      return 'antenna_hook'
+    case 'ch1_qr':
+      return 'back_booth'
     case 'ch1_keychain':
       return 'keychain'
     case 'ch1_promise':
@@ -256,7 +295,7 @@ export function defaultPhase(step: Step2086): string {
     case 'ch5_confide':
       return 'confide'
     case 'ch5_door':
-      return 'door'
+      return 'qr_door'
     case 'ch8_back':
       return 'to_site'
     case 'ch8_dial':

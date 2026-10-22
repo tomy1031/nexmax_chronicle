@@ -1077,13 +1077,16 @@ export class ChronicleFutureStage implements Stage {
     const side = v(rt.player.position.x - s.x, 0, rt.player.position.z - s.z)
     if (side.lengthSq() < 0.01) side.set(1, 0, 0)
     side.normalize()
-    // ソラの、ネクマックスと反対側の 1.2m 横
-    const at = s.clone().addScaledVector(side, -1.2).setY(groundY(rt.phys, s, s.y))
+    // ソラの、ネクマックスと反対側のすぐ横（手の指がソラにかからない所）
+    const at = s.clone().addScaledVector(side, -2.4).setY(groundY(rt.phys, s, s.y))
     const id = this.hands.ids.find((h) => this.hands.state(h) !== 'cut') ?? 'hand0'
     if (!this.hands.has(id)) this.hands.spawn(id, at.clone().add(v(-3, 0, -2)))
     this.hands.slam(id, at, { windup: 1.3, stuck: 1.6 })
-    const look = s.clone().lerp(rt.player.position, 0.35).add(v(0, 0.9, 0))
-    void this.cine(rt, { look, from: look.clone().addScaledVector(side, -0.6).add(v(-side.z * 4.2, 1.4, side.x * 4.2)), hold: Infinity, inSec: 0.6, fov: 50 })
+    // 横から：まん中にソラ、片側にふりおろす手、もう片側にネクマックス
+    const look = s.clone().add(v(0, 0.6, 0))
+    const perp = v(-side.z, 0, side.x)
+    if (perp.dot(v(rt.camera.position.x - s.x, 0, rt.camera.position.z - s.z)) < 0) perp.negate()
+    void this.cine(rt, { look, from: s.clone().addScaledVector(perp, 4.0).addScaledVector(side, 0.3).add(v(0, 1.5, 0)), hold: Infinity, inSec: 0.6, fov: 52 })
     for (let k = 0; k < 15 && this.alive; k++) {
       badge()
       await this.wait(0.1)
@@ -2435,7 +2438,7 @@ export class ChronicleFutureStage implements Stage {
     this.updateDuel(dt, rt)
     this.updateBalloon(rt)
     if (!this.duel) rt.combat.passive = this.busy || rt.talking || rt.inCinematic
-    this.mob?.update(dt, rt, mobPhaseV7(this.f, this.part), this.busy || !!this.fWait?.label.startsWith('QR') || this.climb !== null)
+    this.mob?.update(dt, rt, mobPhaseV7(this.f, this.part), this.busy || this.climb !== null)
     // 裏側（UraBattle）は出たあとも自分の時計で暗転を明けるので、active でなくても毎フレーム回す
     this.ura.update(dt, frame, rt)
   }

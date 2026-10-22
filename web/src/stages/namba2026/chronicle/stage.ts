@@ -550,10 +550,10 @@ export class ChronicleNambaStage implements Stage {
     rt.player.teleport(p, back)
     // 背中の板（すりへった「NEXTMAKE」の板。この場面だけ、背中の石の下に見せる）
     const backPlate = this.attachBackPlate(rt)
-    // 社長の肩ごしに、ネクマックスの背中の板（少しはなれて、背中ぜんたいが見える）
+    // 社長の横から、ネクマックスの背中の板（社長の腕がかからないくらい横へ。背中ぜんたいが見える）
     const tm = this.tmp.set(mAt.x - p.x, 0, mAt.z - p.z).normalize()
     const plateAt = v(p.x, 0.6, p.z)
-    void rt.cinematic({ look: plateAt, from: v(p.x + tm.x * 1.9 - tm.z * 0.75 * sgn, 1.1, p.z + tm.z * 1.9 + tm.x * 0.75 * sgn), hold: Infinity, inSec: 0.9, fov: 40, arc: 0 })
+    void rt.cinematic({ look: plateAt, from: v(p.x + tm.x * 1.7 - tm.z * 1.25 * sgn, 1.05, p.z + tm.z * 1.7 + tm.x * 1.25 * sgn), hold: Infinity, inSec: 0.9, fov: 40, arc: 0 })
     await this.clock.wait(1.1)
     const PL = lines.lines('paradox_plate')
     this.antics.play(m, 'hop2')

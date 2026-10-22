@@ -57,6 +57,8 @@ const TREASURE_BOX = v(23.6, K.TOP_Y, -9.4)
 /** 落ちてくる石が体に当たる水平の近さ（石の半分の幅＋体の太さ）と、飛ばされる速さ */
 const STONE_HIT_R = 0.46 + 0.36
 const STONE_KNOCK = 6
+/** すべり落ちていく石に押しのけられる速さ（m/s） */
+const STONE_SHOVE = 3.2
 const TOP_SPAWNS = [v(24, K.TOP_Y, -10.2), v(28, K.TOP_Y, -10.2), v(24, K.TOP_Y, 2.2), v(28.2, K.TOP_Y, 2.2), v(32.2, K.TOP_Y, -4), v(32.2, K.TOP_Y, -7.6)]
 
 export class KhmerStage implements Stage {
@@ -789,8 +791,8 @@ export class KhmerStage implements Stage {
 
   /**
    * 夜：落ちてくる石（止めていない・落ちている最中）が、本当にネクマックスの体に重なったら、
-   * 石からネクマックスへの向きに軽く吹っ飛ばす（体力は 1 へるが、最後の 1 は残す。無敵時間はシェル）。
-   * 石の上に乗っているとき（石が足の下）は当たらない
+   * 上から落ちてくる間は、石からネクマックスへの向きに軽く吹っ飛ばす（体力は 1 へるが、最後の 1 は残す。無敵時間はシェル）。
+   * 下に着いて段の下へすべり落ちていく間は、押しのけるだけ。石の上に乗っているとき（石が足の下）は当たらない
    */
   private stoneHits(rt: StageRuntime): void {
     const P = rt.player.position
@@ -804,8 +806,15 @@ export class KhmerStage implements Stage {
       if (Math.hypot(dx, dz) > STONE_HIT_R) continue
       // 真上から落ちてきたときは、段の下（西）へ
       const dir = Math.hypot(dx, dz) > 0.08 ? this.hitDir.set(dx, 0, dz) : this.hitDir.set(-1, 0, 0)
-      rt.combat.hurtPlayer(1, dir.normalize(), STONE_KNOCK, false)
-      rt.shake(0.3)
+      dir.normalize()
+      if (L.pos.y > L.path[1].y + 0.05) {
+        // 上から落ちてくる石（トワの攻撃）：当たり
+        rt.combat.hurtPlayer(1, dir, STONE_KNOCK, false)
+        rt.shake(0.3)
+      } else if (!rt.player.isExternal) {
+        // 下に着いたあと、段の下へすべり落ちていく石：体を押しのけるだけ（すりぬけない。体力はへらない）
+        rt.player.burstMove(dir.x * STONE_SHOVE, dir.z * STONE_SHOVE, 0.12)
+      }
     }
   }
 

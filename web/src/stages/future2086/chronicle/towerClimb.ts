@@ -30,7 +30,7 @@ export function sectionAt(p: { x: number; y: number; z: number }): number {
 /** B（渡り廊下）の南の端：針を待つ所 */
 export const B_SOUTH_Z = COURSE.B.z1 - 0.9
 /** E（時計の下の回廊）の南の端：てっぺんの金具をねらう所（金具が真上すぎないように、南へはなれる） */
-export const E_SOUTH_Z = -19.9
+export const E_SOUTH_Z = -19.3
 
 /** 段と位置から、目標（story2086 の OBJECTIVES のキー） */
 export function climbPhase(section: number, p: { z: number }): string {
@@ -55,7 +55,7 @@ export function climbPhase(section: number, p: { z: number }): string {
 /** B の黒い手：休む秒・ふりおろしの予告（windup）の秒 */
 export const WALL_HAND = { rest: 1.1, windup: 1.5, strike: 0.22, stuck: 0.45, recover: 0.55, hitR: 1.0 } as const
 /** E のがれき：落とす間かく（秒）・当たる半径 */
-export const DEBRIS = { every: 1.7, hitR: 0.8 } as const
+export const DEBRIS = { every: 2.0, hitR: 0.8 } as const
 
 export type TowerClimbHost = {
   /** 当たった（from：当てた物の位置。ステージが hurtPlayer で吹っ飛ばす） */
@@ -128,6 +128,9 @@ export class TowerClimb {
     this.updateWallHand(dt, rt, onB)
     this.updateDebris(dt, rt, sec === SECTION.E)
     this.marks = this.marksFor(sec)
+    // 立ち止まったら、ネクマックスが次の金具のほうを向く（クローは向いている方へのびるので、向き直さなくてよいように）
+    const aim = this.aimFor(sec)
+    if (aim && grounded && rt.player.speed < 0.3) rt.player.turnToward(aim.x - p.x, aim.z - p.z, dt, 5)
     // 段が変わったら、次にねらう物の方を見上げる（方向キーで取り消せる）
     if (grounded && sec !== this.shown) {
       this.shown = sec
@@ -170,6 +173,22 @@ export class TowerClimb {
         return []
       default:
         return [{ pos: v((C.A.x0 + C.A.x1) / 2, C.A.y + 1.2, (C.A.z0 + C.A.z1) / 2), label: '足場' }]
+    }
+  }
+
+  /** その段でねらう金具（立ち止まったら、そちらを向く） */
+  private aimFor(sec: number): THREE.Vector3 | null {
+    switch (sec) {
+      case SECTION.A:
+        return this.course.gearHooks[0].spec.c
+      case SECTION.C:
+        return this.towerHooks[0].point
+      case SECTION.D:
+        return this.course.gearHooks[1].spec.c
+      case SECTION.E:
+        return this.towerHooks[1].point
+      default:
+        return null
     }
   }
 
@@ -216,6 +235,8 @@ export class TowerClimb {
         if (Math.hypot(p.x - this.wallAt.x, p.z - this.wallAt.z) < WALL_HAND.hitR && Math.abs(p.y - this.wallAt.y) < 1.3) {
           this.hits++
           this.host.hit(rt, this.wallAt.clone().setX(this.wallAt.x + 0.6))
+          // 当たったら、少し長く休む（続けて当たらないように）
+          this.wallT = -1.4
         }
       }
       if (ph.phase !== 'done') return

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { cellsWithHoles, rectsOverlap } from '../src/stages/future2086/groundHoles'
 import { BENCH, CHECKPOINTS, COURSE, GROUND_HOLES, KEY_STALL, SITE, TOWER, UNDER, chronicleKillY } from '../src/stages/future2086/chronicle/layoutChronicle'
-import { DEBRIS_WARN, HAND_NORTH, HAND_SOUTH, gearHookAngle, gearHookInWindow, gearHookPoint, handAt, onHand, onLedge } from '../src/stages/future2086/chronicle/towerCourse'
+import { DEBRIS_WARN, HAND_NORTH, HAND_AWAY, gearHookAngle, gearHookInWindow, gearHookPoint, handAt, onHand, onLedge } from '../src/stages/future2086/chronicle/towerCourse'
 import { B_SOUTH_Z, E_SOUTH_Z, SECTION, WALL_HAND, climbPhase, sectionAt } from '../src/stages/future2086/chronicle/towerClimb'
 import { YearDialLogic } from '../src/stages/future2086/chronicle/yearDialLogic'
 import { F } from '../src/stages/future2086/layout'
@@ -103,15 +103,22 @@ describe('時計台のぼり（4 章のアクション）', () => {
     expect(on).toBeGreaterThan(1.0)
     expect(period - on).toBeLessThan(8)
   })
-  it('大きな針は、北の端で B に、南の端で C にとどく（両はしで 1.2 秒以上止まる）', () => {
+  it('大きな針は C の北の端が軸で、北で止まると B の南の端へとどく橋になる（2.5 秒以上止まる）', () => {
     const H = COURSE.hand
-    expect(H.dwell).toBeGreaterThanOrEqual(1.2)
+    const C = TOWER.ledges[0]
+    expect(onLedge({ x: H.pivot.x, y: H.pivot.y, z: H.pivot.z }, C, 0.1, 0.4)).toBe(true)
+    expect(H.dwell).toBeGreaterThanOrEqual(2.5)
     const tipN = { x: H.pivot.x + Math.cos(HAND_NORTH) * H.len, z: H.pivot.z + Math.sin(HAND_NORTH) * H.len }
-    const tipS = { x: H.pivot.x + Math.cos(HAND_SOUTH) * H.len, z: H.pivot.z + Math.sin(HAND_SOUTH) * H.len }
-    expect(COURSE.B.z1 - tipN.z).toBeGreaterThan(-0.4)
-    expect(tipS.z - TOWER.ledges[0].z0).toBeGreaterThan(-0.4)
-    expect(handAt(0.5).state).toBe('north')
-    expect(handAt(H.dwell + H.travel + 0.5).state).toBe('south')
+    expect(tipN.z).toBeLessThan(COURSE.B.z1 + 0.05)
+    expect(tipN.x).toBeGreaterThan(COURSE.B.x0)
+    expect(tipN.x).toBeLessThan(COURSE.B.x1)
+    // 西へ回ると、B から外れる（通りの上）
+    const tipW = { x: H.pivot.x + Math.cos(HAND_AWAY) * H.len, z: H.pivot.z + Math.sin(HAND_AWAY) * H.len }
+    expect(tipW.x).toBeLessThan(COURSE.B.x0 - 2)
+    expect(handAt(0.5).state).toBe('bridge')
+    expect(handAt(H.dwell + 0.5).state).toBe('leaving')
+    expect(handAt(H.dwell + H.travel + 0.5).state).toBe('away')
+    expect(handAt(H.dwell + H.travel + H.away + 0.5).state).toBe('coming')
     expect(onHand({ x: tipN.x, y: H.pivot.y, z: tipN.z + 0.3 }, HAND_NORTH)).toBe(true)
   })
   it('塔の金具：C の南の端から、E の南の端から、届いて真上すぎない', () => {

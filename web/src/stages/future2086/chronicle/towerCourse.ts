@@ -1,7 +1,7 @@
 // 4 章の時計台のぼり（物語 v7.1：「ひたすらクローを押すだけ」をやめて、ジャンプ・タイミング・よける・クローのまぜあわせにする）。
 // 配置は layoutChronicle.ts の COURSE。ここは形（足場・大歯車・大きな針・回る歯車の金具・予告の帯・がれき）と、動き。
 // ・大歯車（水平に回る 3 枚）：当たり判定は動かない円柱（回っても形は同じ）。乗っている間は carry() で一緒に回す
-// ・大きな針：軸のまわりを北 ⇔ 南に行き来して、両はしで止まる（キネマティックの板。乗ると一緒に回る）
+// ・大きな針：軸（C の北の端）のまわりを、北（B へかかる橋）⇔ 西（通りの上）に行き来して、両はしで止まる（板の当たり判定は回すたびに置き直す。乗ると一緒に回る）
 // ・回る歯車の金具：壁の面で回る歯車のふちの金具。上に回ってきた時だけ金色に光って、ねらえる（ステージが enabled を決める）
 // ・黒い手がはらう予告（渡り廊下 B の壁の帯と床の線）・がれき（赤い輪 → 落ちる）
 // 動きの計算（角度・窓・どの足場の上か）は純粋な関数にして、tests/chronicle2086Additions.test.ts で確かめる。
@@ -20,25 +20,26 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 // ------------------------------------------------------------------ 動きの計算（純粋）
 
-export type HandState = 'north' | 'toSouth' | 'south' | 'toNorth'
+/** bridge：北で止まって B へかかる（わたれる）／leaving：西へ回っていく／away：西（通りの上）で止まる／coming：北へもどってくる */
+export type HandState = 'bridge' | 'leaving' | 'away' | 'coming'
 
-/** 大きな針の向き（軸から針先への水平の角。方向は (cos θ, 0, sin θ)）。北 = -π/2、西を通って南 = -3π/2 */
+/** 大きな針の向き（軸から針先への水平の角。方向は (cos θ, 0, sin θ)）。北 = -π/2（B への橋）、西 = -π */
 export const HAND_NORTH = -Math.PI / 2
-export const HAND_SOUTH = -Math.PI * 1.5
+export const HAND_AWAY = -Math.PI
 
-/** 時刻 t の大きな針の角度と状態（両はしで dwell 秒止まり、travel 秒でなめらかに回る） */
-export function handAt(t: number, s: { dwell: number; travel: number } = COURSE.hand): { theta: number; state: HandState; left: number } {
-  const cyc = 2 * (s.dwell + s.travel)
+/** 時刻 t の大きな針の角度と状態（北で dwell 秒・西で away 秒止まり、travel 秒でなめらかに回る） */
+export function handAt(t: number, s: { dwell: number; away: number; travel: number } = COURSE.hand): { theta: number; state: HandState; left: number } {
+  const cyc = s.dwell + s.away + 2 * s.travel
   const k = ((t % cyc) + cyc) % cyc
   const ease = (x: number) => x * x * (3 - 2 * x)
-  if (k < s.dwell) return { theta: HAND_NORTH, state: 'north', left: s.dwell - k }
+  if (k < s.dwell) return { theta: HAND_NORTH, state: 'bridge', left: s.dwell - k }
   if (k < s.dwell + s.travel) {
     const u = (k - s.dwell) / s.travel
-    return { theta: HAND_NORTH + (HAND_SOUTH - HAND_NORTH) * ease(u), state: 'toSouth', left: s.dwell + s.travel - k }
+    return { theta: HAND_NORTH + (HAND_AWAY - HAND_NORTH) * ease(u), state: 'leaving', left: s.dwell + s.travel - k }
   }
-  if (k < 2 * s.dwell + s.travel) return { theta: HAND_SOUTH, state: 'south', left: 2 * s.dwell + s.travel - k }
-  const u = (k - 2 * s.dwell - s.travel) / s.travel
-  return { theta: HAND_SOUTH + (HAND_NORTH - HAND_SOUTH) * ease(u), state: 'toNorth', left: cyc - k }
+  if (k < s.dwell + s.travel + s.away) return { theta: HAND_AWAY, state: 'away', left: s.dwell + s.travel + s.away - k }
+  const u = (k - s.dwell - s.travel - s.away) / s.travel
+  return { theta: HAND_AWAY + (HAND_NORTH - HAND_AWAY) * ease(u), state: 'coming', left: cyc - k }
 }
 
 /** 回る歯車の金具の角度（0 = てっぺん。-π..π） */
@@ -180,6 +181,11 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
   // 足もとの印（着いたらそこがやり直しの所）：A・B の上の、うすく光る輪
   for (const p of [v(3.2, C.A.y, -31.0), v(5.4, C.B.y, -32.4)]) c.b.add(new THREE.RingGeometry(0.3, 0.37, 28), c.fm.glow, M(p.x, p.y + 0.012, p.z, -Math.PI / 2, 0, 0), { tint: new THREE.Color(0.25, 0.7, 1.0), cast: false, receive: false })
 
+  // ---- 夜のコースの明かり（シェルが近いものから点光源を割り当てる）。足場と歯車が夜でも読めるように
+  for (const p of [v(2.6, 3.2, -24.8), v(3.6, 5.8, -30.4), v(4.1, 9.8, -30.2), v(3.6, 9.6, -25.6), v(3.9, 13.4, -21.8), v(3.6, 18.6, -21.8)]) {
+    c.lights.push({ pos: p, color: '#ffe2b0', intensity: 2.4, dist: 7.5 })
+  }
+
   // ---- 大歯車（水平に回る 3 枚）。足の柱は動かない
   const gearMeshes: THREE.Group[] = []
   for (const g of C.gears) {
@@ -206,10 +212,8 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
     gearMeshes.push(m)
   }
 
-  // ---- 大きな針（軸の柱は動かない。針は軸のまわりを回る）
+  // ---- 大きな針（軸は C の北の端。針は軸のまわりを回る）
   const H = C.hand
-  c.b.add(new THREE.CylinderGeometry(0.22, 0.3, H.pivot.y - 0.4, 14), c.fm.darkMetal, M(H.pivot.x, (H.pivot.y - 0.4) / 2, H.pivot.z))
-  c.b.add(new THREE.CylinderGeometry(0.55, 0.65, 0.14, 20), c.fm.metal, M(H.pivot.x, 0.07, H.pivot.z))
   const handMesh = (() => {
     const b = new Batch()
     const w = H.width
@@ -331,11 +335,15 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
   const gearAngles = C.gears.map(() => 0)
   let night = false
 
+  // 針の当たり判定は「動かない剛体」を回すたびに置き直す（キネマティックの剛体だと、キャラクターコントローラが上を歩けずに止まることがある）。
+  // 止まっている間は置き直さない
+  let syncedTheta = NaN
   const syncHand = () => {
     handMesh.rotation.y = -hand.theta
-    if (handBody) {
+    if (handBody && hand.theta !== syncedTheta) {
+      syncedTheta = hand.theta
       q.setFromAxisAngle(Y, -hand.theta)
-      handBody.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+      handBody.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true)
     }
   }
 
@@ -458,10 +466,11 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
       }
       // 針の軸の丸い台（針と同じ高さ）
       ph.world.createCollider(R.ColliderDesc.cylinder(0.13, 0.62).setTranslation(H.pivot.x, H.pivot.y - 0.13, H.pivot.z), fixed)
-      handBody = ph.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(H.pivot.x, H.pivot.y - 0.12, H.pivot.z))
+      handBody = ph.world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(H.pivot.x, H.pivot.y - 0.12, H.pivot.z))
       ph.world.createCollider(R.ColliderDesc.cuboid(H.len / 2, 0.12, H.width / 2).setTranslation(H.len / 2, 0, 0).setFriction(0.9), handBody)
       q.setFromAxisAngle(Y, -hand.theta)
       handBody.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true)
+      syncedTheta = hand.theta
     },
     dispose() {
       // Rapier の世界はシェルがまとめて解放する

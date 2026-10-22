@@ -54,7 +54,7 @@ const HOOKS: HookSpec[] = [
  * (1) 回る大歯車（3 枚。乗ると一緒に回る）を Space でとびうつって、北の足場 A へ
  * (2) 回る歯車のふちの金具：上に回ってきて金色に光った時だけ J → 渡り廊下 B へ
  * (3) 渡り廊下 B：壁が赤く光ったら黒い手が足もとをはらう → Space でとびこえて、南の端へ
- * (4) 大きな針：行ったり来たりして、両はしで止まる。止まったら乗って、向こうのバルコニー C へ
+ * (4) 大きな針（長い分針。軸は C の北の端）：北で止まると B の南の端へかかる橋になる。止まったらわたって C へ（西へ回っていく間も、軸のほうへ歩けば C）
  * (5) 金具（J）→ 細い足場 D　(6) 回る歯車のふちの金具（J）→ 時計の下の回廊 E
  * (7) 回廊 E：赤い輪にがれきが落ちてくる → よけながら南へ　(8) てっぺんの金具（J）→ 屋上
  * 段ごとにやり直しの位置（CHECKPOINTS）。落ちたら、着いたことのあるいちばん上の位置へ
@@ -88,14 +88,14 @@ export const COURSE = {
   ] as GearSpec[],
   A: COURSE_A,
   /** 北の足場 A の上の、建物の壁の大歯車の金具 → B */
-  hook1: { id: 'gear_hook_1', c: v(6.12, 4.9, -31.0), r: 1.7, w: 0.8, window: 0.7, landing: v(5.4, 7.4, -32.4), via: v(4.2, 8.7, -32.0), wait: v(3.1, 2.75, -31.0) } as GearHookSpec,
+  hook1: { id: 'gear_hook_1', c: v(6.12, 4.9, -31.0), r: 1.7, w: 0.75, window: 0.85, landing: v(5.4, 7.4, -32.4), via: v(4.2, 8.7, -32.0), wait: v(3.1, 2.75, -31.0) } as GearHookSpec,
   B: COURSE_B,
   /** 黒い手がはらう帯（B の上、建物の壁ぞい） */
   sweep: { x: 6.15, y: 7.4, z0: COURSE_B.z0, z1: COURSE_B.z1 },
-  /** 大きな針：軸（上面の高さ）・長さ・幅。北（B の南の端）と南（C の北の端）を行き来し、両はしで止まる */
-  hand: { pivot: v(5.15, 7.4, -26.2), len: 2.3, width: 1.0, dwell: 2.2, travel: 3.6 },
+  /** 大きな針：軸（C の北の端。上面の高さ）・長さ・幅。北で dwell 秒止まって B へかかる → 西（通りの上）へ回って away 秒 → もどる */
+  hand: { pivot: v(5.0, 7.4, -23.45), len: 5.25, width: 1.1, dwell: 3.2, away: 2.0, travel: 2.4 },
   /** 塔の西の壁の、回る歯車の金具 → E（時計の下の回廊の北西のすみ） */
-  hook2: { id: 'gear_hook_2', c: v(5.5, 13.6, -21.4), r: 1.25, w: -0.8, window: 0.7, landing: v(4.65, CK.y0, -24.6), via: v(3.9, 17.4, -23.6), wait: v(4.85, 11.2, -23.25) } as GearHookSpec,
+  hook2: { id: 'gear_hook_2', c: v(5.5, 13.6, -21.4), r: 1.25, w: -0.75, window: 0.85, landing: v(4.65, CK.y0, -24.6), via: v(3.9, 17.4, -23.6), wait: v(4.85, 11.2, -23.25) } as GearHookSpec,
   /** がれきが落ちる所（E の西の帯） */
   debris: { x0: 4.25, x1: CK.x0 - 0.05, z0: -25.0, z1: -19.0, y: CK.y0 },
   /** てっぺんの金具をねらえる所（E の西の帯の、この z より南） */
@@ -109,7 +109,7 @@ export const CHECKPOINTS: ReadonlyArray<{ id: CheckpointId; pos: THREE.Vector3; 
   { id: 'street', pos: v(0.6, 0, -21.4), area: { id: 'street', y: 0, x0: -3, x1: 6, z0: -34, z1: -19.6 } },
   { id: 'A', pos: v(3.2, COURSE_A.y, -31.0), area: COURSE_A },
   { id: 'B', pos: v(5.4, COURSE_B.y, -32.4), area: COURSE_B },
-  { id: 'C', pos: v(4.9, 7.4, -23.2), area: LEDGES[0] },
+  { id: 'C', pos: v(4.9, 7.4, -20.6), area: LEDGES[0] },
   { id: 'D', pos: v(4.9, 11.2, -22.8), area: LEDGES[1] },
   { id: 'E', pos: v(4.65, CK.y0, -24.6), area: LEDGE_E },
 ]

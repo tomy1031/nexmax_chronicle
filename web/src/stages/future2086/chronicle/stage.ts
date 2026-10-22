@@ -402,7 +402,7 @@ export class ChronicleFutureStage implements Stage {
     } else if (this.soraMode === 'spot') {
       // 近くに来たらこちらを向く
       const p = rt.player.position
-      if (p.distanceTo(s.root.position) < 4.5) this.walker.turnToward(s, p, dt, 3)
+      if (p.distanceTo(s.root.position) < 4.5 && this.soraDownTo === 0) this.walker.turnToward(s, p, dt, 3)
     } else if (this.soraMode === 'walk') {
       s.root.position.y += (groundY(rt.phys, s.root.position, s.root.position.y) - s.root.position.y) * Math.min(1, dt * 10)
     }
@@ -410,7 +410,8 @@ export class ChronicleFutureStage implements Stage {
     if (this.soraDown !== this.soraDownTo || this.soraDown > 0) {
       this.soraDown += (this.soraDownTo - this.soraDown) * Math.min(1, dt * (this.soraDownTo > this.soraDown ? 7 : 3))
       s.root.rotation.order = 'YXZ'
-      s.root.rotation.x = -1.05 * this.soraDown
+      s.root.rotation.x = -1.38 * this.soraDown
+      s.root.position.y = this.soraSpot.pos.y + 0.12 * this.soraDown
       speed = 0
     }
     s.update(dt, speed)
@@ -1390,7 +1391,7 @@ export class ChronicleFutureStage implements Stage {
     if (!this.alive) return
     await this.talk(rt, 'ch4_pass')
     this.setPhase('save_run', [{ pos: this.sora.root.position.clone().add(v(0, 2.0, 0)), label: 'ソラ' }])
-    await this.waitNear(rt, this.sora.root.position, 1.8, 2)
+    await this.waitNear(rt, this.sora.root.position, 2.4, 2)
     if (!this.alive) return
     this.lock(rt, true)
     // ソラの前（手とソラのあいだ）に立つ
@@ -1511,7 +1512,15 @@ export class ChronicleFutureStage implements Stage {
       onPassThrough: () => (passed = true),
     })
     this.setPhase('tower_ring', [{ pos: orumPt, label: '黒い輪' }])
-    await this.until(() => passed, () => (passed = true))
+    await this.until(
+      () => {
+        // 立ち止まったら、黒い輪のほうを向く（クローは向いている方へのびる）
+        const p = rt.player.position
+        if (rt.player.speed < 0.3 && rt.player.grounded) rt.player.turnToward(orumPt.x - p.x, orumPt.z - p.z, this.lastDt, 4)
+        return passed
+      },
+      () => (passed = true),
+    )
     rt.chrono.remove('chrono_orum')
     if (!this.alive) return
     this.lock(rt, true)

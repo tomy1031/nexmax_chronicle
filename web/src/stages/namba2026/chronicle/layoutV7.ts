@@ -60,8 +60,29 @@ export const ARMOR_SOURCES: Array<{ id: 'plate' | 'koji' | 'aframe'; pos: THREE.
   { id: 'aframe', pos: v(-6.75, 0, 6.35), yaw: 0.35 },
 ]
 
-/** 佐伯さんの測定の道具（石標 A の映りぐあいを確かめる三脚とタブレット・折りたたみ机） */
-export const MEASURE = { table: v(-6.55, 0, 7.75), tripod: v(-5.6, 0, 7.15) }
+/** 佐伯さんの測定の道具（石標 A の QR の読みこみを確かめる三脚とタブレット・折りたたみ机。机は建物ぎわへ寄せて、広場をあける） */
+export const MEASURE = { table: v(-4.5, 0, 10.0), tripod: v(-5.6, 0, 7.15) }
+
+/**
+ * NEXTMAKE の前の「水辺の広場」：南岸から水路へ張り出した板の広場（6 章のよろいの影獣と戦う場所）。
+ * 遊歩道（z 5〜11）と合わせて、たて 10m・よこ 26m ほど。ふちは見えない壁と低い柵（street.ts の buildGround に渡す）
+ */
+export const DECK = { x0: -19.5, x1: 6.5, z0: 0.9 }
+
+export type PillarKind = 'lamp' | 'steel' | 'sign'
+/**
+ * 影獣が突進でぶつかる柱（街灯・工事の鉄柱・看板の柱）。pos は足元の中心、r は柱の太さ（m）。
+ * 街灯の 3 本と吊り輪の門の柱はもとの町の物、鉄柱 2 本と看板の柱は広場に足す（riverDeck.ts）
+ */
+export const PILLARS: ReadonlyArray<{ id: string; kind: PillarKind; label: string; pos: THREE.Vector3; r: number }> = [
+  { id: 'lamp_w', kind: 'lamp', label: '街灯', pos: v(-14, 0, 5.95), r: 0.16 },
+  { id: 'lamp_c', kind: 'lamp', label: '街灯', pos: v(-2, 0, 5.95), r: 0.16 },
+  { id: 'lamp_e', kind: 'lamp', label: '街灯', pos: v(7, 0, 5.95), r: 0.16 },
+  { id: 'frame', kind: 'steel', label: '鉄の柱', pos: v(-21, 0, 6.2), r: 0.18 },
+  { id: 'steel_c', kind: 'steel', label: '工事の鉄柱', pos: v(-8.6, 0, 2.7), r: 0.2 },
+  { id: 'steel_w', kind: 'steel', label: '工事の鉄柱', pos: v(-16.4, 0, 2.6), r: 0.2 },
+  { id: 'sign_e', kind: 'sign', label: '看板の柱', pos: v(1.6, 0, 2.5), r: 0.14 },
+]
 
 /** ラボ：佐伯さんの端末（IDO 検索）と、社長の絵（構想ボードに貼った紙） */
 export const LAB = {

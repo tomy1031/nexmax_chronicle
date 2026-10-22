@@ -33,7 +33,8 @@ import { ArmorSources } from './armorPlates'
 import { MorningProjection } from './morningProjection'
 import { SkyCrack, ShadowMouths } from './defenseFx'
 import type { AlleyTime } from './alleyTime'
-import { ALLEY_V7, ARMOR_SOURCES, KANBAN, LOT, SHRINE, type KanbanId } from './layoutV7'
+import { ALLEY_V7, ARMOR_SOURCES, DECK, KANBAN, LOT, SHRINE, type KanbanId } from './layoutV7'
+import { buildRiverDeck } from './riverDeck'
 
 export type ChronicleNambaScene = {
   root: THREE.Group
@@ -102,8 +103,9 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
   const c: NCtx = { b: new Batch(), bf: new Batch(), m, col: new ColliderList(), lights: [], root, updaters: [], rng: mulberry32(2026), q, signs, signMat, signGlow, inner, innerMat, innerGlow }
   progress(0.4, 'なんばの通りを組み立て中…')
   await yieldFrame()
-  buildGround(c)
-  buildRailings(c)
+  buildGround(c, DECK)
+  buildRailings(c, DECK)
+  buildRiverDeck(c)
   buildBridge(c)
   buildSouthSide(c)
   buildNorthSide(c)

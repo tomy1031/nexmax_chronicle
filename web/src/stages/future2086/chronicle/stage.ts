@@ -905,7 +905,7 @@ export class ChronicleFutureStage implements Stage {
     qr.setRecord(rec)
     qr.setNear(1)
     this.setPhase(phase, [{ pos: qr.qrPos.clone().add(v(0, 0.8, 0)), label: 'QR' }])
-    await this.waitF(qr.stand, 1.8, 'QR を読む')
+    await this.waitF(qr.stand, 1.4, 'QR を読む')
     if (!this.alive) return
     this.lock(rt, true)
     this.teleport(rt, qr.stand, faceYaw(qr.stand, qr.qrPos))

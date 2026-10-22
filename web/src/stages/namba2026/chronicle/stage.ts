@@ -1,8 +1,10 @@
-// 2026年 大阪・なんば（物語 v7 の 6・9 章）の本編ステージ。docs/物語_v7_時を裂く爪.md・docs/ステージ設計_v1.md §3〜4。
-// 6 章（v7_nextmake で着く）：立てたばかりのかんばんの光から出る → 社長と佐伯さん → かんばんの光がもう一度ゆがんで、よろいの影獣
-//   （看板・鉄板を体にはりつける。佐伯さんをつかむ → J で腕を引きはがす。よろい 3 枚を J ではがし、K でたおす）→ 社長「それだけは、ほんまや」
-//   → ラボで社長の絵（すみに「NEXTMAKE 001」）→ 佐伯さんが石の音 → IDO 検索「時計」→ 町のかんばん 3 本（時計屋・駅の大時計・古い路地）
-//   → 路地のかんばんで「青い刃のかけら」（「時計」と「青い」で 1 本）→ かんばんに手をあてる → 1726年へ（ido_kanban）
+// 2026年 大阪・なんば（物語 v7.1 の 6・9 章）の本編ステージ。docs/物語_v7_時を裂く爪.md・docs/ステージ設計_v1.md §3〜4。
+// 6 章（v7_nextmake で着く）：社長と佐伯さんが、立てたばかりのかんばんの QR の読みこみをためしている → かんばんの光から出る
+//   → 光がもう一度ゆがんで、よろいの影獣（看板・鉄板を体にはりつける）。NEXTMAKE の前の「水辺の広場」で戦う（beastFight.ts）：
+//   突進をよけて柱にぶつける → ゆるんだ板を J ではがす → J で投げ返す → よろいがなくなったら K でパンチ（おこると、とびかかり・佐伯さんをつかむ）
+//   → 「君、だれや？」→ 名前とうしろの板で、まだ作っていないロボットに会う社長の大さわぎ → ラボで社長の絵（すみに「NEXTMAKE 001」）
+//   → 佐伯さんが石の音 → IDO 検索「時計」→ 町のかんばん 3 本（時計屋・駅の大時計・古い路地）
+//   → 路地のかんばんで「青い刃のかけら」（「時計」と「青い」で 1 本）→ F で QR を読む（目から光・石がコチコチ・絵が本物の景色に）→ 1726年へ（ido_kanban）
 // 9 章（v7_alley で着く。夕方）：社長「また来たんか？」→ 来年ビルを建てる土地 → 路地のおくのほこら・おふじさん・佐伯さん
 //   → 夜：空のひび・ほこら防衛（2 波。屋根の影は J、箱にとびかかる影は K）→ 社長の「江戸の朝」の映し出し → 小さな影がにげる
 //   → 大きな影（暗がりへかくれる → F で照らしてもらう → J・K）→ 本物の朝 → 社長の決断・ダイヤル・ノート → 光の輪から 2086年へ
@@ -11,7 +13,7 @@ import * as THREE from 'three'
 import { ERA_PRESENT, eraTintHex } from '../../../core/eras'
 import { DialogueDB } from '../../../core/dialogue'
 import type { ActionFrame } from '../../../player/inputActions'
-import type { ClawTargetDef, WireEvent } from '../../../player/clawLogic'
+import type { WireEvent } from '../../../player/clawLogic'
 import type { Character } from '../../../world/characters'
 import type { Hint } from '../../../ui/hud'
 import type { EnemyHandle } from '../../../combat/combatSystem'
@@ -20,6 +22,7 @@ import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadConte
 import { SceneClock } from '../../../chronicle/kit/clock'
 import { Walker } from '../../../chronicle/kit/walker'
 import { Curtain } from '../../../chronicle/kit/curtain'
+import { KinematicBox } from '../../../chronicle/kit/kinematic'
 import { ARMORED_SHADE_STYLE } from '../../../chronicle/visuals/shade'
 import { createSaekiPlaceholder } from '../saeki'
 import { OfficeStaff } from '../officeStaff'
@@ -36,33 +39,23 @@ import { V7_ART, loadArtCanvas } from '../../../chronicle/art'
 import { IDO_RECORDS, SEARCH_WORDS, recordOfKanban } from './idoSearchLogic'
 import { createOfujiPlaceholder } from './ofuji'
 import { DefenseDirector } from './defenseDirector'
-import { softenEnemy } from './softEnemy'
 import { ARMOR_SOURCES, KANBAN, LAB, SHRINE, SPOTS_V7, V7_SPAWNS, type KanbanId } from './layoutV7'
 import { KANBAN_RECORD, STEP_SPAWN, STEP_TIME, combatStep, nambaV7Objective, nambaV7Step, stepMusic, type NambaV7Ctx, type NambaV7Step } from './storyNamba'
+import { BEAST_STATS, BeastFight, type BeastHandle } from './beastFight'
+import { BEAST_TUNING, beastBossName } from './beastLogic'
+import { KanbanQr } from './qrSign'
+import { NpcAntics } from './npcAntics'
+import { paintEdoMorning } from './recordArt'
+import { MobTalkV7 } from './mobTalkV7'
 
 const lines = new DialogueDB(linesData)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
-/** よろいの影獣（6 章）：体力・溜め・当たり。体力 0 で戻るときのやり直しの位置（獣の住みかから 4m はなれた、遊歩道の東） */
-const BEAST = { hp: 10, windup: 1.3, damage: 1, firstStun: 1.8, firstGrab: 5.0, retry: v(-1.2, 0, 9.0) }
+/** よろいの影獣（6 章）：はじめに動かない秒・体力 0 で戻るときのやり直しの位置（水辺の広場の東。看板の柱のそば） */
+const BEAST = { firstStun: 2.0, retry: v(2.6, 0, 4.4) }
 
 type Spot = { pos: THREE.Vector3; face: THREE.Vector3 }
 type Person = Character
-
-/** 6 章の影獣との戦い（佐伯さんをつかむ動き） */
-type Fight = {
-  h: EnemyHandle & { def: ClawTargetDef; knock: THREE.Vector3 }
-  plates: number
-  /** side：持ち上げる側（プレイヤーから見て右 1・左 -1） */
-  grab: { phase: 'approach' | 'hold'; t: number; side: number } | null
-  grabs: number
-  nextGrab: number
-  armDef: ClawTargetDef
-  /** つかんでいるあいだ、まちがえて狙わないように止めた近くの的（木箱など） */
-  muted: ClawTargetDef[]
-  /** やられる前の獣の体力（体力 0 で戻っても、獣の体力は満タンにしない） */
-  lastHp: number
-}
 
 /** 町のかんばんの記録を見ている */
 type Rec = { kanban: KanbanId; marker: IdoMarker; t: number; talked: boolean; id: string }
@@ -100,8 +93,20 @@ export class ChronicleNambaStage implements Stage {
   private busy = false
   // 6 章
   private arrival: { t: number; from: THREE.Vector3; to: THREE.Vector3 } | null = null
-  private fight: Fight | null = null
+  private fight: BeastFight | null = null
   private armorFx: ArmorPlates | null = null
+  /** 佐伯さんの手のタブレット（QR の読みこみをためしている） */
+  private tablet: THREE.Group | null = null
+  private qr: KanbanQr | null = null
+  private readonly antics = new NpcAntics()
+  private mob: MobTalkV7 | null = null
+  /** 戦いの間の小さな台詞（戦いを止めない） */
+  private readonly sayQ: Array<{ speaker: string; text: string }> = []
+  private sayT = 0
+  /** 町のかんばん C の QR を読んでいる（出発） */
+  private reading = false
+  /** 影獣と戦う間、NEXTMAKE の入口をふさぐ（中へにげこまない・獣も入らない） */
+  private doorBlock: KinematicBox | null = null
   private toLab = false
   private labGreeted = false
   private searchOpen = false
@@ -150,6 +155,15 @@ export class ChronicleNambaStage implements Stage {
     this.ns.root.add(this.armorFx.group)
     this.surgeC = new KanbanSurge(this.ns.idos.c)
     this.ns.root.add(this.surgeC.group)
+    // かんばんの大きな QR（4 本）と、路地のかんばんの前にうかぶ QR
+    const I = this.ns.idos
+    this.qr = new KanbanQr(
+      (['a', 'b', 'c', 'd'] as const).map((k, i) => ({ marker: I[k], yaw: KANBAN[k].yaw, seed: 11 + i * 7 })),
+      { marker: I.c, yaw: KANBAN.c.yaw, seed: 25 },
+    )
+    this.ns.root.add(this.qr.group)
+    this.ns.root.add(this.antics.group)
+    this.tablet = makeTablet()
     return { root: this.ns.root, colliders: this.ns.colliders, claw: { targets: this.ns.claw.targets, movables: this.ns.claw.movables }, lights: this.ns.lights }
   }
 
@@ -228,16 +242,19 @@ export class ChronicleNambaStage implements Stage {
     sh.setKey(this.step === 'shrine_talk')
     sh.setGlow(this.step === 'defense' ? 0.6 : 0.25)
     sh.setSun(this.step === 'return' ? 1 : 0)
+    // 町の人と話す（F）
+    this.mob = new MobTalkV7(this.ns.pedestrians, ui, rt.camera, this.staff, this.ns.root)
     if (this.step === 'arrive') {
-      // かんばんの光の中で待つ（時代カードのあとに出てくる）
+      // かんばんの光の中で待つ（時代カードのあと、社長と佐伯さんが QR をためしたら出てくる）。それまでは見えない
       const k = this.ns.idos.a
       this.arrival = { t: -1, from: k.base.clone().addScaledVector(k.front, 0.55).setY(0.25), to: v(-4.35, 0, 8.65) }
       rt.player.beginExternal()
       rt.player.moveExternal(this.arrival.from, 1 / 60)
-      this.ns.surge.setLevel(0.9)
-      rt.oreGlow(2)
+      rt.nexmax.root.visible = false
+      this.ns.surge.setLevel(0)
       rt.setControlLocked(true)
       this.busy = true
+      if (this.tablet) this.saeki.handAnchor.add(this.tablet)
     } else if (this.step === 'shrine_talk') {
       this.surgeC?.setLevel(0.6)
     } else if (this.step === 'defense') {
@@ -270,12 +287,34 @@ export class ChronicleNambaStage implements Stage {
   private async runArrival(rt: StageRuntime): Promise<void> {
     this.busy = true
     rt.setControlLocked(true)
-    // 光の中から出てくる
-    this.ns.surge.surge({ sec: 2.6 })
-    if (this.arrival) this.arrival.t = 0
-    await this.clock.until(() => this.arrival === null, 3)
+    const k = this.ns.idos.a
     const m = this.matsui
     const s = this.saeki
+    // 社長と佐伯さんが、立てたばかりのかんばんの前で、QR の読みこみをためしている
+    this.walker.face(s, k.plate)
+    this.walker.face(m, k.plate)
+    void rt.cinematic({ look: v(k.plate.x - 0.5, 1.0, k.plate.z + 0.9), from: v(-2.0, 1.75, 10.6), hold: Infinity, inSec: 0.4, fov: 50, arc: 0 })
+    const QT = lines.lines('qr_test')
+    await rt.dialogue(QT.slice(0, 1))
+    // タブレットから板へ光（読み取りの線が走る）
+    const tab = this.tabletPos()
+    for (let i = 0; i < 8; i++) {
+      k.setScan(tab, Math.min(1, (i + 1) / 3))
+      await this.clock.wait(0.08)
+    }
+    await rt.dialogue(QT.slice(1))
+    // QR を読むと……かんばんが光って、ネクマックスが出てくる
+    k.setScan(null, 0)
+    this.ns.surge.surge({ sec: 2.6 })
+    rt.oreGlow(2)
+    await this.clock.wait(0.5)
+    rt.nexmax.root.visible = true
+    if (this.arrival) this.arrival.t = 0
+    await this.clock.until(() => this.arrival === null, 3)
+    this.antics.emote(m, 'bangq', 2.4)
+    this.antics.play(m, 'leanBack')
+    this.antics.emote(s, 'bang', 2.0)
+    this.antics.play(s, 'shake')
     this.walker.face(m, rt.player.position)
     this.walker.face(s, rt.player.position)
     rt.player.turnToward(m.root.position.x - rt.player.position.x, m.root.position.z - rt.player.position.z, 1, 1)
@@ -287,18 +326,44 @@ export class ChronicleNambaStage implements Stage {
     void rt.cinematic({ look: v(center.x, 1.3, center.z), from: v(-1.6, 1.9, 10.4), hold: Infinity, inSec: 1.0, fov: 50, shake: 0.08 })
     this.ns.surge.surge({ dark: true, sec: 3.6 })
     rt.shake(0.25)
+    this.antics.emote(m, 'bang', 1.6)
+    this.antics.play(m, 'jump')
     const L = lines.lines('beast_emerge')
     await rt.dialogue(L.slice(0, 2))
     // 獣が出る（戦闘の欠け重。よろいの板は見えないまま付けておき、飛んでくる板の演出のあとで見せる）
     const plateObjs = createArmorPlateObjects()
     for (const p of plateObjs) p.visible = false
     const yaw = Math.atan2(-(rt.player.position.x - center.x), -(rt.player.position.z - center.z))
-    const h = rt.combat.spawn('brute', center, { tag: 'beast', style: ARMORED_SHADE_STYLE, hp: BEAST.hp, keepHpOnRespawn: true, scale: 1.35, leash: 9, hidden: true, yaw, plates: plateObjs, onPlate: (left) => this.onPlate(left) }) as Fight['h']
-    softenEnemy(h, { windup: BEAST.windup, damage: BEAST.damage })
+    const T = BEAST_TUNING
+    const h = rt.combat.spawn('brute', center, {
+      tag: 'beast',
+      style: ARMORED_SHADE_STYLE,
+      hp: T.hp,
+      stats: BEAST_STATS,
+      keepHpOnRespawn: true,
+      scale: T.scale,
+      leash: 80,
+      hidden: true,
+      yaw,
+      plates: plateObjs,
+      platesLocked: true,
+      plateThrow: true,
+      throwDamage: T.throwDamage,
+      aimCone: T.aimCone,
+      onPlate: (left) => {
+        this.fight?.onPlate(left)
+        rt.combat.showBoss(h, beastBossName(left))
+      },
+      onPlateLocked: () => this.fight?.onPlateLocked(),
+      onPlateHit: () => this.fight?.onPlateHit(),
+    }) as BeastHandle
     rt.combat.appear(h)
     h.brain.stun(6)
     this.setPromenadeCrowd(false)
+    // 佐伯さんのタブレットはしまって、二人は NEXTMAKE の入口へ下がる
+    this.tablet?.removeFromParent()
     void this.walker.walkTo(this.matsui, [SPOTS_V7.matsuiFight.pos], 2.4, center)
+    void this.walker.walkTo(this.saeki, [SPOTS_V7.saekiSafe.pos], 2.4, center)
     await rt.dialogue(L.slice(2))
     // まわりの看板・鉄板が飛んできて、よろいになる
     const fx = this.armorFx as ArmorPlates
@@ -317,118 +382,105 @@ export class ChronicleNambaStage implements Stage {
     fx.attach(null)
     for (const p of plateObjs) p.visible = true
     await rt.dialogue(lines.lines('beast_armor'))
-    // 戦いのカメラ：獣に向き、遊歩道の東から斜めに見る（ビルの壁にカメラがめりこまない側）
+    // 戦いのカメラ：プレイヤーのうしろから、獣の方を見る
     const pp = rt.player.position
-    rt.player.teleport(pp, Math.atan2(-(center.x - pp.x), -(center.z - pp.z)))
-    rt.camRig.yaw = 1.05
-    rt.camRig.pitch = 0.3
+    const start = v(-0.4, 0, 9.0)
+    rt.player.teleport(start, Math.atan2(-(center.x - start.x), -(center.z - start.z)))
+    rt.camRig.yaw = Math.atan2(pp.x - center.x, pp.z - center.z)
+    rt.camRig.pitch = 0.32
     rt.endCinematic()
     // 戦い
     rt.combat.enabled = true
     rt.combat.setCheckpoint(BEAST.retry, Math.atan2(-(center.x - BEAST.retry.x), -(center.z - BEAST.retry.z)))
-    rt.combat.showBoss(h, 'よろいの影獣')
-    const armDef: ClawTargetDef = { id: 'v7_beast_arm', type: 'enemy_pull', label: '佐伯さんをつかんだ影の腕', point: new THREE.Vector3(), radius: 0.7, enabled: false, noLineOfSight: true, range: 12 }
-    rt.claw.targets.push(armDef)
-    this.fight = { h, plates: plateObjs.length, grab: null, grabs: 0, nextGrab: BEAST.firstGrab, armDef, muted: [], lastHp: BEAST.hp }
-    // はじめは少し動かない（獣のすぐそばから始まるので、はなれて向きを合わせる間）
-    h.brain.stun(BEAST.firstStun)
+    rt.combat.showBoss(h, beastBossName(plateObjs.length))
+    this.fight = new BeastFight(rt, h, plateObjs, this.ns.root, {
+      saeki: this.saeki,
+      walker: this.walker,
+      saekiSafe: SPOTS_V7.saekiSafe.pos,
+      say: (key) => this.sayLines(key),
+      onGrab: () => this.sayLines('beast_grab'),
+      onRelease: (byClaw) => this.sayLines(byClaw ? 'beast_released' : 'beast_dropped'),
+    })
+    this.fight.start(BEAST.firstStun)
+    this.doorBlock = new KinematicBox(rt.phys, v(1.3, 1.6, 0.15), v(-10, 1.6, 11.05))
     this.busy = false
     rt.setControlLocked(false)
-    void rt.dialogue(lines.lines('beast_hint'))
+    this.sayLines('beast_hint')
+  }
+
+  /** 戦いの間の小さな台詞（会話の窓は出さず、戦いも止めない）。たまりすぎたら古いのを捨てる */
+  private sayLines(key: string): void {
+    for (const l of lines.lines(key)) this.sayQ.push(l)
+    while (this.sayQ.length > 3) this.sayQ.shift()
+  }
+
+  private updateSay(dt: number, rt: StageRuntime): void {
+    if (this.sayT > 0) this.sayT -= dt
+    if (this.sayT > 0 || !this.sayQ.length || rt.talking) return
+    const l = this.sayQ.shift() as { speaker: string; text: string }
+    const sec = Math.min(4.2, 1.5 + [...l.text].length * 0.085)
+    rt.say(l.speaker, l.text, sec)
+    this.sayT = sec * 0.9
+  }
+
+  /** 佐伯さんのタブレットの位置（QR を読む光の始点） */
+  private tabletPos(): THREE.Vector3 {
+    if (this.tablet?.parent) {
+      this.ns.root.updateMatrixWorld(true)
+      return this.tablet.getWorldPosition(new THREE.Vector3())
+    }
+    return this.saeki.root.position.clone().setY(1.1)
+  }
+
+  /**
+   * ネクマックスの背中の、すりへった「NEXTMAKE」の板（背中の石の下）。主人公のモデルには無いので、
+   * 社長が板を読む場面だけ、ステージが小さな板を付けて、場面のおわりで外す（解放もここで）
+   */
+  private attachBackPlate(rt: StageRuntime): THREE.Mesh | null {
+    const root = rt.nexmax.root
+    const ore = root.getObjectByName('ore') as THREE.Mesh | undefined
+    if (!ore?.geometry) return null
+    ore.geometry.computeBoundingBox()
+    const c = (ore.geometry.boundingBox as THREE.Box3).getCenter(new THREE.Vector3())
+    root.updateMatrixWorld(true)
+    ore.localToWorld(c)
+    root.worldToLocal(c)
+    const cv = document.createElement('canvas')
+    cv.width = 256
+    cv.height = 112
+    const g = cv.getContext('2d') as CanvasRenderingContext2D
+    const gr = g.createLinearGradient(0, 0, 256, 112)
+    gr.addColorStop(0, '#b8c2cc')
+    gr.addColorStop(1, '#8a949e')
+    g.fillStyle = gr
+    g.fillRect(0, 0, 256, 112)
+    g.strokeStyle = '#5a6470'
+    g.lineWidth = 6
+    g.strokeRect(3, 3, 250, 106)
+    g.fillStyle = '#26303a'
+    g.font = '900 40px "Hiragino Sans","Noto Sans JP",sans-serif'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText('NEXTMAKE', 128, 44)
+    g.font = '700 26px "Hiragino Sans","Noto Sans JP",sans-serif'
+    g.fillText('0 \u2591 1', 128, 86)
+    // すりへった跡
+    for (let i = 0; i < 160; i++) {
+      g.fillStyle = `rgba(230,236,240,${(0.15 + Math.random() * 0.35).toFixed(2)})`
+      g.fillRect(Math.random() * 256, Math.random() * 112, 2 + Math.random() * 10, 1 + Math.random() * 2)
+    }
+    const tex = new THREE.CanvasTexture(cv)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.0875), new THREE.MeshStandardMaterial({ map: tex, metalness: 0.5, roughness: 0.45 }))
+    m.name = 'v7_back_plate'
+    m.position.set(c.x, c.y - 0.15, c.z + 0.035)
+    root.add(m)
+    return m
   }
 
   /** 遊歩道を歩く町の人（影獣が出たら、にげていなくなる・たおしたら戻る） */
   private setPromenadeCrowd(on: boolean): void {
     for (const c of this.ns.pedestrians.group.children) if (c.position.z > 5 && c.position.z < 10.5 && c.position.x < 10) c.visible = on
-  }
-
-  private onPlate(left: number): void {
-    const rt = this.rt
-    if (!rt || !this.fight) return
-    this.fight.plates = left
-    if (left > 0) {
-      const l = lines.lines('beast_plate')[0]
-      rt.say(l.speaker, `${l.text}（あと ${left} 枚）`, 2.6)
-    } else void rt.dialogue(lines.lines('beast_bare'))
-  }
-
-  /** 戦いのあいだ：佐伯さんをつかむ・はなす */
-  private updateFight(dt: number, rt: StageRuntime): void {
-    const F = this.fight
-    if (!F || !F.h.alive) return
-    const h = F.h
-    const s = this.saeki
-    if (!rt.combat.downed) F.lastHp = h.brain.hp
-    if (!F.grab) {
-      F.nextGrab -= dt
-      if (F.nextGrab <= 0 && F.grabs < 2 && !this.busy) {
-        F.grab = { phase: 'approach', t: 0, side: 1 }
-        this.walker.stop(s)
-      }
-      return
-    }
-    const g = F.grab
-    g.t += dt
-    if (h.brain.state !== 'stunned') h.brain.stun(0.4)
-    if (g.phase === 'approach') {
-      this.tmp.set(s.root.position.x - h.pos.x, 0, s.root.position.z - h.pos.z)
-      const d = this.tmp.length()
-      h.yaw = Math.atan2(-this.tmp.x, -this.tmp.z)
-      if (d > 1.5) h.pos.addScaledVector(this.tmp.normalize(), Math.min(d - 1.5, 3.4 * dt))
-      if (d <= 1.55 || g.t > 4) {
-        g.phase = 'hold'
-        g.t = 0
-        // プレイヤーから見て、佐伯さんのいる側に持ち上げる（獣の体のかげにかくれないように）
-        const px = rt.player.position.x - h.pos.x
-        const pz = rt.player.position.z - h.pos.z
-        // 横の向き (-pz, px) と佐伯さんの側をくらべる
-        g.side = -pz * (s.root.position.x - h.pos.x) + px * (s.root.position.z - h.pos.z) >= 0 ? 1 : -1
-        F.h.def.enabled = false
-        F.armDef.enabled = true
-        // 子どもでも腕をねらえるように：近くの木箱などの的を、はなすまで止める
-        F.muted = rt.claw.targets.filter((t) => t !== F.armDef && t.enabled && t.point.distanceTo(h.pos) < 9)
-        for (const t of F.muted) t.enabled = false
-        void rt.dialogue(lines.lines('beast_grab'))
-        rt.shake(0.2)
-      }
-      return
-    }
-    // つかんでいる：プレイヤーの方を向き、佐伯さんを横に持ち上げる
-    this.tmp.set(rt.player.position.x - h.pos.x, 0, rt.player.position.z - h.pos.z)
-    if (this.tmp.lengthSq() > 0.01) {
-      this.tmp.normalize()
-      let dy = Math.atan2(-this.tmp.x, -this.tmp.z) - h.yaw
-      while (dy > Math.PI) dy -= Math.PI * 2
-      while (dy < -Math.PI) dy += Math.PI * 2
-      h.yaw += dy * Math.min(1, dt * 5)
-    }
-    const fx = -Math.sin(h.yaw)
-    const fz = -Math.cos(h.yaw)
-    // 横（side = 1 で獣の右手）
-    const sx = -fz * g.side
-    const sz = fx * g.side
-    s.root.position.set(h.pos.x + sx * 1.55 + fx * 0.5, 0.55 + Math.sin(g.t * 9) * 0.04, h.pos.z + sz * 1.55 + fz * 0.5)
-    this.walker.face(s, h.pos)
-    F.armDef.point.set(h.pos.x + sx * 1.1 + fx * 0.4, 1.5, h.pos.z + sz * 1.1 + fz * 0.4)
-    if (g.t > 12) this.releaseSaeki(rt, false)
-  }
-
-  private releaseSaeki(rt: StageRuntime, byClaw: boolean): void {
-    const F = this.fight
-    if (!F || !F.grab) return
-    F.grab = null
-    F.grabs++
-    F.nextGrab = 16
-    F.armDef.enabled = false
-    F.h.def.enabled = true
-    for (const t of F.muted) t.enabled = true
-    F.muted = []
-    F.h.brain.stun(byClaw ? 2.4 : 0.8)
-    const s = this.saeki
-    s.root.position.y = 0
-    void this.walker.walkTo(s, [SPOTS_V7.saekiSafe.pos], 2.6, F.h.pos)
-    void rt.dialogue(lines.lines(byClaw ? 'beast_released' : 'beast_dropped'))
-    if (byClaw) rt.hud.flash('success')
   }
 
   private onDefeated(h: EnemyHandle): void {
@@ -438,28 +490,94 @@ export class ChronicleNambaStage implements Stage {
     else this.defense?.onDefeated(h)
   }
 
+  /** 影獣をたおした → 「君、だれや？」→ 名前とうしろの板で、まだ作っていないロボットに会った社長の大さわぎ → ラボへ */
   private async runBeastDown(rt: StageRuntime): Promise<void> {
     if (rt.story.get('v7_beast_down')) return
     this.busy = true
-    const F = this.fight
-    if (F) {
-      F.armDef.enabled = false
-      const i = rt.claw.targets.indexOf(F.armDef)
-      if (i >= 0) rt.claw.targets.splice(i, 1)
-      if (F.grab) this.releaseSaeki(rt, true)
-    }
+    this.fight?.finish()
+    this.fight?.dispose()
     this.fight = null
+    this.sayQ.length = 0
+    this.doorBlock?.remove()
+    this.doorBlock = null
+    rt.combat.dropPlates()
     this.setPromenadeCrowd(true)
     rt.combat.showBoss(null)
     await this.clock.wait(0.8)
     rt.setControlLocked(true)
     this.ns.surge.surge({ dark: true, sec: 1.8, strength: 0.5 })
-    this.saeki.root.position.y = 0
-    void this.walker.walkTo(this.matsui, [v(-5.3, 0, 9.4)], 1.8, rt.player.position)
-    void this.walker.walkTo(this.saeki, [v(-6.6, 0, 9.0)], 1.6, rt.player.position)
-    void rt.cinematic({ look: v(-4.6, 1.2, 8.4), from: v(-2.0, 1.7, 11.4), hold: Infinity, inSec: 1.2, fov: 48 })
-    await rt.dialogue(lines.lines('beast_down'))
-    this.walker.face(this.matsui, rt.player.position)
+    const m = this.matsui
+    const s = this.saeki
+    s.root.position.y = 0
+    // 二人がかけよってくる（ネクマックスの前に）
+    const p = rt.player.position.clone()
+    const toward = (dx: number, dz: number) => {
+      const q = v(p.x + dx, 0, p.z + dz)
+      q.x = Math.min(6, Math.max(-18, q.x))
+      q.z = Math.min(10.4, Math.max(1.4, q.z))
+      return q
+    }
+    // 二人は広い方（広場の側）から来る。カメラは二人のうしろから、ネクマックスの顔を見る（建物にめりこまない）
+    const sgn = p.z > 6 ? -1 : 1
+    const mAt = toward(1.3, 1.0 * sgn)
+    const sAt = toward(-1.3, 1.1 * sgn)
+    void this.walker.walkTo(m, [mAt], 2.6, p)
+    void this.walker.walkTo(s, [sAt], 2.4, p)
+    rt.player.teleport(p, Math.atan2(-(mAt.x - p.x), -(mAt.z - p.z)))
+    const camFrom = v(p.x + 0.3, 1.6, p.z + sgn * 4.3)
+    void rt.cinematic({ look: v((p.x + mAt.x + sAt.x) / 3, 1.15, (p.z + mAt.z + sAt.z) / 3), from: camFrom, hold: Infinity, inSec: 1.2, fov: 50 })
+    const D = lines.lines('beast_down')
+    await rt.dialogue(D.slice(0, 1))
+    await this.clock.until(() => this.walker.speedOf(m) === 0, 3)
+    this.walker.face(m, p)
+    this.walker.face(s, p)
+    await rt.dialogue(D.slice(1))
+    // 「ネクマックス!?」：とびあがる
+    const N = lines.lines('paradox_name')
+    this.antics.play(m, 'jump')
+    this.antics.emote(m, 'bangq', 2.2)
+    rt.shake(0.08)
+    await rt.dialogue(N.slice(0, 1))
+    this.antics.play(m, 'shake', 1.6)
+    this.antics.emote(m, 'sweat', 2.6)
+    await rt.dialogue(N.slice(1, 2))
+    this.antics.play(s, 'shy', 2.4)
+    this.antics.emote(s, 'note', 2.0)
+    await rt.dialogue(N.slice(2))
+    // うしろの板を見せる（ネクマックスがうしろを向く）
+    // うしろを向く（前 = 社長から遠ざかる向き）
+    const back = Math.atan2(-(p.x - mAt.x), -(p.z - mAt.z))
+    rt.player.teleport(p, back)
+    // 背中の板（すりへった「NEXTMAKE」の板。この場面だけ、背中の石の下に見せる）
+    const backPlate = this.attachBackPlate(rt)
+    // 社長の横から、ネクマックスの背中の板（社長の腕がかからないくらい横へ。背中ぜんたいが見える）
+    const tm = this.tmp.set(mAt.x - p.x, 0, mAt.z - p.z).normalize()
+    const plateAt = v(p.x, 0.6, p.z)
+    void rt.cinematic({ look: plateAt, from: v(p.x + tm.x * 1.7 - tm.z * 1.25 * sgn, 1.05, p.z + tm.z * 1.7 + tm.x * 1.25 * sgn), hold: Infinity, inSec: 0.9, fov: 40, arc: 0 })
+    await this.clock.wait(1.1)
+    const PL = lines.lines('paradox_plate')
+    this.antics.play(m, 'hop2')
+    this.antics.emote(m, 'bang', 1.8)
+    await rt.dialogue(PL.slice(0, 1))
+    rt.player.teleport(p, Math.atan2(-(mAt.x - p.x), -(mAt.z - p.z)))
+    // 社長のアップ：社長とネクマックスを結ぶ線の横から（ネクマックスの頭でふさがない）
+    const toP = this.tmp.set(p.x - mAt.x, 0, p.z - mAt.z).normalize()
+    const sideK = -sgn
+    void rt.cinematic({ look: v(mAt.x, 1.45, mAt.z), from: v(mAt.x + toP.x * 1.1 - toP.z * 1.7 * sideK, 1.6, mAt.z + toP.z * 1.1 + toP.x * 1.7 * sideK), hold: Infinity, inSec: 0.8, fov: 46 })
+    this.antics.play(m, 'leanBack', 1.2)
+    this.antics.emote(m, 'bangq', 2.4)
+    await rt.dialogue(PL.slice(1, 2))
+    this.antics.play(m, 'headHold', 3.2)
+    this.antics.emote(m, 'swirl', 3.2)
+    await rt.dialogue(PL.slice(2))
+    if (backPlate) {
+      backPlate.removeFromParent()
+      backPlate.geometry.dispose()
+      const bm = backPlate.material as THREE.MeshStandardMaterial
+      bm.map?.dispose()
+      bm.dispose()
+    }
+    void rt.cinematic({ look: v((p.x + mAt.x + sAt.x) / 3, 1.15, (p.z + mAt.z + sAt.z) / 3), from: camFrom, hold: Infinity, inSec: 1.0, fov: 50 })
     await rt.dialogue(lines.lines('tell_2086'))
     rt.endCinematic()
     rt.combat.enabled = false
@@ -469,8 +587,8 @@ export class ChronicleNambaStage implements Stage {
     this.toLab = true
     this.busy = false
     rt.setControlLocked(false)
-    // 社長はラボの構想ボードへ、佐伯さんは自分の作業台へ
-    const toLab = [v(-6.5, 0, 9.0), v(-9.9, 0, 10.2), v(-9.9, 0, 11.6), v(-9.7, 0, 15.8), v(-6.5, 0, 16.6), v(-6.5, 0, 18.0), v(-10.2, 0, 18.45), v(-13.4, 0, 18.3)]
+    // 社長はラボの構想ボードへ、佐伯さんは自分の作業台へ（入口の前を通って）
+    const toLab = [v(-10.0, 0, 9.4), v(-9.9, 0, 10.2), v(-9.9, 0, 11.6), v(-9.7, 0, 15.8), v(-6.5, 0, 16.6), v(-6.5, 0, 18.0), v(-10.2, 0, 18.45), v(-13.4, 0, 18.3)]
     void this.walker.walkTo(this.matsui, [...toLab, SPOTS_V7.matsuiSketch.pos], 1.9, LAB.sketch)
     void this.walker.walkTo(this.saeki, [...toLab.slice(0, 7), SPOTS_V7.saekiTerminal.pos], 1.8, SPOTS_V7.saekiTerminal.face)
   }
@@ -485,16 +603,37 @@ export class ChronicleNambaStage implements Stage {
     if (this.matsui.root.position.distanceTo(SPOTS_V7.matsuiSketch.pos) > 2.5) this.place(this.matsui, { pos: SPOTS_V7.matsuiSketch.pos, face: LAB.sketch })
     rt.player.turnToward(LAB.sketch.x - rt.player.position.x, LAB.sketch.z - rt.player.position.z, 1, 1)
     void rt.cinematic({ look: LAB.sketch.clone(), from: v(-16.6, 1.75, 20.0), hold: Infinity, inSec: 1.1, fov: 46, arc: 0 })
-    await rt.dialogue(lines.lines('sketch_show').slice(0, 1))
+    const SS = lines.lines('sketch_show')
+    await rt.dialogue(SS.slice(0, 1))
     const sk = this.sketch as SketchCloseup
     sk.show('社長の絵')
-    await rt.dialogue(lines.lines('sketch_show').slice(1))
+    await this.clock.wait(0.4)
+    // 「……って、本人の前で見せるの、めっちゃはずかしいな！」
+    this.antics.play(this.matsui, 'shy', 2.6)
+    this.antics.emote(this.matsui, 'sweat', 2.6)
+    await rt.dialogue(SS.slice(1, 2))
+    await rt.dialogue(SS.slice(2))
     sk.markCorner(true)
     sk.setCaption('すみに、小さく「NEXTMAKE 001」')
     await this.clock.wait(0.6)
     sk.zoomCorner(true)
     await rt.dialogue(lines.lines('sketch_corner'))
     sk.hide()
+    // 「未来の僕、ちゃんと君を作れたんやな。……いや、まだ作ってへんのか！」：頭をかかえる
+    const mp = this.matsui.root.position
+    this.walker.face(this.matsui, rt.player.position)
+    void rt.cinematic({ look: v(mp.x, 1.5, mp.z), from: v(mp.x + 2.1, 1.7, mp.z - 2.3), hold: Infinity, inSec: 0.9, fov: 48, arc: 0 })
+    const SP = lines.lines('sketch_paradox')
+    this.antics.emote(this.matsui, 'note', 1.8)
+    await rt.dialogue(SP.slice(0, 1))
+    this.antics.play(this.matsui, 'jump')
+    this.antics.emote(this.matsui, 'bangq', 1.2)
+    await this.clock.wait(0.5)
+    this.antics.play(this.matsui, 'headHold', 4.0)
+    this.antics.emote(this.matsui, 'swirl', 4.0)
+    await rt.dialogue(SP.slice(1, 2))
+    await rt.dialogue(SP.slice(2))
+    this.antics.stopBody(this.matsui)
     rt.endCinematic()
     rt.story.set('v7_sketch_seen', true)
     rt.save('v7_lab')
@@ -606,7 +745,7 @@ export class ChronicleNambaStage implements Stage {
     await rt.dialogue(L.slice(0, 1))
     this.closeRecord(rt)
     rt.setControlLocked(true)
-    const m = this.walker.walkTo(this.matsui, [v(16.6, 0, 10.6), SPOTS_V7.matsuiAlley.pos], 2.6, KANBAN.c.pos)
+    const m = this.walker.walkTo(this.matsui, [v(16.6, 0, 10.6), v(17.65, 0, 13.6), v(17.65, 0, 16.2), SPOTS_V7.matsuiAlley.pos], 2.6, KANBAN.c.pos)
     const s = this.walker.walkTo(this.saeki, [v(16.3, 0, 10.6), v(16.9, 0, 13.0), v(17.4, 0, 16.6), SPOTS_V7.saekiAlley.pos], 2.6, KANBAN.c.pos)
     void rt.cinematic({ look: v(16.3, 1.1, 15.8), from: v(17.5, 1.9, 12.0), hold: Infinity, inSec: 1.2, fov: 54 })
     await Promise.race([Promise.all([m, s]), this.clock.wait(6)])
@@ -626,37 +765,77 @@ export class ChronicleNambaStage implements Stage {
     rt.setControlLocked(false)
   }
 
-  /** 路地のかんばんに手をあてる → 石が鳴る → 1726年へ */
+  /** 路地のかんばんの QR を読む → 目から光・うかぶ QR・記録の絵が組み上がる → 石がコチ、コチ → 絵が本物の景色に → 1726年へ */
   private async runDepart(rt: StageRuntime): Promise<void> {
     this.busy = true
+    this.reading = true
     rt.setControlLocked(true)
     const c = this.ns.idos.c
+    const qr = this.qr as KanbanQr
     rt.player.turnToward(c.plate.x - rt.player.position.x, c.plate.z - rt.player.position.z, 1, 1)
-    void rt.cinematic({ look: v(c.plate.x, 1.0, c.plate.z), from: v(17.6, 1.7, 13.4), hold: Infinity, inSec: 1.0, fov: 50 })
+    void rt.cinematic({ look: v(c.plate.x, 1.1, c.plate.z), from: v(16.85, 1.75, 12.9), hold: Infinity, inSec: 1.0, fov: 50 })
     await rt.dialogue(lines.lines('depart_touch'))
-    // 石が記録に合わせて鳴る：かんばんの絵が本物の景色へ
-    this.surgeC?.setLevel(0.45)
-    c.setScan(this.eyePos(rt), 1)
-    for (let i = 0; i < 6; i++) {
-      rt.oreGlow(1 + i * 0.25)
-      await this.clock.wait(0.2)
+    // QR を読む：板の前に大きな QR がうかび、目から光
+    const hc = qr.holoCenter
+    void rt.cinematic({ look: hc.clone(), from: v(hc.x + 0.7, hc.y - 0.05, hc.z - 2.2), hold: Infinity, inSec: 0.8, fov: 44, arc: 0 })
+    qr.setHolo(1)
+    // うかぶ QR に目から光が当たって、読み取りの線が走る（記録のパネルは、そのあと）
+    for (let i = 0; i < 16; i++) {
+      c.setScan(this.eyePos(rt), Math.min(1, (i + 1) / 3))
+      await this.clock.wait(0.1)
     }
+    const rec = recordOfKanban('c')
+    const img = rec ? recordImage(rec.image) : null
+    if (img) this.panelFx.start(img)
+    if (rec) rt.hud.showIdo({ ...rec.panel, image: img ? this.panelFx.canvas : null })
+    await this.clock.wait(1.3)
+    // 背中の石が、記録に合わせて、コチ、コチ……
+    void rt.dialogue(lines.lines('depart_kochi'))
+    for (let i = 0; i < 8; i++) {
+      const k = (i + 1) / 8
+      rt.oreGlow(1.3 + k * 1.1)
+      qr.setResonance(k)
+      rt.hud.setIdoGlitch(k * 0.8)
+      this.surgeC?.setLevel(0.15 + k * 0.35)
+      rt.shake(0.05 + k * 0.08)
+      c.setScan(this.eyePos(rt), 1)
+      await this.clock.wait(0.24)
+      rt.oreGlow(1.0)
+      await this.clock.wait(0.24)
+    }
+    // かんばんの絵が、ゆらりと本物の景色に
+    this.panelFx.start(this.edoView())
+    rt.hud.setIdoGlitch(0.35)
+    this.surgeC?.setLevel(0.65)
+    void rt.cinematic({ look: v(c.plate.x, 1.1, c.plate.z), from: v(16.85, 1.75, 12.9), hold: Infinity, inSec: 0.9, fov: 52 })
+    await this.clock.wait(1.0)
     await rt.dialogue(lines.lines('depart_go'))
     this.surgeC?.setLevel(1)
     rt.oreGlow(2.4)
     rt.shake(0.25)
+    rt.hud.hideIdo()
     rt.rift.openAt(rt.player.position.clone().lerp(c.base, 0.4), eraTintHex(1726), 1.6, 2.2)
     await this.clock.wait(0.7)
     c.setScan(null, 0)
+    qr.setHolo(0)
+    qr.setResonance(0)
     rt.endCinematic(true)
     rt.setControlLocked(false)
     this.busy = false
+    this.reading = false
     const r = rt.travel({ to: '1726', cause: 'ido_kanban', spawn: 'v7_alley' })
     if (!r.ok) {
       rt.hud.toast(r.reason)
       rt.rift.close()
       this.surgeC?.setLevel(0)
     }
+  }
+
+  /** 本物の景色（300 年前の路地の朝）。1 回だけ描く */
+  private edoImg: HTMLCanvasElement | null = null
+  private edoView(): HTMLCanvasElement {
+    if (!this.edoImg) this.edoImg = paintEdoMorning(720, 300, 5)
+    return this.edoImg
   }
 
   // ================================================================ 9 章：社長との約束
@@ -673,7 +852,19 @@ export class ChronicleNambaStage implements Stage {
     await Promise.race([m, this.clock.wait(4)])
     this.surgeC?.setLevel(0)
     rt.player.turnToward(this.matsui.root.position.x - rt.player.position.x, this.matsui.root.position.z - rt.player.position.z, 1, 1)
-    await rt.dialogue(lines.lines('arrive9'))
+    const A9 = lines.lines('arrive9')
+    await rt.dialogue(A9.slice(0, 1))
+    // 「おお、帰れたんか！」でとびあがって、「……って、また来たんか？」で首をかしげる
+    this.antics.play(this.matsui, 'hop2')
+    this.antics.emote(this.matsui, 'note', 1.4)
+    this.antics.emote(this.saeki, 'bang', 1.4)
+    await this.clock.wait(0.3)
+    void this.clock.wait(1.3).then(() => {
+      this.antics.emote(this.matsui, 'q', 2.0)
+      this.antics.play(this.matsui, 'leanBack', 0.9)
+    })
+    await rt.dialogue(A9.slice(1, 2))
+    await rt.dialogue(A9.slice(2))
     const LP = lines.lines('land_plan')
     await rt.dialogue(LP.slice(0, -1))
     // 佐伯さん「ほこらへ、行ってみましょう」：二人が先に路地のおくへ。ネクマックスの背中ごしに見送る
@@ -789,13 +980,8 @@ export class ChronicleNambaStage implements Stage {
   }
 
   private onCombatRespawn(): void {
-    // 体力 0 で戻ったとき：影獣の体力は、やられる前のまま（シェルは満タンにもどす）。防衛戦はそのまま（ほこらの体力も）
-    const F = this.fight
-    if (F && F.h.alive) {
-      F.h.brain.hp = Math.min(F.h.brain.hp, F.lastHp)
-      // 戻ってすぐ襲われないように、少しのあいだ動かない
-      F.h.brain.stun(2.5)
-    }
+    // 体力 0 で戻ったとき：影獣の体力は、やられる前のまま（keepHpOnRespawn）。はがした板もそのまま。防衛戦はそのまま（ほこらの体力も）
+    this.fight?.onRespawn()
     this.defense?.onPlayerRespawn()
   }
 
@@ -928,7 +1114,7 @@ export class ChronicleNambaStage implements Stage {
         if (k === 'a') return null
         return this.searchOpen ? { kind: 'record', label: '記録を見る', kanban: k } : { kind: 'not_yet', label: '調べる', kanban: k }
       }
-      if (step === 'depart' && k === 'c') return { kind: 'depart', label: 'かんばんに手をあてる', kanban: k }
+      if (step === 'depart' && k === 'c') return { kind: 'depart', label: 'QR を読む', kanban: k }
       if (step === 'between' && k === 'c') return { kind: 'between', label: '調べる', kanban: k }
     }
     if (step === 'defense' && this.defense?.phase === 'big_dark') return { kind: 'aim', label: '社長に照らしてもらう' }
@@ -943,7 +1129,7 @@ export class ChronicleNambaStage implements Stage {
       return true
     }
     const a = this.action(rt)
-    if (!a) return false
+    if (!a) return this.mob !== null && !this.mobSuspended(rt) && this.mob.interact(rt)
     switch (a.kind) {
       case 'close_search':
         this.search?.close()
@@ -981,13 +1167,19 @@ export class ChronicleNambaStage implements Stage {
     if (this.rec) return this.rec.talked ? [{ key: 'F', label: 'とじる' }] : []
     const a = this.action(rt)
     if (a) return [{ key: 'F', label: a.label }]
-    if (this.fight?.grab?.phase === 'hold') return [{ key: 'J', label: '影の腕を引きはがす' }]
+    if (this.fight?.grabbing) return [{ key: 'J', label: '影の腕を引きはがす' }]
+    if (this.mob && !this.mobSuspended(rt)) return this.mob.hints(rt)
     return null
+  }
+
+  /** 町の人の吹き出し・会話を出さないとき（戦い・演出・記録を見ている・防衛戦の夜） */
+  private mobSuspended(rt: StageRuntime): boolean {
+    return this.busy || this.fight !== null || this.rec !== null || this.reading || this.step === 'defense' || !!this.search?.visible || rt.combat.inCombat
   }
 
   private ctx(): NambaV7Ctx {
     return {
-      fight: this.fight ? { plates: this.fight.plates, grabbed: this.fight.grab?.phase === 'hold' } : null,
+      fight: this.fight ? { plates: this.fight.plates, grabbed: this.fight.grabbing } : null,
       toLab: this.toLab,
       searchOpen: this.searchOpen,
       checked: [...this.checked].filter((id) => ['clock_shop', 'station_clock', 'old_alley'].includes(id)).length,
@@ -998,6 +1190,7 @@ export class ChronicleNambaStage implements Stage {
   }
 
   objective(_rt: StageRuntime): { title: string; sub: string } {
+    if (this.fight && this.step === 'arrive') return this.fight.objective()
     return nambaV7Objective(this.step, this.ctx())
   }
 
@@ -1013,8 +1206,7 @@ export class ChronicleNambaStage implements Stage {
     const head = (c: Person, label: string) => out.push({ pos: at(out.length, c.root.position, c.height + 0.3), label })
     switch (this.step) {
       case 'arrive':
-        if (this.fight?.grab?.phase === 'hold') head(this.saeki, '佐伯さん')
-        else if (this.fight) out.push({ pos: at(0, this.fight.h.pos, 3.4), label: 'よろいの影獣' })
+        if (this.fight) return this.fight.markers()
         break
       case 'sketch':
         if (this.toLab && rt.player.position.z < 17) head(this.matsui, 'マツイ社長')
@@ -1041,7 +1233,7 @@ export class ChronicleNambaStage implements Stage {
         }
         break
       case 'depart':
-        out.push({ pos: at(0, this.ns.idos.c.base, 1.75), label: '路地のかんばん', edge: true })
+        out.push({ pos: at(0, this.ns.idos.c.base, 1.75), label: '路地のかんばんの QR', edge: true })
         break
       case 'shrine_talk':
         if (this.toShrine) out.push({ pos: at(0, SHRINE.pos, 2.8), label: '時の神さまのほこら', edge: true })
@@ -1063,9 +1255,9 @@ export class ChronicleNambaStage implements Stage {
   }
 
   onClawEvent(e: WireEvent, rt: StageRuntime): void {
-    const F = this.fight
-    if (F && e.kind === 'connected' && 'target' in e && e.target === F.armDef && F.grab?.phase === 'hold') this.releaseSaeki(rt, true)
+    this.fight?.onClaw(e)
     this.defense?.onClaw(e)
+    void rt
   }
 
   // ================================================================ 毎フレーム
@@ -1092,8 +1284,12 @@ export class ChronicleNambaStage implements Stage {
         }
       }
     }
-    this.updateFight(dt, rt)
+    // 影獣の戦い（戦闘の更新のあと）・戦いの間の小さな台詞
+    this.fight?.update(dt)
+    this.updateSay(dt, rt)
     this.updateRecord(dt, rt)
+    if (this.reading) this.panelFx.update(dt)
+    this.mob?.update(dt, rt, this.step, this.mobSuspended(rt))
     this.defense?.update(dt, this.clock.time)
     this.staff?.update(dt)
     const p = rt.player.position
@@ -1119,16 +1315,20 @@ export class ChronicleNambaStage implements Stage {
     this.armorFx?.update(dt, t)
     this.surgeC?.update(dt, t, rt.camera)
     this.search?.update(dt)
+    this.qr?.update(dt, rt.camera)
+    this.mob?.render(dt)
     const p = rt.player.position
     for (const ch of [this.matsui, this.saeki, this.ofuji]) {
       if (!ch) continue
       const sp = this.walker.speedOf(ch)
       // 立ち止まっている人は、近くのネクマックスの方を向く（つかまっている佐伯さんはそのまま）
-      if (sp === 0 && !(ch === this.saeki && this.fight?.grab) && !(ch === this.ofuji && this.step === 'shrine_talk' && !this.busy)) {
+      if (sp === 0 && !(ch === this.saeki && this.fight?.grabbing) && !(ch === this.ofuji && this.step === 'shrine_talk' && !this.busy)) {
         if (Math.hypot(p.x - ch.root.position.x, p.z - ch.root.position.z) < 5) this.walker.turnToward(ch, p, dt, 3)
       }
       ch.update(dt, sp)
     }
+    // 大きな身ぶり（人の update のあと）
+    this.antics.update(dt)
   }
 
   // ================================================================ 開発用
@@ -1137,10 +1337,7 @@ export class ChronicleNambaStage implements Stage {
   devSkip(rt: StageRuntime): void {
     switch (this.step) {
       case 'arrive':
-        if (this.fight) {
-          if (this.fight.grab) this.releaseSaeki(rt, true)
-          rt.combat.kill(this.fight.h)
-        }
+        if (this.fight) rt.combat.kill(this.fight.h)
         break
       case 'sketch':
         if (!this.busy) {
@@ -1192,7 +1389,7 @@ export class ChronicleNambaStage implements Stage {
       step: this.step,
       busy: this.busy,
       spawn: this.spawnId,
-      fight: this.fight ? { hp: this.fight.h.brain.hp, plates: this.fight.plates, grab: this.fight.grab?.phase ?? null, grabs: this.fight.grabs } : null,
+      fight: this.fight ? this.fight.debug() : null,
       toLab: this.toLab,
       searchOpen: this.searchOpen,
       checked: [...this.checked],
@@ -1213,9 +1410,45 @@ export class ChronicleNambaStage implements Stage {
     this.sketch?.dispose()
     this.curtain?.dispose()
     this.armorFx?.dispose()
+    this.fight?.dispose()
+    this.fight = null
+    this.doorBlock = null
+    this.qr?.dispose()
+    this.antics.dispose()
+    this.mob?.dispose()
+    this.mob = null
+    if (this.tablet) {
+      this.tablet.removeFromParent()
+      disposeTree(this.tablet)
+    }
+    // 主人公の見た目はシェルの物：かくしたままにしない
+    if (this.rt) this.rt.nexmax.root.visible = true
     this.ns?.attachTime(null)
     this.rt = null
     const w = window as unknown as { __nambaDev?: unknown }
     if (w.__nambaDev) delete w.__nambaDev
   }
+}
+
+/** 佐伯さんの手のタブレット（QR の読みこみをためす）。黒い枠と光る画面 */
+function makeTablet(): THREE.Group {
+  const g = new THREE.Group()
+  g.name = 'saeki_tablet'
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.015), new THREE.MeshStandardMaterial({ color: '#1a1c22', roughness: 0.4, metalness: 0.3 }))
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.15), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 1.4, 1.9), toneMapped: false }))
+  screen.position.z = -0.009
+  screen.rotation.y = Math.PI
+  g.add(body, screen)
+  g.position.set(-0.06, 0.32, -0.12)
+  g.rotation.set(0.35, 0, 0)
+  return g
+}
+
+function disposeTree(o: THREE.Object3D): void {
+  o.traverse((x) => {
+    const m = x as THREE.Mesh
+    if (!m.isMesh) return
+    m.geometry.dispose()
+    ;(m.material as THREE.Material).dispose()
+  })
 }

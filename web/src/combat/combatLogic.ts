@@ -380,6 +380,20 @@ export class EnemyBrain {
     return 'hurt'
   }
 
+  /** 投げた物（はがしたよろいの板など）が当たった：装甲・盾に関係なく通り、しばらく動けない */
+  hurtThrough(damage: number, stunSec: number): 'blocked' | 'hurt' | 'killed' {
+    if (this.state === 'dead') return 'blocked'
+    this.hp -= damage
+    if (this.hp <= 0) {
+      this.hp = 0
+      this.state = 'dead'
+      this.t = 0
+      return 'killed'
+    }
+    this.setHold('stunned', stunSec)
+    return 'hurt'
+  }
+
   /** クローで引き寄せられた・飛び込まれた：しばらく動けない */
   stun(sec: number): void {
     if (this.state === 'dead') return
@@ -435,7 +449,8 @@ export class EnemyBrain {
         }
         return { ...out, move: i.leashed ? 'none' : 'home' }
       case 'chase':
-        if (i.passive || i.dist > s.lose || !i.leashed) {
+        // 住みかから離れすぎたら帰る。ただし、プレイヤーがすぐそば（とどく所）にいるときは帰らずに戦う
+        if (i.passive || i.dist > s.lose || (!i.leashed && i.dist > s.reach)) {
           this.state = 'idle'
           this.t = 0
           return { ...out, move: 'home' }

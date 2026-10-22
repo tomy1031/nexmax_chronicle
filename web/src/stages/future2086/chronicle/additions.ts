@@ -15,6 +15,8 @@ import type { TimeOfDay } from '../fmaterials'
 import { buildFutureScene, type FutureScene, type FutureSceneMods } from '../scene'
 import { buildUnits, type Units } from '../units'
 import { buildClockTower, type ClockTowerParts } from './clockTower'
+import { buildTowerCourse, type TowerCourseParts } from './towerCourse'
+import { buildQrStand, type QrStandParts } from './qrStand'
 import { buildUnderground, type UndergroundParts } from './underground'
 import { buildNextmakeSite, type NextmakeSite } from './nextmakeSite'
 import { buildBench, buildKeychainStall, type BenchParts, type KeychainStall } from './plazaProps'
@@ -34,6 +36,10 @@ export const CHRONICLE_SCENE_MODS: FutureSceneMods = {
 export type ChronicleAdditions = {
   root: THREE.Group
   tower: ClockTowerParts
+  /** 4 章の時計台のぼりのコース（大歯車・大きな針・回る歯車の金具・予告・がれき） */
+  course: TowerCourseParts
+  /** ソラの展示の台（かんばんの QR） */
+  qr: QrStandParts
   underground: UndergroundParts
   site: NextmakeSite
   stall: KeychainStall
@@ -43,7 +49,7 @@ export type ChronicleAdditions = {
   stallUnit: Units
   /** 出し入れする当たり判定（跡地の 2 つの姿・裏側の足場・歯車の歯） */
   colliders: SwitchColliders
-  /** 足したつかめる対象（時計台の金具。fs.claw.targets にも入れてある） */
+  /** 足したつかめる対象（時計台の金具・回る歯車の金具。fs.claw.targets にも入れてある） */
   clawTargets: ClawTargetDef[]
   spots: typeof CHRONICLE_SPOTS
   /** ステージの begin で 1 回（rt.phys） */
@@ -67,6 +73,9 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
 
   const tower = buildClockTower(c, root)
   for (const h of tower.hooks) fs.claw.targets.push(h)
+  const course = buildTowerCourse(c, root)
+  for (const h of course.gearHooks) fs.claw.targets.push(h.def)
+  const qr = buildQrStand(root, fs.colliders)
   const underground = buildUnderground(c, root)
   const stall = buildKeychainStall(c, root)
   const bench = buildBench(c)
@@ -76,12 +85,14 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
   const stallUnit = buildUnits(root, [
     { id: 'unit_keychain', serial: 18, pos: new THREE.Vector3(KEY_STALL.x + 0.15, 0.38, KEY_STALL.z + 0.2), yaw: Math.PI / 2 - 0.15, pose: 'wave', nightPose: 'wave' },
   ])
-  const clawTargets: ClawTargetDef[] = [...tower.hooks]
+  const clawTargets: ClawTargetDef[] = [...tower.hooks, ...course.gearHooks.map((h) => h.def)]
 
   let night = false
   return {
     root,
     tower,
+    course,
+    qr,
     underground,
     site,
     stall,
@@ -93,17 +104,20 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
     spots: CHRONICLE_SPOTS,
     attachPhysics(phys: Physics) {
       colliders.attach(phys)
+      course.attachPhysics(phys)
       site.setVariant(site.variant)
     },
     setTimeOfDay(mode: TimeOfDay) {
       night = mode === 'night'
       if (holoNight) holoNight.visible = night
       tower.setNight(night)
+      course.setNight(night)
       stallUnit.setNight(night)
     },
     update(dt: number, t: number) {
       for (const u of c.updaters) u(dt, t)
       tower.update(dt)
+      qr.update(dt)
       underground.update(dt)
       site.update(dt)
       stall.update(dt)
@@ -112,6 +126,7 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
     },
     dispose() {
       colliders.detach()
+      course.dispose()
       stallUnit.dispose()
     },
   }

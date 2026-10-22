@@ -110,3 +110,14 @@ describe('v7 の時空移動（石の力だけで渡る）', () => {
     expect(travelRule('2026', { to: '2086', cause: 'return' }, flags('drawing_confirmed')).ok).toBe(true)
   })
 })
+
+describe('大きな章（とびらを出す区切り）', () => {
+  it('12 の小さな章を、はじめに・5 つの章・おわりにへ、順番どおりにまとめる', async () => {
+    const { BIG_CHAPTER, bigChapterLabel, sceneTitle } = await import('../src/chronicle/progress')
+    const list = Array.from({ length: 14 }, (_, i) => BIG_CHAPTER[i as keyof typeof BIG_CHAPTER])
+    expect(list).toEqual([0, 1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 4, 5, 6])
+    expect(bigChapterLabel(1)).toBe('第 1 章')
+    expect(bigChapterLabel(0)).toBe('はじめに')
+    expect(sceneTitle(2)).toBe('空のひび')
+  })
+})

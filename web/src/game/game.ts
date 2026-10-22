@@ -19,7 +19,7 @@ import { TARGET_CATEGORY, isChronoTarget, type ClawTargetType } from '../player/
 import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
 import { CombatSystem } from '../combat/combatSystem'
 import { ChronoSystem } from '../chronicle/chrono'
-import { CHAPTER_ERA, chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
+import { BIG_CHAPTER, CHAPTER_ERA, chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
 import { ChapterCard } from '../chronicle/chapterCard'
 import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
@@ -36,7 +36,7 @@ import { TravelFx } from './travelFx'
 import { RiftFx } from './riftFx'
 import { applyEnvironment, type AppliedEnvironment } from './env'
 import { disposeObject3D } from './dispose'
-import { DialogueQueue, lineDuration, type DialogueLine } from './dialogueQueue'
+import { DialogueQueue, type DialogueLine } from './dialogueQueue'
 import { createStage, DEFAULT_STAGE, STAGE_INFO } from './registry'
 import { CineDirector, autoFramePosition, type CineShot } from './cinematic'
 import { CineMarkerFx } from './cineMarker'
@@ -86,6 +86,8 @@ const ZERO_AXIS = Object.freeze({ x: 0, y: 0 })
 
 /** 開始直後に出す操作案内（秒） */
 const START_HINT_TIME = 14
+/** 会話の 1 行をウィンドウに出しておく最長の秒（実時間。ふつうは次の行・会話の終わりで消える） */
+const DIALOGUE_HOLD_SEC = 600
 
 /** 読み込んでいるステージと、そのステージ用に作った物理・プレイヤー・クロー */
 type Active = {
@@ -156,7 +158,7 @@ export class Game {
   private readonly cineBars: HTMLDivElement
   /** 物語 v7 の章のとびら。chapterShown はもう出した章（起動時の章は出さない） */
   private readonly chapterCard: ChapterCard
-  private chapterShown = -1
+  private chapterShown: Chapter = 0
   private chapterIdle = 0
   private readonly cineAuto = new THREE.Vector3()
   private readonly cineDir = new THREE.Vector3()
@@ -435,7 +437,7 @@ export class Game {
     const claw = new ClawSystem(phys, player, world.claw.targets, world.claw.movables)
     this.scene.add(claw.beam.group)
     // 戦闘（ステージが rt.combat.enabled にして敵を出す）と、物語の進み具合からの装備
-    const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n) })
+    const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n), camera: this.camera })
     this.scene.add(combat.group)
     // 時空裂きのNMクロー（物語 v7。持つまでは「すりぬける」だけ）
     const chrono = new ChronoSystem({ claw, toast: (t, s) => this.hud.toast(t, s), shake: (n) => this.cine.addShake(n) })
@@ -632,8 +634,7 @@ export class Game {
         const c = (n ?? chapterOf((k) => this.story.get(k))) as Chapter
         // 番号を指定しないときは、その章の時代にいるときだけ出す（前の時代の終わりで章が進んだとき）
         if (c <= this.chapterShown || (n === undefined && CHAPTER_ERA[c] !== a.stage.key)) return Promise.resolve()
-        this.chapterShown = c
-        return this.chapterCard.show(c)
+        return this.openChapter(c, false)
       },
       get playTime() {
         return g.playTime
@@ -654,6 +655,25 @@ export class Game {
     return v
   }
 
+  /**
+   * 章が進んだ：大きな章が変わればとびら（終わるまで待つ）、同じ大きな章の中なら場面の題を小さく出すだけ（すぐ返る）。
+   * instant：とびらを、はじめから全部おおった形で出す（画面を見せる前に）
+   */
+  private openChapter(c: Chapter, instant: boolean): Promise<void> {
+    const prev = this.chapterShown
+    this.chapterShown = c
+    if (BIG_CHAPTER[c] !== BIG_CHAPTER[prev]) return this.chapterCard.show(BIG_CHAPTER[c], 5.2, instant)
+    this.chapterCard.caption(c)
+    return Promise.resolve()
+  }
+
+  /** 着いた時代で出す章（まだ出していない章で、その章の時代に着いたとき）。無ければ null */
+  private chapterDueHere(a: Active): Chapter | null {
+    const f = (n: string) => this.story.get(n)
+    const c = chapterOf(f)
+    return v7Started(f) && c > this.chapterShown && CHAPTER_ERA[c] === a.stage.key ? c : null
+  }
+
   private showEraCard(key: StageKey, sub: string): void {
     const info = STAGE_INFO[key]
     const t = eraTint(stageEra(key))
@@ -672,13 +692,18 @@ export class Game {
     })
   }
 
+  /**
+   * 会話の 1 行：次の行へ進むか会話が終わるまで出したまま（ウィンドウは実時間で消えるが、会話はゲームの時間で進むので、
+   * フレームが遅い端末で会話の途中にウィンドウが先に消えないように）
+   */
   private showLine(l: DialogueLine): void {
-    this.hud.say(l.speaker, l.text, lineDuration(l.text) + 1.6)
+    this.hud.say(l.speaker, l.text, DIALOGUE_HOLD_SEC)
   }
 
   private endDialogue(): void {
     const t = this.talk
     this.talk = null
+    if (t) this.hud.clearDialog()
     t?.resolve()
   }
 
@@ -740,6 +765,8 @@ export class Game {
     const t = claw.selectedTarget
     return !t || t.type === 'enemy_pull' || t.type === 'enemy_zip'
   }
+  /** 時代を移って着いたときの章のとびらを出している（閉じたら場面を始める） */
+  private arrivalCard = false
   /** 前のフレームで照準を R でロックしていたか（ロック中は止まっていれば対象の方を向く） */
   private lastLocked = false
 
@@ -753,19 +780,27 @@ export class Game {
     // 時空移動
     for (const e of this.travel.tick(dt)) {
       if (e.kind === 'cover') void this.swap(e.request)
-      else if (e.kind === 'revealed') this.showEraCard(e.request.to, this.active?.stage.subtitle ?? '')
-      else if (e.kind === 'done') {
+      else if (e.kind === 'revealed') {
+        // 物語 v7：大きな章が変わるときは、画面を見せる前に（まだ光でおおわれているうちに）とびらで隠し、
+        // とびらが閉じてから時代の札と場面を始める（フィールドが先に見えないように）
         const a = this.active
-        if (a) {
-          // 物語 v7：章が進んでいたら、着いた所で章のとびらを出してから場面を始める
-          const f = (n: string) => this.story.get(n)
-          const c = chapterOf(f)
-          if (v7Started(f) && c > this.chapterShown && CHAPTER_ERA[c] === a.stage.key) {
-            this.chapterShown = c
-            void this.chapterCard.show(c).then(() => {
-              if (this.active === a && !a.dead) a.stage.revealed?.(a.rt)
-            })
-          } else a.stage.revealed?.(a.rt)
+        const c = a ? this.chapterDueHere(a) : null
+        if (a && c !== null && BIG_CHAPTER[c] !== BIG_CHAPTER[this.chapterShown]) {
+          this.arrivalCard = true
+          void this.openChapter(c, true).then(() => {
+            this.arrivalCard = false
+            if (this.active !== a || a.dead) return
+            this.showEraCard(e.request.to, a.stage.subtitle ?? '')
+            a.stage.revealed?.(a.rt)
+          })
+        } else this.showEraCard(e.request.to, this.active?.stage.subtitle ?? '')
+      } else if (e.kind === 'done') {
+        const a = this.active
+        if (a && !this.arrivalCard) {
+          // 同じ大きな章の中で、着いた所で場面が変わる：場面の題を小さく出して始める
+          const c = this.chapterDueHere(a)
+          if (c !== null) void this.openChapter(c, false)
+          a.stage.revealed?.(a.rt)
         }
       }
     }
@@ -817,7 +852,7 @@ export class Game {
     a.combat.animate(ndt * a.combat.timeScale, uTime.value)
     a.chrono.update(ndt, this.camera)
     if (!frozen) this.tickDialogue(ndt, false)
-    this.chapterCard.update()
+    this.chapterCard.update(dt)
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
     this.nexmax.handAnchor.getWorldPosition(this.hand)
@@ -984,7 +1019,10 @@ export class Game {
       player.turnToward(sel.point.x - player.position.x, sel.point.z - player.position.z, 1, 99)
       hud.pulseArm('right')
     }
-    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && !chronoSel && clawArm(this.equipment) !== null, this.camera)
+    // はがして手に持ったよろいの板（物語 v7 の影獣）：J で投げる（そのときはクローを撃たない）
+    const plateInHand = combat.holdingPlate
+    if (!locked && plateInHand && frame.pressed.has('claw_fire') && combat.throwPlate()) hud.pulseArm('right')
+    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && !chronoSel && !plateInHand && clawArm(this.equipment) !== null, this.camera)
     const ms = combat.moveScale
     const move = locked ? ZERO_AXIS : ms < 1 ? { x: frame.move.x * ms, y: frame.move.y * ms } : frame.move
     player.update(dt, { move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed && !combat.downed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
@@ -1191,6 +1229,7 @@ export class Game {
     }
     const impactArm = this.impactInUse(claw)
     const fight: Hint[] = a.combat.enabled && a.combat.inCombat ? [{ key: 'K', label: '攻撃' }, { key: 'Shift', label: '回避' }] : []
+    if (a.combat.holdingPlate) return [{ key: 'J', label: '板を投げる' }, ...fight]
     if (impactArm) return [{ key: 'J', label: 'はじく' }, ...fight, { key: 'E', label: '右腕へ' }]
     const sel = claw.selectedTarget
     if (sel) {

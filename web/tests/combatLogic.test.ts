@@ -172,3 +172,39 @@ describe('子ども向けの敵の数値', () => {
     expect(ENEMY_STATS.brute.windup).toBeLessThan(1.6)
   })
 })
+
+describe('投げた板（よろいの影獣）', () => {
+  it('装甲があっても通り、しばらく動けなくなる', () => {
+    const b = new EnemyBrain('brute', 1)
+    b.setArmored(true)
+    const hp = b.hp
+    expect(b.hurt(1, 0.3, true)).toBe('blocked')
+    expect(b.hurtThrough(2, 2.4)).toBe('hurt')
+    expect(b.hp).toBe(hp - 2)
+    expect(b.state).toBe('stunned')
+    expect(b.armor).toBe(true)
+  })
+
+  it('体力が尽きれば倒れる', () => {
+    const b = new EnemyBrain('mite', 1)
+    expect(b.hurtThrough(99, 1)).toBe('killed')
+    expect(b.alive).toBe(false)
+  })
+})
+
+describe('住みかから離れた敵', () => {
+  it('プレイヤーがとどく所にいれば、帰らずに攻撃する。遠ければ帰る', () => {
+    const b = new EnemyBrain('mite', 1)
+    b.update(0.016, { dist: 5, leashed: true, passive: false })
+    expect(b.state).toBe('chase')
+    b.update(0.016, { dist: 1.2, leashed: false, passive: false })
+    expect(b.state).toBe('chase')
+    b.update(1.5, { dist: 1.2, leashed: false, passive: false })
+    b.update(0.016, { dist: 1.2, leashed: false, passive: false })
+    expect(b.state).toBe('windup')
+    const c = new EnemyBrain('mite', 2)
+    c.update(0.016, { dist: 5, leashed: true, passive: false })
+    c.update(0.016, { dist: 6, leashed: false, passive: false })
+    expect(c.state).toBe('idle')
+  })
+})

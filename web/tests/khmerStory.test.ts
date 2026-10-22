@@ -1,8 +1,10 @@
 // 11章「900年前のカンボジア」の進み方（stages/khmer1186/storyKhmer.ts）と台詞（lines_v7.json）のテスト。
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { COLLAPSE_PLAN, KHMER_STEPS, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep } from '../src/stages/khmer1186/storyKhmer'
-import { K, SPAWNS } from '../src/stages/khmer1186/layout'
+import { COLLAPSE_PLAN, KHMER_STEPS, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerMobPhase, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep } from '../src/stages/khmer1186/storyKhmer'
+import { K, SPAWNS, VILLAGERS } from '../src/stages/khmer1186/layout'
+import mobLines from '../src/stages/khmer1186/mob_lines_v7.json'
+import { hasTalk, talkLinesFor, type MobTable } from '../src/world/mobTalkLogic'
 
 const STAIRS_SEGS = K.STAIRS.segs
 import { V7_FLAGS } from '../src/chronicle/progress'
@@ -174,5 +176,51 @@ describe('台詞（lines_v7.json）', () => {
 
   it('トワの一人称は「おれ」（「ぼく」「わたし」を使わない）', () => {
     for (const list of Object.values(db)) for (const l of list) if (l.speaker === 'トワ') expect(l.text).not.toMatch(/ぼく|わたし/)
+  })
+})
+
+describe('村の人（mob_lines_v7.json・mobTalkKhmer.ts）', () => {
+  const table = mobLines as unknown as MobTable
+  const src = readFileSync(new URL('../src/stages/khmer1186/people.ts', import.meta.url), 'utf8')
+  const shown = [...(src.match(/SHOWN_VILLAGERS = \[([^\]]+)\]/)?.[1] ?? '').matchAll(/'([a-z0-9]+)'/g)].map((m) => m[1])
+  it('場面：着いてから鏡までは昼（鏡の間は mirrors）、夜は村の人がいない、夜明けのあとは dawn', () => {
+    expect(khmerMobPhase('arrive')).toBe('day')
+    expect(khmerMobPhase('meet')).toBe('day')
+    expect(khmerMobPhase('mirrors')).toBe('mirrors')
+    expect(khmerMobPhase('mirrors', true)).toBe('mirrors_ball')
+    expect(khmerMobPhase('night', true)).toBe('night')
+    for (const s of ['ura', 'after', 'return'] as const) expect(khmerMobPhase(s, true)).toBe('dawn')
+  })
+  it('見えている村の人は 10 人以上、みんな立ち位置があって、どの場面でも F で 1〜3 行の会話がある（夜はいない）', () => {
+    expect(shown.length).toBeGreaterThanOrEqual(10)
+    for (const id of shown) {
+      expect(VILLAGERS.some((v) => v.id === id), id).toBe(true)
+      expect(table.speakers[id], id).toBeDefined()
+      for (const ph of ['day', 'mirrors', 'day_ball', 'mirrors_ball', 'dawn']) {
+        expect(hasTalk(table, id, ph), `${id} ${ph}`).toBe(true)
+        const t = talkLinesFor(table, id, ph, 0)
+        expect(t.length, `${id} ${ph}`).toBeGreaterThanOrEqual(1)
+        expect(t.length, `${id} ${ph}`).toBeLessThanOrEqual(3)
+      }
+      expect(hasTalk(table, id, 'night'), id).toBe(false)
+    }
+  })
+  it('まりを返す前と後で、子どもの話がかわる（鏡の間も）', () => {
+    const before = talkLinesFor(table, 'kid1', 'mirrors', 0).map((l) => l.text).join('')
+    const after = talkLinesFor(table, 'kid1', 'mirrors_ball', 0).map((l) => l.text).join('')
+    expect(before).toContain('まり')
+    expect(after).toContain('ありがとう')
+    // ほかの人は、まりを返したあとも鏡の間の話をする
+    expect(talkLinesFor(table, 'mahout', 'mirrors_ball', 0)).toEqual(talkLinesFor(table, 'mahout', 'mirrors', 0))
+  })
+  it('吹き出しは 40 字まで・会話の 1 行は 44 字まで・物語の先の名前は出さない', () => {
+    for (const sp of Object.values(table.speakers)) {
+      for (const l of Object.values(sp.bubble).flatMap((x) => x ?? [])) expect([...l].length, l).toBeLessThanOrEqual(40)
+      for (const l of Object.values(sp.talk ?? {}).flatMap((x) => x ?? [])) {
+        expect([...l.text].length, l.text).toBeLessThanOrEqual(44)
+        expect([sp.name, 'ネクマックス']).toContain(l.speaker)
+        for (const w of ['オルム', 'トワ', '裏側', '900']) expect(l.text).not.toContain(w)
+      }
+    }
   })
 })

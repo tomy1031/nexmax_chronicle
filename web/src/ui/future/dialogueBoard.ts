@@ -1,7 +1,6 @@
 // 台詞ウィンドウの中身を決める純粋なロジック（DOM なし。tests/hudFutureDialogue.test.ts）。
 // ・いちばん新しい台詞を大きなウィンドウ（main）に出す
-// ・まだ表示時間が残っている 1 つ前の台詞は、ウィンドウの上に小さく残す（ghost、最大 GHOST_MAX 秒）
-//   → 源兵衛とおはるが同時に話しても、F で早送りしても、読み逃しにくい
+// ・まだ表示時間が残っている 1 つ前の台詞は、ウィンドウの上に小さく残せる（ghost、最大 ghostMax 秒。0 なら残さない）
 // ・同じ台詞がもう一度来たら、出し直さずに時間だけ延ばす
 
 export type BoardLine = {
@@ -33,7 +32,7 @@ export class DialogueBoard {
       m.until = Math.max(m.until, now + dur)
       return 'extended'
     }
-    if (m && m.until > now) {
+    if (m && m.until > now && this.ghostMax > 0) {
       this.ghost = { ...m, until: Math.min(m.until, now + this.ghostMax) }
     } else if (this.ghost && this.ghost.until <= now) {
       this.ghost = null

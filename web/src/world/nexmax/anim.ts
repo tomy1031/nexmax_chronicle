@@ -586,16 +586,17 @@ export function evalPunch(p: Params, c: Ctx, left = false): void {
 /** 当たった：体が後ろへ揺れる */
 export function evalHurt(p: Params, c: Ctx): void {
   clearParams(p)
-  const k = Math.exp(-c.pt * 5)
-  p.torsoPitch = -0.35 * k
-  p.bodyPitch = -0.15 * k
-  p.headPitch = -0.3 * k
-  p.rShX = 0.5
-  p.rShZ = 0.6 * k + 0.2
-  p.rEl = 0.8
-  p.lShX = 0.5
-  p.lShZ = 0.6 * k + 0.2
-  p.lEl = 0.8
+  // 大きくのけぞって、両うでがばんざいのように開く（当たったのが、はっきりわかるように）
+  const k = Math.exp(-c.pt * 3.2)
+  p.torsoPitch = -0.6 * k
+  p.bodyPitch = -0.28 * k
+  p.headPitch = -0.45 * k
+  p.rShX = 0.9 * k + 0.3
+  p.rShZ = 1.0 * k + 0.2
+  p.rEl = 0.6
+  p.lShX = 0.9 * k + 0.3
+  p.lShZ = 1.0 * k + 0.2
+  p.lEl = 0.6
   p.hipsY = -0.04
   p.rHipZ = 0.08
   p.lHipZ = 0.08

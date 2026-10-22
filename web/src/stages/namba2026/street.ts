@@ -10,7 +10,10 @@ const STONE_TINT = '#ece6dc'
 
 // ------------------------------------------------------------------ 地面・岸・水
 
-export function buildGround(c: NCtx): THREE.Mesh {
+/** 南岸から水路へ張り出した板の広場（物語 v7 の 6 章の戦いの場）。x0〜x1、水路の側の端 z0（岸は N.CANAL_S） */
+export type RiverDeckSpan = { x0: number; x1: number; z0: number }
+
+export function buildGround(c: NCtx, deck?: RiverDeckSpan): THREE.Mesh {
   // 遊歩道（南・北）。建物の下もふさいでおく
   boxAB(c, -140, 140, -0.3, 0, N.CANAL_S, 44, c.m.paving, { texM: 2.4, r: 0.01 })
   boxAB(c, -140, 140, -0.3, 0, -44, N.CANAL_N, c.m.paving, { texM: 2.4, r: 0.01 })
@@ -39,21 +42,28 @@ export function buildGround(c: NCtx): THREE.Mesh {
   const b0 = N.BRIDGE.x - N.BRIDGE.width / 2
   const b1 = N.BRIDGE.x + N.BRIDGE.width / 2
   for (const z of [N.CANAL_S + 0.12, N.CANAL_N - 0.12]) {
-    c.col.wall(N.X0, z, b0, z, 0, 1.2, 0.2)
+    if (deck && z > 0) {
+      // 張り出した広場のところは、広場のふちに沿って囲む
+      c.col.wall(N.X0, z, deck.x0, z, 0, 1.2, 0.2)
+      c.col.wall(deck.x0, z, deck.x0, deck.z0, 0, 1.2, 0.2)
+      c.col.wall(deck.x0, deck.z0, deck.x1, deck.z0, 0, 1.2, 0.2)
+      c.col.wall(deck.x1, deck.z0, deck.x1, z, 0, 1.2, 0.2)
+      c.col.wall(deck.x1, z, b0, z, 0, 1.2, 0.2)
+    } else c.col.wall(N.X0, z, b0, z, 0, 1.2, 0.2)
     c.col.wall(b1, z, N.X1, z, 0, 1.2, 0.2)
   }
   return water
 }
 
-/** 岸の柵：石の柱と鎖（プレイ範囲は細かく、遠くは柱だけ） */
-export function buildRailings(c: NCtx): void {
+/** 岸の柵：石の柱と鎖（プレイ範囲は細かく、遠くは柱だけ）。deck のところは柵を置かない（広場のふちに別の柵） */
+export function buildRailings(c: NCtx, deck?: RiverDeckSpan): void {
   const b0 = N.BRIDGE.x - N.BRIDGE.width / 2 - 0.3
   const b1 = N.BRIDGE.x + N.BRIDGE.width / 2 + 0.3
   for (const side of [1, -1]) {
     const z = side * (N.CANAL_S + 0.24)
     let prev: THREE.Vector3 | null = null
     for (let x = -70; x <= 70; x += 2.4) {
-      if (x > b0 && x < b1) {
+      if ((x > b0 && x < b1) || (deck && side > 0 && x > deck.x0 - 0.3 && x < deck.x1 + 0.3)) {
         prev = null
         continue
       }

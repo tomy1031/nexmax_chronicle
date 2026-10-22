@@ -11,7 +11,7 @@ import type { PlayerController } from '../player/controller'
 import type { ClawSystem } from '../player/clawSystem'
 import type { ClawTargetDef, WireEvent } from '../player/clawLogic'
 import type { Hud } from '../ui/hud'
-import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind, type EnemyStats } from './combatLogic'
+import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type DamageResult, type EnemyKind, type EnemyStats } from './combatLogic'
 
 /** やられて戻ったあと、敵が襲ってこない時間（秒） */
 const RESPAWN_GRACE = 2.2
@@ -129,6 +129,11 @@ type Enemy = EnemyHandle & {
 /** 手に持った・投げたよろいの板 */
 type HeldPlate = { obj: THREE.Object3D; damage: number }
 type ThrownPlate = HeldPlate & { vel: THREE.Vector3; t: number; dropT: number }
+
+/** 攻撃を受けたとき：のけぞる時間（秒）・横に飛ばされる最小の速さ（m/s）・はね上がる速さ（m/s） */
+const HURT_POSE_SEC = 0.55
+const HURT_MIN_KNOCK = 5
+const HURT_HOP = 4.2
 
 /** 投げた板の速さ（m/s）と、まわりの敵へ向きを寄せる角度（ラジアン） */
 const THROW_SPEED = 17
@@ -1150,29 +1155,48 @@ export class CombatSystem {
    * lethal = false なら最後の 1 は残す（台本の場面の中で倒れてやり直しにならないように）
    */
   hurtPlayer(damage: number, dir: THREE.Vector3, knock: number, lethal = true): void {
-    const pl = this.host.player
     if (this.dodgeState.invulnerable || this.health.invuln > 0) return
     const n = lethal ? damage : Math.min(damage, this.health.hp - 1)
+    let res: DamageResult = 'hit'
     if (n <= 0) {
-      // 残り 1：へらさず、当たった手応えと無敵時間だけ
+      // 残り 1：へらさず、当たった手応え（吹っ飛び）と無敵時間だけ
       this.health.invuln = COMBAT_TUNING.invulnSec
-      this.hurtT = 0.35
-      this.host.hud.flash('danger')
-      return
+    } else {
+      res = this.health.damage(n)
+      if (res === 'ignored') return
     }
-    const res = this.health.damage(n)
-    if (res === 'ignored') return
     this.combo.cancel()
-    this.hurtT = 0.35
-    if (!pl.isExternal) pl.burstMove(dir.x * knock, dir.z * knock, 0.18)
-    this.host.hud.flash('danger')
-    this.host.shake(0.35)
-    this.sparks.burst(this.tmp2.copy(pl.position).setY(pl.position.y + 0.7), '#ff4f6a', 10, 3)
+    this.knockPlayer(dir, knock)
     if (res === 'dead') {
       this.downT = 0
       this.host.claw.reset()
       this.host.hud.banner('やられた……', 'fail', 1.4)
     }
+  }
+
+  /**
+   * 当たった手応え：当てた物の方を向いてのけぞり、少しはね上がって、うしろへ飛ばされる（はっきり見えるように）。
+   * dir は当てた物からネクマックスへの向き、knock は横の速さ（小さくても、軽く吹っ飛ぶくらいは出す）
+   */
+  private knockPlayer(dir: THREE.Vector3, knock: number): void {
+    const pl = this.host.player
+    this.hurtT = HURT_POSE_SEC
+    const len = Math.hypot(dir.x, dir.z)
+    if (!pl.isExternal) {
+      if (len > 1e-3) {
+        const dx = dir.x / len
+        const dz = dir.z / len
+        const sp = Math.max(knock, HURT_MIN_KNOCK)
+        pl.facing = Math.atan2(dx, dz)
+        pl.burstMove(dx * sp, dz * sp, 0.26)
+      }
+      if (pl.grounded) pl.velocity.y = Math.max(pl.velocity.y, HURT_HOP)
+    }
+    this.hitstop = Math.max(this.hitstop, 0.06)
+    this.host.hud.flash('danger')
+    this.host.shake(0.4)
+    // 白い輪は出さない（のけぞる姿がかくれる）。赤い火花だけ
+    this.sparks.burst(this.tmp2.copy(pl.position).setY(pl.position.y + 0.75), '#ff4f6a', 16, 4)
   }
 
   private respawn(): void {

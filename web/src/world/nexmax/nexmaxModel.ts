@@ -673,6 +673,7 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
     let want = baseExpr
     if (character.autoExpression) {
       if (pose === 'fall' && t - slotStart.fall > 0.35) want = 'surprised'
+      if (pose === 'hurt') want = 'surprised'
     }
     // まばたき（表情の切り替えはまぶたを閉じた瞬間に）
     blinkIn -= dt

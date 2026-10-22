@@ -1,4 +1,5 @@
-// タイトル画面：「つづきから」「はじめから」と、ホーム画面への追加の案内・更新の知らせ。
+// タイトル画面：「つづきから」「はじめから」と、ホーム画面への追加の案内・新しい版への切り替え。
+// 新しい版が見つかったら、ボタンの代わりに進み具合を出し、ダウンロードが終わったら読み込み直す（前の版で遊び始めないように）。
 // 選んだら resolve して片付ける（3D のネクマックスの WebGL も手放す）。ゲームの読み込みは main.ts がその後に始める。
 // 操作：タップ／クリック、または ↑↓（W・S）で選んで Enter・Space・F。Esc で確認・案内を閉じる。
 import './title.css'
@@ -87,6 +88,8 @@ export class TitleScreen {
   private guideOpen = false
   private confirmOpen = false
   private lastFocus: HTMLElement | null = null
+  /** 新しい版を入れている（ボタンを出さない） */
+  private updating = false
 
   constructor(parent: HTMLElement, opts: TitleOptions) {
     this.opts = opts
@@ -112,11 +115,11 @@ export class TitleScreen {
           ${save ? `<button class="nt-btn primary" data-act="continue"><span class="nt-btn-label">つづきから</span>${saveMeta}</button>` : ''}
           <button class="nt-btn${save ? '' : ' primary'}" data-act="new"><span class="nt-btn-label">はじめから</span>${save ? '' : '<span class="nt-btn-meta"><span>2086年　ナンバタウン</span></span>'}</button>
         </nav>
+        <div class="nt-updating" role="status" hidden></div>
         <button class="nt-install" data-act="install" hidden>${INSTALL_ICON}<span>ホーム画面に追加</span></button>
       </main>
       <footer class="nt-foot">
         <span class="nt-ver">v${__APP_VERSION__}</span>
-        <div class="nt-update" role="status" hidden></div>
       </footer>
       <div class="nt-modal nt-confirm" role="dialog" aria-modal="true" aria-labelledby="nt-confirm-title" hidden>
         <div class="nt-sheet">
@@ -155,6 +158,8 @@ export class TitleScreen {
       this.renderInstallEntry()
       if (this.guideOpen) this.root.querySelector('.nt-guide .nt-sheet')!.innerHTML = installedHtml()
     }
+    // タイトルを出している間は、新しい版の準備ができたら、すぐ切り替える
+    opts.pwa.autoApply = true
     opts.pwa.onUpdate = (s) => this.renderUpdate(s)
     this.renderUpdate(opts.pwa.updateState)
   }
@@ -186,6 +191,7 @@ export class TitleScreen {
     this.opts.pwa.onInstallAvailability = null
     this.opts.pwa.onInstalled = null
     this.opts.pwa.onUpdate = null
+    this.opts.pwa.autoApply = false
     this.root.classList.add('out')
     await new Promise((r) => setTimeout(r, 380))
     this.nexmax?.dispose()
@@ -219,14 +225,13 @@ export class TitleScreen {
       case 'guide-close':
         this.closeGuide(true)
         break
-      case 'update':
-        this.opts.pwa.applyUpdate()
-        break
     }
   }
 
   private choose(c: TitleChoice): void {
-    if (!this.resolve) return
+    if (!this.resolve || this.updating) return
+    // 遊び始めたら、もう切り替えない（次に開いたときに切り替える）
+    this.opts.pwa.autoApply = false
     const r = this.resolve
     this.resolve = null
     r(c)
@@ -255,10 +260,6 @@ export class TitleScreen {
   private buttons(): HTMLElement[] {
     const scope = this.confirmOpen ? this.root.querySelector('.nt-confirm')! : this.guideOpen ? this.root.querySelector('.nt-guide')! : this.root.querySelector('.nt-side')!
     const list = [...scope.querySelectorAll<HTMLElement>('button')].filter((b) => !b.hidden && b.offsetParent !== null)
-    if (!this.confirmOpen && !this.guideOpen) {
-      const up = this.root.querySelector<HTMLElement>('.nt-update button')
-      if (up && up.offsetParent !== null) list.push(up)
-    }
     return list
   }
 
@@ -300,7 +301,7 @@ export class TitleScreen {
   }
 
   private openGuide(): void {
-    if (this.guideOpen || this.confirmOpen) return
+    if (this.guideOpen || this.confirmOpen || this.updating) return
     this.guideOpen = true
     this.lastFocus = document.activeElement as HTMLElement
     this.fillGuide()
@@ -320,23 +321,36 @@ export class TitleScreen {
 
   private renderInstallEntry(): void {
     const b = this.root.querySelector<HTMLElement>('.nt-install')!
-    b.hidden = !this.opts.offerInstall()
+    b.hidden = this.updating || !this.opts.offerInstall()
   }
 
+  /** 新しい版を入れている間は、ボタンの代わりに進み具合を出す（終わったら Pwa が読み込み直す） */
   private renderUpdate(s: UpdateState): void {
-    const box = this.root.querySelector<HTMLElement>('.nt-update')!
-    if (s.phase === 'idle') {
-      box.hidden = true
+    const busy = s.phase !== 'idle'
+    const was = this.updating
+    this.updating = busy
+    this.root.querySelector<HTMLElement>('.nt-menu')!.hidden = busy
+    const box = this.root.querySelector<HTMLElement>('.nt-updating')!
+    box.hidden = !busy
+    if (busy !== was) this.renderInstallEntry()
+    if (!busy) {
+      if (was) this.focusFirst()
       return
     }
-    box.hidden = false
-    if (s.phase === 'downloading') {
-      const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0
-      box.innerHTML = `<span>新しい版をダウンロード中　${formatBytes(s.done)} / ${formatBytes(s.total)}</span><i class="nt-update-bar"><b style="width:${pct}%"></b></i>`
-    } else {
-      const size = s.bytes > 0 ? `（${formatBytes(s.bytes)}）` : ''
-      box.innerHTML = `<span>新しい版の準備ができました${size}</span><button class="nt-link" data-act="update">更新する</button>`
+    if (this.confirmOpen) {
+      this.confirmOpen = false
+      this.root.querySelector<HTMLElement>('.nt-confirm')!.hidden = true
     }
+    let meta = 'じゅんびしています……'
+    let pct = 0
+    if (s.phase === 'downloading' && s.total > 0) {
+      pct = Math.min(100, Math.round((s.done / s.total) * 100))
+      meta = `${formatBytes(s.done)} / ${formatBytes(s.total)}`
+    } else if (s.phase === 'ready') {
+      pct = 100
+      meta = '読みこみなおしています……'
+    }
+    box.innerHTML = `<span class="nt-updating-title">ゲームを新しくしています</span><i class="nt-updating-bar"><b style="width:${pct}%"></b></i><span class="nt-updating-meta">${meta}</span>`
   }
 
   // ---------------------------------------------------------------- 大きさ

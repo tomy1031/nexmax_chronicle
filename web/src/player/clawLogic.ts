@@ -8,10 +8,14 @@
 import * as THREE from 'three'
 import { ClawEvent, ClawStateMachine } from '../core/clawStateMachine'
 
-export type ClawTargetType = 'pull_object' | 'pull_player' | 'swing_anchor' | 'hold_mechanism' | 'enemy_pull' | 'enemy_zip'
+/**
+ * chrono_*：物語 v7 の時空裂きのNMクロー（chronicle/chrono.ts）。ワイヤーは撃たず、J でその場に効く。
+ * chrono_freeze：動いている物を止める／chrono_seam：空中のゆらぎを裂いて裏側への切れ目をひらく／chrono_ura：裏側にしかない物（黒い手など）を裂く
+ */
+export type ClawTargetType = 'pull_object' | 'pull_player' | 'swing_anchor' | 'hold_mechanism' | 'enemy_pull' | 'enemy_zip' | 'chrono_freeze' | 'chrono_seam' | 'chrono_ura'
 
-/** 照準の見た目の分類（マニュアル §7：軽い物／固定支点／協力装置。敵は赤） */
-export type TargetCategory = 'light' | 'anchor' | 'mechanism' | 'enemy'
+/** 照準の見た目の分類（マニュアル §7：軽い物／固定支点／協力装置。敵は赤。時空裂きは青白い時計） */
+export type TargetCategory = 'light' | 'anchor' | 'mechanism' | 'enemy' | 'chrono'
 
 export const TARGET_CATEGORY: Record<ClawTargetType, TargetCategory> = {
   pull_object: 'light',
@@ -20,6 +24,14 @@ export const TARGET_CATEGORY: Record<ClawTargetType, TargetCategory> = {
   hold_mechanism: 'mechanism',
   enemy_pull: 'enemy',
   enemy_zip: 'enemy',
+  chrono_freeze: 'chrono',
+  chrono_seam: 'chrono',
+  chrono_ura: 'chrono',
+}
+
+/** 時空裂きの対象か（ワイヤーを撃たず、J でその場に効く） */
+export function isChronoTarget(t: ClawTargetType): boolean {
+  return t === 'chrono_freeze' || t === 'chrono_seam' || t === 'chrono_ura'
 }
 
 export type ClawTargetDef = {
@@ -38,6 +50,11 @@ export type ClawTargetDef = {
   noLineOfSight?: boolean
   /** 射程の上書き（m） */
   range?: number
+  /**
+   * 自動照準の優先度（スコアから引く）。0.3 で「少しまん中からはずれていても先に選ぶ」、1 で「見えていればほぼ必ず選ぶ」。
+   * ステージが、いま狙ってほしい物（次の歯車など）に付ける。R の切りかえの順にも効く
+   */
+  priority?: number
   /** pull_player：着地点（足元） */
   landing?: THREE.Vector3
   /** pull_player：途中で必ず通る点（手すりや屋根を越えるため） */
@@ -136,7 +153,7 @@ export function evaluateTarget(
   }
   const visible = inCone && inRange && facingOk && (def.noLineOfSight ? true : los(def, distance))
   const valid = inCone && inRange && facingOk && visible
-  const score = ell * tuning.centerWeight + (distance / range) * tuning.distanceWeight
+  const score = ell * tuning.centerWeight + (distance / range) * tuning.distanceWeight - (def.priority ?? 0)
   return { def, ndcX: v.x, ndcY: v.y, distance, inCone, inRange, facingOk, visible, valid, score }
 }
 

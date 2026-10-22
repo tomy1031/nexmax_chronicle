@@ -9,7 +9,7 @@ import { uTime } from '../../render/materials'
 import { mulberry32 } from '../../render/noise'
 import type { ClawTargetDef } from '../../player/clawLogic'
 import type { MovableInput } from '../../player/clawSystem'
-import type { ColliderList } from '../../world/colliders'
+import { ColliderList } from '../../world/colliders'
 import { F } from './layout'
 import { ROUNDED } from './textures2086'
 
@@ -329,7 +329,26 @@ void main() {
 }
 `
 
-function paintStreet(g: CanvasRenderingContext2D, w: number, h: number): void {
+/**
+ * 街頭ビジョンの中身（物語 v7：毎朝「今日は 2086年10月18日、お祭りの一日目です」）。
+ * 何も指定しなければ導入編のままの画面。loop が 2 以上なら、右上にネクマックスだけに見える青い印「◯度目の 10月18日」を重ねる。
+ */
+export type StreetNews = {
+  /** 大きな日付の行（例：'今日は 2086年10月18日'） */
+  date?: string
+  /** 2 行目（例：'お祭りの一日目です'） */
+  headline?: string
+  /** 3 行目（天気など） */
+  sub?: string
+  /** 下の流れる帯 */
+  ticker?: string
+  /** 何度目の同じ日か（2 以上で右上に青い印） */
+  loop?: number
+  /** 印の日付（既定 '10月18日'） */
+  loopDate?: string
+}
+
+function paintStreet(g: CanvasRenderingContext2D, w: number, h: number, n: StreetNews = {}): void {
   const gr = g.createLinearGradient(0, 0, w, h)
   gr.addColorStop(0, '#0a1f4a')
   gr.addColorStop(1, '#16367a')
@@ -339,23 +358,57 @@ function paintStreet(g: CanvasRenderingContext2D, w: number, h: number): void {
   g.textBaseline = 'middle'
   g.font = font(800, 40)
   g.fillText('NANBA TOWN NEWS', 34, 46)
-  g.fillStyle = '#ff5a6a'
-  g.font = font(800, 30)
-  g.fillText('LIVE', w - 120, 46)
+  const looping = (n.loop ?? 1) >= 2
+  if (!looping) {
+    g.fillStyle = '#ff5a6a'
+    g.font = font(800, 30)
+    g.fillText('LIVE', w - 120, 46)
+  }
+  const fit = (text: string, x: number, y: number, px: number, maxW: number) => {
+    let size = px
+    g.font = font(800, size)
+    while (g.measureText(text).width > maxW && size > 12) {
+      size *= 0.94
+      g.font = font(800, size)
+    }
+    g.fillText(text, x, y)
+  }
   g.fillStyle = '#fff6d8'
-  g.font = font(800, 74)
-  g.fillText('本日 2086年10月18日（日）', 34, 150)
+  fit(n.date ?? '本日 2086年10月18日（日）', 34, 150, 74, w - 68)
   g.fillStyle = '#ffffff'
-  g.font = font(800, 62)
-  g.fillText('時代博覧祭 開催！', 34, 248)
+  fit(n.headline ?? '時代博覧祭 開催！', 34, 248, 62, w - 68)
   g.fillStyle = '#9fe0ff'
-  g.font = font(800, 46)
-  g.fillText('天気：一日中晴れ　☀　最高 24℃', 34, 336)
+  fit(n.sub ?? '天気：一日中晴れ　☀　最高 24℃', 34, 336, 46, w - 68)
   g.fillStyle = 'rgba(255,255,255,0.12)'
   g.fillRect(0, h - 64, w, 64)
   g.fillStyle = '#e8f0ff'
-  g.font = font(800, 34)
-  g.fillText('ソラさんの IDO 展示「時を旅する大阪」きょうお披露目 ― 体験の列はブース西側へ', 34, h - 32)
+  fit(n.ticker ?? 'ソラさんの IDO 展示「時を旅する大阪」きょうお披露目 ― 体験の列はブース西側へ', 34, h - 32, 34, w - 68)
+  if (looping) {
+    // ネクマックスの石の青：画面の上に浮かぶ印（町の人には見えていない、という見せ方）
+    const text = `${n.loop}度目の ${n.loopDate ?? '10月18日'}`
+    g.font = font(800, 40)
+    const tw = g.measureText(text).width
+    const bw = tw + 64
+    const bx = w - bw - 26
+    const by = 14
+    g.save()
+    g.shadowColor = '#5fd8ff'
+    g.shadowBlur = 26
+    g.fillStyle = 'rgba(8, 40, 96, 0.92)'
+    g.beginPath()
+    g.roundRect(bx, by, bw, 64, 32)
+    g.fill()
+    g.lineWidth = 4
+    g.strokeStyle = '#8fe6ff'
+    g.stroke()
+    g.restore()
+    g.fillStyle = '#bff2ff'
+    g.beginPath()
+    g.arc(bx + 30, by + 32, 9, 0, Math.PI * 2)
+    g.fill()
+    g.fillStyle = '#ffffff'
+    g.fillText(text, bx + 48, by + 34)
+  }
 }
 
 function buildStreetScreen(root: THREE.Group, col: ColliderList, mats: Mats) {
@@ -370,7 +423,8 @@ function buildStreetScreen(root: THREE.Group, col: ColliderList, mats: Mats) {
   const house = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.1, 0.28), mats.navy)
   house.position.set(0, 3.3, -0.16)
   pole.castShadow = house.castShadow = true
-  const u = { map: { value: canvasTex(1024, 560, paintStreet) }, uTime, uPulse: { value: 0 } }
+  const tex = canvasTex(1024, 560, (cg, w, h) => paintStreet(cg, w, h))
+  const u = { map: { value: tex }, uTime, uPulse: { value: 0 } }
   const scr = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.86), new THREE.ShaderMaterial({ vertexShader: scanVert, fragmentShader: streetFrag, uniforms: u, fog: false }))
   scr.position.set(0, 3.3, 0)
   const edge = new THREE.Mesh(new THREE.BoxGeometry(3.66, 0.04, 0.05), mats.glowCyan)
@@ -382,6 +436,12 @@ function buildStreetScreen(root: THREE.Group, col: ColliderList, mats: Mats) {
     center: P.clone().add(v(0, 3.3, 0)),
     pulse() {
       u.uPulse.value = 1
+    },
+    /** 画面の文字を描き直す（物語 v7：日付・お祭りの何日目・何度目の 10月18日）。引数なしで導入編の画面に戻す */
+    setNews(n: StreetNews = {}) {
+      const cv = tex.image as HTMLCanvasElement
+      paintStreet(cv.getContext('2d') as CanvasRenderingContext2D, cv.width, cv.height, n)
+      tex.needsUpdate = true
     },
     update(dt: number) {
       u.uPulse.value = Math.max(0, u.uPulse.value - dt * 0.12)
@@ -874,10 +934,22 @@ type Mats = {
 
 export type IntroProps = ReturnType<typeof buildIntroProps>
 
-export function buildIntroProps(root: THREE.Group, col: ColliderList) {
+/**
+ * opts.v7（物語 v7 の本編）：導入編だけの小物（中継アンテナ・運営本部・非常警報・記録の石標）は町に置かない
+ * （形は作るが、町の外の入れ物と当たり判定に入れる）
+ */
+export function buildIntroProps(root: THREE.Group, col: ColliderList, opts: { v7?: boolean } = {}) {
   const group = new THREE.Group()
   group.name = 'intro_props'
   root.add(group)
+  // 置かない小物も root の下（見えない）に入れて、解放はシェルにまかせる
+  const away = new THREE.Group()
+  away.name = 'intro_props_unused'
+  away.visible = false
+  if (opts.v7) root.add(away)
+  const awayCol = new ColliderList()
+  const g2 = opts.v7 ? away : group
+  const c2 = opts.v7 ? awayCol : col
   const mats: Mats = {
     white: new THREE.MeshStandardMaterial({ color: '#f2f4f8', roughness: 0.35, metalness: 0.05 }),
     navy: new THREE.MeshStandardMaterial({ color: '#1b2752', roughness: 0.4, metalness: 0.3 }),
@@ -887,13 +959,13 @@ export function buildIntroProps(root: THREE.Group, col: ColliderList) {
     glowCyan: new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 2.6, 3.4), toneMapped: false }),
     glowWarm: new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.6, 1.8), toneMapped: false }),
   }
-  const antenna = buildAntenna(group, col, mats)
+  const antenna = buildAntenna(g2, c2, mats)
   const screen = buildBigScreen(group, col, mats)
   const street = buildStreetScreen(group, col, mats)
   const balloon = buildLampBalloon(group, col, mats)
-  const hq = buildHq(group, col, mats)
-  const alarm = buildAlarm(group, col, mats)
-  const stones = buildStones(group, col)
+  const hq = buildHq(g2, c2, mats)
+  const alarm = buildAlarm(g2, c2, mats)
+  const stones = buildStones(g2, c2)
   const confetti = buildConfetti(group)
   const interactables: IntroInteractable[] = [
     { id: 'antenna', pos: INTRO_LAYOUT.antenna.clone().add(v(0, 0, 0.9)), reach: 2.2 },

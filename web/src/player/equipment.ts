@@ -1,7 +1,7 @@
 // 腕パーツの装備状態（操作マニュアル v1.1 §1・§3・§8.5）と、異次元拠点を開けるかの判定（§5）。
 // 初期は右腕に「つかむNMClaw」1 個、左腕は装備なし。装備スロットは左右各 1 つ。純粋なロジック。
 
-export type ArmPart = 'grapple_claw' | 'impact_claw'
+export type ArmPart = 'grapple_claw' | 'impact_claw' | 'rift_claw'
 export type ArmSide = 'right' | 'left'
 
 export type Equipment = {
@@ -14,6 +14,7 @@ export type Equipment = {
 export const PART_NAMES: Record<ArmPart, string> = {
   grapple_claw: 'つかむNMClaw',
   impact_claw: 'はじくNMClaw',
+  rift_claw: '時空裂きのNMクロー',
 }
 
 export const ARM_NAMES: Record<ArmSide, string> = { right: '右腕', left: '左腕' }
@@ -43,18 +44,26 @@ export function selectedPart(eq: Equipment): ArmPart | null {
   return eq[eq.selected]
 }
 
-/** 物語の進み具合から装備を決める（左腕の はじくNMClaw は 1970年でミチが組み上げる。docs/中盤シナリオとワールド構成_v1.md §3.2） */
+/**
+ * 物語の進み具合から装備を決める（左腕の はじくNMClaw は 1970年でミチが組み上げる。docs/中盤シナリオとワールド構成_v1.md §3.2）。
+ * 物語 v7：10章でほこらの「時を裂く爪」を右腕の NMクローの先にはめると、時空裂きのNMクローになる（つかむ力はそのまま）
+ */
 export function equipFromFlags(eq: Equipment, f: (name: string) => boolean): void {
-  eq.right = 'grapple_claw'
+  eq.right = f('v7_rift_claw') ? 'rift_claw' : 'grapple_claw'
   eq.left = f('impact_claw_got') ? 'impact_claw' : null
   if (eq[eq.selected] === null) eq.selected = 'right'
 }
 
+/** ワイヤーを撃てる部品か（時空裂きのNMクローも、つかむ・引く・ぶら下がるはそのまま使える） */
+export function canGrapple(part: ArmPart | null): boolean {
+  return part === 'grapple_claw' || part === 'rift_claw'
+}
+
 /** つかむNMClaw を射出できる腕（無ければ null）。初期は右腕だけ。 */
 export function clawArm(eq: Equipment): ArmSide | null {
-  if (eq[eq.selected] === 'grapple_claw') return eq.selected
-  if (eq.right === 'grapple_claw') return 'right'
-  if (eq.left === 'grapple_claw') return 'left'
+  if (canGrapple(eq[eq.selected])) return eq.selected
+  if (canGrapple(eq.right)) return 'right'
+  if (canGrapple(eq.left)) return 'left'
   return null
 }
 

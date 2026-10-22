@@ -25,13 +25,36 @@ export type EdoScene = {
   update(dt: number, t: number): void
 }
 
+/** 組み立ての選び方（既定は導入編の町そのまま） */
+export type EdoSceneOptions = {
+  /**
+   * 物語 v7（7 章）の町：源兵衛の工房は stages/edo1726/chronicle が「中に入れる形」で建てるので、ここでは建てない。
+   * 工房と団子屋のあいだに路地をあける（団子屋の間口を詰める）
+   */
+  chronicle?: boolean
+  /** 遠景の家・木を置かない範囲（広場・路地のおく・朝日の通り道） */
+  keepOut?: ReadonlyArray<{ x0: number; x1: number; z0: number; z1: number }>
+  /** 町の静的な部品を足す（同じバッチに積むので、描画の回数が増えない）。near は影あり・far は遠景 */
+  extend?: (near: Ctx, far: Ctx, foliage: Foliage) => void
+}
+
+/** 7 章の町で、南の通りの店の並び（工房の西の端〜団子屋）。stages/edo1726/chronicle/layout.ts と合わせる */
+export const CHRONICLE_ROW = {
+  /** 源兵衛の工房（中に入れる）：x0〜x1、正面 z=STREET_Z1 */
+  workshop: { x0: -21, x1: -12.2 },
+  /** 路地：工房と団子屋のあいだ */
+  alley: { x0: -12.2, x1: -9.6 },
+  /** 団子屋（間口を詰めた） */
+  dango: { cx: -6.3, width: 6.6 },
+} as const
+
 const inRange = (v: number, a: number, b: number, soft = 0.4) => {
   const k1 = Math.min(1, Math.max(0, (v - a) / soft + 0.5))
   const k2 = Math.min(1, Math.max(0, (b - v) / soft + 0.5))
   return k1 * k2
 }
 
-export function buildEdoScene(m: MaterialLibrary, quality: QualitySettings): EdoScene {
+export function buildEdoScene(m: MaterialLibrary, quality: QualitySettings, opts: EdoSceneOptions = {}): EdoScene {
   const root = new THREE.Group()
   root.name = 'edo'
   const c: Ctx = {
@@ -53,12 +76,15 @@ export function buildEdoScene(m: MaterialLibrary, quality: QualitySettings): Edo
   buildGround(c)
   const water = buildWaterSurfaces(root)
   const gate = buildGate(c, root)
-  buildStreet(c, foliage)
+  const keep = opts.keepOut ?? []
+  const kept = (x: number, z: number) => keep.some((r) => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1)
+  buildStreet(c, foliage, opts.chronicle ?? false)
   buildNorthBank(c, foliage)
   buildPier(c)
-  buildUpstream(c, cf, root, foliage)
-  buildFar(c, cf, root, farFoliage)
+  buildUpstream(c, cf, root, foliage, kept)
+  buildFar(c, cf, root, farFoliage, kept)
   const claw = buildClawTargets(c, gate)
+  opts.extend?.(c, cf, foliage)
 
   root.add(c.b.build('static'))
   const far = c.bf.build('far')
@@ -182,8 +208,9 @@ function buildWaterSurfaces(root: THREE.Group): THREE.Mesh {
 
 // ------------------------------------------------------------------ 南の通り（仕掛け横丁）
 
-function buildStreet(c: Ctx, f: Foliage): void {
+function buildStreet(c: Ctx, f: Foliage, chronicle: boolean): void {
   const z = L.STREET_Z1
+  const R = CHRONICLE_ROW
   const shops: Array<[number, number, Parameters<typeof machiya>[2]]> = [
     [-62.25, 7.5, { width: 7.5, depth: 7, noren: 'redCrest', lanterns: 'red' }],
     [-54.75, 7.5, { width: 7.5, depth: 7, shop: 'closed', lanterns: 'cream' }],
@@ -191,11 +218,14 @@ function buildStreet(c: Ctx, f: Foliage): void {
     [-39.75, 7.5, { width: 7.5, depth: 7, noren: 'gearIndigo', lanterns: 'red', balcony: true }],
     [-32.25, 7.5, { width: 7.5, depth: 7, noren: 'whiteTea', shop: 'tea', lanterns: 'red', sign: { text: '茶屋' } }],
     [-24.75, 7.5, { width: 7.5, depth: 7, noren: 'waveIndigo', lanterns: 'mixed', sign: { text: '細工' }, vsign: '仕掛け' }],
-    [-7.0, 8, { width: 8, depth: 7, noren: 'redCrest', lanterns: 'red', sign: { text: '団子' }, balcony: true }],
+    chronicle
+      ? [R.dango.cx, R.dango.width, { width: R.dango.width, depth: 7, noren: 'redCrest', lanterns: 'red', sign: { text: '団子' }, balcony: true }]
+      : [-7.0, 8, { width: 8, depth: 7, noren: 'redCrest', lanterns: 'red', sign: { text: '団子' }, balcony: true }],
     [0.7, 7.4, { width: 7.4, depth: 7, noren: 'gearIndigo', lanterns: 'cream', h1: 3.2 }],
   ]
   for (const [cx, , o] of shops) machiya(c, { ox: cx, oz: z, rot: 0, y: 0 } as Frame, o)
-  genbeiWorkshop(c, { ox: -16, oz: z, rot: 0, y: 0 })
+  // 7 章の町では、源兵衛の工房は chronicle/workshop.ts が中に入れる形で建てる
+  if (!chronicle) genbeiWorkshop(c, { ox: -16, oz: z, rot: 0, y: 0 })
   gatehouse(c, { ox: 8.55, oz: L.BANK_S, rot: 0, y: 0 })
 
   // 水路沿いの柵
@@ -223,7 +253,7 @@ function buildStreet(c: Ctx, f: Foliage): void {
   const rng = c.rng
   for (let i = 0; i < 26; i++) {
     const x = range(rng, -58, 3)
-    if (x > -21.5 && x < -10.5) continue
+    if (x > -21.5 && x < (chronicle ? -9.2 : -10.5)) continue
     const zz = range(rng, z - 1.4, z - 0.6)
     const k = rng()
     if (k < 0.45) crate(c, x, 0, zz, range(rng, 0.45, 0.7), range(rng, -0.4, 0.4))
@@ -332,7 +362,7 @@ function buildPier(c: Ctx): void {
 
 // ------------------------------------------------------------------ 上流（導水路・屋根付き倉庫・上の町）
 
-function buildUpstream(c: Ctx, cf: Ctx, root: THREE.Group, f: Foliage): void {
+function buildUpstream(c: Ctx, cf: Ctx, root: THREE.Group, f: Foliage, kept: (x: number, z: number) => boolean): void {
   // 仕切り石垣の放水口（導水路→舟の水路へ落ちる遠くの滝）
   {
     const x = 33.5
@@ -362,7 +392,12 @@ function buildUpstream(c: Ctx, cf: Ctx, root: THREE.Group, f: Foliage): void {
   for (let i = 0; i < 16; i++) {
     const x = range(rng, 15, 62)
     const z = range(rng, 16, 38)
-    farHouse(cf, x, L.TERRACE_Y, z, range(rng, 5, 7.5), range(rng, 5, 6.5), range(rng, 3.4, 4.6), pick(rng, [0, Math.PI / 2]), rng)
+    const w = range(rng, 5, 7.5)
+    const d = range(rng, 5, 6.5)
+    const h = range(rng, 3.4, 4.6)
+    const rot = pick(rng, [0, Math.PI / 2])
+    if (kept(x, z)) continue
+    farHouse(cf, x, L.TERRACE_Y, z, w, d, h, rot, rng)
   }
   for (let i = 0; i < 4; i++) {
     const x = 47 + i * 4
@@ -386,7 +421,7 @@ function buildUpstream(c: Ctx, cf: Ctx, root: THREE.Group, f: Foliage): void {
 
 // ------------------------------------------------------------------ 遠景
 
-function buildFar(near: Ctx, c: Ctx, root: THREE.Group, f: Foliage): void {
+function buildFar(near: Ctx, c: Ctx, root: THREE.Group, f: Foliage, kept: (x: number, z: number) => boolean): void {
   const rng = mulberry32(99)
   // 手前の太鼓橋（通り↔北岸）
   archBridge(near, L.BRIDGE_NEAR_X, L.BANK_N, L.BANK_S, 0, 0, 1.7, 2.8, { lanterns: true })
@@ -445,13 +480,17 @@ function buildFar(near: Ctx, c: Ctx, root: THREE.Group, f: Foliage): void {
       if (rng() < 0.25) continue
       const x = gx + range(rng, -1.5, 1.5)
       const z = gz + range(rng, -1.5, 1.5)
+      if (kept(x, z)) continue
       farHouse(c, x, 0, z, range(rng, 5.5, 8), range(rng, 5, 7), range(rng, 3.4, 5.2), pick(rng, [0, Math.PI / 2]), rng)
     }
   }
   for (let gx = 12; gx <= 68; gx += 9) {
     for (let gz = 46; gz <= 112; gz += 10) {
       if (rng() < 0.25) continue
-      farHouse(c, gx + range(rng, -1.5, 1.5), 0, gz + range(rng, -1.5, 1.5), range(rng, 5.5, 8), range(rng, 5, 7), range(rng, 3.4, 5.2), pick(rng, [0, Math.PI / 2]), rng)
+      const x = gx + range(rng, -1.5, 1.5)
+      const z = gz + range(rng, -1.5, 1.5)
+      if (kept(x, z)) continue
+      farHouse(c, x, 0, z, range(rng, 5.5, 8), range(rng, 5, 7), range(rng, 3.4, 5.2), pick(rng, [0, Math.PI / 2]), rng)
       if (rng() < 0.15) f.cherry(gx + 4, 0, gz + 4, range(rng, 1.0, 1.4), 3000 + gx * 7 + gz, 0.35)
     }
   }

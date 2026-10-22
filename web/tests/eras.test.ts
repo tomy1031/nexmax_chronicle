@@ -17,12 +17,12 @@ import {
 } from "../src/core/eras";
 
 describe("eras", () => {
-  it("時代ID は 1726 / 1970 / 2026 / 2086、拠点は 0", () => {
+  it("時代ID は 1186 / 1726 / 1970 / 2026 / 2086、拠点は 0", () => {
     expect(ERA_EDO).toBe(1726);
     expect(ERA_PRESENT).toBe(2026);
     expect(ERA_FUTURE).toBe(2086);
     expect(ERA_HUB).toBe(0);
-    expect([...ERA_IDS].sort((a, b) => a - b)).toEqual([0, 1726, 1970, 2026, 2086]);
+    expect([...ERA_IDS].sort((a, b) => a - b)).toEqual([0, 1186, 1726, 1970, 2026, 2086]);
   });
 
   it("isEraId は定義済みの時代IDだけ true", () => {

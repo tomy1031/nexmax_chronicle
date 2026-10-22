@@ -11,6 +11,8 @@ export type BoxCollider = {
   rotZ?: number
   /** 見えない壁（水への落下防止・プレイ範囲）。プレイヤーは止めるが、視線・カメラ・置いた物は通す */
   invisible?: boolean
+  /** 手すり・低い柵など：プレイヤーは止めて見えもするが、カメラのレイは通す（カメラが手すりで寄りすぎないように） */
+  camPass?: boolean
 }
 
 export class ColliderList {
@@ -33,6 +35,15 @@ export class ColliderList {
   /** 上面の高さと XZ 範囲で床を登録（厚さ thick は下方向） */
   floor(x0: number, x1: number, z0: number, z1: number, top: number, thick = 1): void {
     this.box((x0 + x1) / 2, top - thick / 2, (z0 + z1) / 2, Math.abs(x1 - x0), thick, Math.abs(z1 - z0))
+  }
+
+  /** 手すり・柵（XZ の線分に沿って）。プレイヤーは止めるが、カメラは通す */
+  rail(ax: number, az: number, bx: number, bz: number, y0: number, y1: number, thick = 0.2): void {
+    const dx = bx - ax
+    const dz = bz - az
+    const len = Math.hypot(dx, dz)
+    this.box((ax + bx) / 2, (y0 + y1) / 2, (az + bz) / 2, len, y1 - y0, thick, -Math.atan2(dz, dx))
+    this.items[this.items.length - 1].camPass = true
   }
 
   /** 見えない壁（XZ の線分に沿って） */

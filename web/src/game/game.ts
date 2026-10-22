@@ -15,9 +15,13 @@ import { KEYBOARD_BINDINGS, TOUCH_BINDINGS, resolveActions, type ActionFrame, ty
 import { shouldUseTouch } from '../player/touchLogic'
 import { TouchControls } from '../player/touchInput'
 import { ClawSystem } from '../player/clawSystem'
-import { TARGET_CATEGORY, type ClawTargetType } from '../player/clawLogic'
+import { TARGET_CATEGORY, isChronoTarget, type ClawTargetType } from '../player/clawLogic'
 import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
 import { CombatSystem } from '../combat/combatSystem'
+import { ChronoSystem } from '../chronicle/chrono'
+import { CHAPTER_ERA, chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
+import { ChapterCard } from '../chronicle/chapterCard'
+import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
 import { loadCharacter, type Character, type CharacterName } from '../world/characters'
 import { setOutlineViewport } from '../world/nexmax/materials'
@@ -72,6 +76,9 @@ const FIRE_VERB: Record<ClawTargetType, string> = {
   hold_mechanism: '歯車をつかむ',
   enemy_pull: '引き寄せる',
   enemy_zip: '飛び込む',
+  chrono_freeze: '止める',
+  chrono_seam: '裂く',
+  chrono_ura: '裂く',
 }
 
 /** 入力なしの軸（毎フレーム作らない） */
@@ -90,6 +97,7 @@ type Active = {
   camRig: CameraRig
   claw: ClawSystem
   combat: CombatSystem
+  chrono: ChronoSystem
   rt: StageRuntime
   /** 解放済み（古いステージの非同期の続きが、新しいステージで会話・演出を始めないように） */
   dead?: boolean
@@ -97,10 +105,11 @@ type Active = {
 
 /** 時代ごとに登場する話者（HUD の顔アイコンを読み込み時に先に作る） */
 const SPEAKERS_BY_STAGE: Partial<Record<StageKey, string[]>> = {
+  '1186': ['チャンダ', 'チャンダのおばあさん', 'トワ'],
   '1726': ['源兵衛', 'おはる'],
   '1970': ['ミチ'],
-  '2026': ['マツイ社長', '佐伯'],
-  '2086': ['ソラ'],
+  '2026': ['マツイ社長', '佐伯', 'おふじ'],
+  '2086': ['ソラ', 'トワ'],
 }
 
 export class Game {
@@ -145,6 +154,10 @@ export class Game {
   /** 目標の目印（いまやることの相手の頭の上の「！」。ステージの objectiveMarkers） */
   private readonly objMarks: ObjectiveMarkerFx
   private readonly cineBars: HTMLDivElement
+  /** 物語 v7 の章のとびら。chapterShown はもう出した章（起動時の章は出さない） */
+  private readonly chapterCard: ChapterCard
+  private chapterShown = -1
+  private chapterIdle = 0
   private readonly cineAuto = new THREE.Vector3()
   private readonly cineDir = new THREE.Vector3()
   private adaptive!: AdaptiveResolution
@@ -159,6 +172,8 @@ export class Game {
   private oreGlow = 0
   private attackToastCooldown = 0
   private controlLocked = false
+  /** ステージが決めたネクマックスのポーズ（null なら動きから選ぶ） */
+  private poseOverride: 'sit' | null = null
   private readonly savedPlayer = new THREE.Vector3()
   private talk: { queue: DialogueQueue; resolve: () => void } | null = null
   private lastFrame: ActionFrame | null = null
@@ -207,6 +222,8 @@ export class Game {
     this.hud.setPortraitFps(this.q.portraitFps)
     this.hud.setGraphicsPrefs(this.prefs)
     this.hud.onGraphicsChange = (p) => this.setGraphics(p)
+    // 物語 v7 の人物の会話の顔（イラスト）
+    applyV7Portraits(this.hud)
     if (this.gp.nohud) ui.style.display = 'none'
     this.input = createInput(this.renderer.domElement)
     // つないだキーボードも使えるよう割り当てを足す
@@ -230,6 +247,13 @@ export class Game {
     this.cineMarker = new CineMarkerFx(ui)
     this.scene.add(this.cineMarker.group)
     this.objMarks = new ObjectiveMarkerFx(ui)
+    this.chapterCard = new ChapterCard(ui)
+    // 物語の途中で部品が変わる（物語 v7 の 10 章：時を裂く爪をはめて時空裂きのNMクローに）
+    this.story.changed.on((name) => {
+      if (name !== 'v7_rift_claw') return
+      equipFromFlags(this.equipment, (n) => this.story.get(n))
+      this.armKey = ''
+    })
     // 提灯などの点光源（近い候補へ毎回移す。ステージをまたいで使い回す）。使う数は画質で決める（見えない光は描画の計算に入らない）
     for (let i = 0; i < 6; i++) {
       const pl = new THREE.PointLight('#ffae5a', 0, 7, 2)
@@ -270,6 +294,8 @@ export class Game {
     }
     const unknown = this.story.applyFlagList(this.gp.flags)
     if (unknown.length) console.warn('[game] 未知のフラグ', unknown)
+    // 起動したときの章のとびらは出さない（つづきから・途中の章から始めたとき）
+    this.chapterShown = chapterOf((n) => this.story.get(n))
     this.loading.setEra(STAGE_INFO[stageKey].label)
     this.loading.setTheme(stageKey)
     this.hud.setEra(STAGE_INFO[stageKey].label)
@@ -411,6 +437,10 @@ export class Game {
     // 戦闘（ステージが rt.combat.enabled にして敵を出す）と、物語の進み具合からの装備
     const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n) })
     this.scene.add(combat.group)
+    // 時空裂きのNMクロー（物語 v7。持つまでは「すりぬける」だけ）
+    const chrono = new ChronoSystem({ claw, toast: (t, s) => this.hud.toast(t, s), shake: (n) => this.cine.addShake(n) })
+    chrono.unlocked = riftClawUnlocked((n) => this.story.get(n))
+    this.scene.add(chrono.group)
     equipFromFlags(this.equipment, (n) => this.story.get(n))
     this.armKey = ''
     // 状態をリセット
@@ -421,6 +451,7 @@ export class Game {
     this.landTimer = 0
     this.fireTimer = 0
     this.controlLocked = false
+    this.poseOverride = null
     this.departT = 0
     this.endCineUi()
     this.hud.setPaused(false)
@@ -435,7 +466,7 @@ export class Game {
     this.nexmax.setAim(null)
     this.camera.fov = 55
     this.camera.updateProjectionMatrix()
-    const a = { stage, world, env, phys, player, camRig, claw, combat } as Active
+    const a = { stage, world, env, phys, player, camRig, claw, combat, chrono } as Active
     a.rt = this.makeRuntime(a)
     claw.onEvent = (e) => {
       switch (e.kind) {
@@ -503,6 +534,7 @@ export class Game {
     a.dead = true
     this.cancelCinematic()
     this.endDialogue()
+    this.chapterCard.finish()
     this.hud.clearDialog()
     this.hud.hideIdo()
     this.hud.setGate(null)
@@ -515,6 +547,8 @@ export class Game {
     this.scene.remove(a.claw.beam.group)
     disposeObject3D(a.claw.beam.group)
     a.combat.dispose()
+    this.scene.remove(a.chrono.group)
+    a.chrono.dispose()
     a.env.dispose()
     a.phys.world.free()
     for (const pl of this.lanternLights) pl.intensity = 0
@@ -559,6 +593,7 @@ export class Game {
       camRig: a.camRig,
       claw: a.claw,
       combat: a.combat,
+      chrono: a.chrono,
       phys: a.phys,
       nexmax: this.nexmax,
       sky: a.env.sky,
@@ -583,12 +618,23 @@ export class Game {
       setControlLocked: (on) => {
         this.controlLocked = on
       },
+      setPlayerPose: (pose) => {
+        this.poseOverride = pose
+      },
       cinematic: (shot) => (a.dead ? Promise.resolve() : this.startCinematic(a, shot)),
       endCinematic: (fast) => this.cine.release(fast),
       get inCinematic() {
         return g.cine.active
       },
       shake: (amount) => this.cine.addShake(amount),
+      chapter: (n) => {
+        if (a.dead) return Promise.resolve()
+        const c = (n ?? chapterOf((k) => this.story.get(k))) as Chapter
+        // 番号を指定しないときは、その章の時代にいるときだけ出す（前の時代の終わりで章が進んだとき）
+        if (c <= this.chapterShown || (n === undefined && CHAPTER_ERA[c] !== a.stage.key)) return Promise.resolve()
+        this.chapterShown = c
+        return this.chapterCard.show(c)
+      },
       get playTime() {
         return g.playTime
       },
@@ -657,12 +703,18 @@ export class Game {
     dist.length = L.length
     for (let i = 0; i < L.length; i++) {
       order[i] = i
-      dist[i] = L[i].pos.distanceToSquared(center)
+      // 小さいほど先に枠をもらう。消えている明かり（強さ 0）と、届く範囲から遠く外れた明かりは割り当てない。
+      // 近さだけでなく強さも見る（明るい提灯が、暗い飾りの灯に枠を取られないように）。補助灯（priority）は先に
+      const s = L[i]
+      const d2 = s.pos.distanceToSquared(center)
+      const reach = s.dist > 0 ? s.dist + 6 : Infinity
+      if (s.intensity <= 0.01 || d2 > reach * reach) dist[i] = Infinity
+      else dist[i] = -(s.intensity / (1 + d2 * 0.04)) * (s.priority ? 8 : 1)
     }
     order.sort((x, y) => dist[x] - dist[y])
     for (let i = 0; i < this.lanternLights.length; i++) {
       const pl = this.lanternLights[i]
-      const s = i < order.length ? L[order[i]] : null
+      const s = i < order.length && dist[order[i]] !== Infinity ? L[order[i]] : null
       if (!s) {
         pl.intensity = 0
         continue
@@ -704,7 +756,17 @@ export class Game {
       else if (e.kind === 'revealed') this.showEraCard(e.request.to, this.active?.stage.subtitle ?? '')
       else if (e.kind === 'done') {
         const a = this.active
-        if (a) a.stage.revealed?.(a.rt)
+        if (a) {
+          // 物語 v7：章が進んでいたら、着いた所で章のとびらを出してから場面を始める
+          const f = (n: string) => this.story.get(n)
+          const c = chapterOf(f)
+          if (v7Started(f) && c > this.chapterShown && CHAPTER_ERA[c] === a.stage.key) {
+            this.chapterShown = c
+            void this.chapterCard.show(c).then(() => {
+              if (this.active === a && !a.dead) a.stage.revealed?.(a.rt)
+            })
+          } else a.stage.revealed?.(a.rt)
+        }
       }
     }
     this.travelFx.draw(dt, this.travel.cover, this.travel.phase === 'intro', this.travel.phase === 'loading')
@@ -753,7 +815,9 @@ export class Game {
     this.nexmax.update(ndt, this.shotIndex === -1 || !shots ? player.speed : shots.nexmaxSpeed(this.shotIndex))
     stage.animate(ndt, uTime.value, rt)
     a.combat.animate(ndt * a.combat.timeScale, uTime.value)
+    a.chrono.update(ndt, this.camera)
     if (!frozen) this.tickDialogue(ndt, false)
+    this.chapterCard.update()
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
     this.nexmax.handAnchor.getWorldPosition(this.hand)
@@ -771,11 +835,11 @@ export class Game {
       } else this.hud.setReticle({ mode: 'idle' })
       this.lastLocked = u.locked
       const active = u.phase !== 'idle'
-      const key = `${u.holdingLabel ?? ''}|${this.equipment.selected}|${active ? 1 : 0}|${this.equipment.left ?? ''}`
+      const key = `${u.holdingLabel ?? ''}|${this.equipment.selected}|${active ? 1 : 0}|${this.equipment.left ?? ''}|${this.equipment.right ?? ''}`
       if (key !== this.armKey) {
         this.armKey = key
         this.hud.setArms({
-          right: { name: PART_NAMES.grapple_claw, holding: u.holdingLabel, selected: this.equipment.selected === 'right', active },
+          right: { name: PART_NAMES[this.equipment.right ?? 'grapple_claw'], holding: u.holdingLabel, selected: this.equipment.selected === 'right', active },
           left: { name: this.equipment.left ? PART_NAMES[this.equipment.left] : null, selected: this.equipment.selected === 'left' },
         })
       }
@@ -869,11 +933,26 @@ export class Game {
       const r = canOpenHub({ unlocked: false, atSafePoint: false, wireMoving: claw.wire.isWireMoving(), airborne: !player.grounded && !player.isExternal, inCombat: combat.inCombat })
       hud.toast(r.message)
     }
-    if (!cineOn && frame.pressed.has('interact')) {
+    const card = this.chapterCard.active
+    if (card && (frame.pressed.has('interact') || frame.pressed.has('jump') || frame.pressed.has('claw_fire'))) this.chapterCard.skip()
+    if (!cineOn && !card && frame.pressed.has('interact')) {
       if (this.talk) this.tickDialogue(0, true)
       else stage.interact(rt)
     }
-    const locked = this.controlLocked || cineOn || combat.downed
+    // 章のとびらの出しわすれ：章が進んだまま、何もしていない時間が続いたら出す
+    {
+      const f = (n: string) => this.story.get(n)
+      const idle = !card && !this.talk && !cineOn && !this.controlLocked && !this.travel.busy
+      const due = chapterOf(f)
+      if (v7Started(f) && due > this.chapterShown && CHAPTER_ERA[due] === a.stage.key && idle) {
+        this.chapterIdle += dt
+        if (this.chapterIdle > 1.5) {
+          this.chapterIdle = 0
+          void rt.chapter()
+        }
+      } else this.chapterIdle = 0
+    }
+    const locked = this.controlLocked || cineOn || combat.downed || card
     // K：戦闘のあるステージでは攻撃（無ければ案内だけ）
     this.attackToastCooldown -= dt
     if (!locked && frame.pressed.has('attack')) {
@@ -895,7 +974,17 @@ export class Game {
     // 左腕を選んでいても、金具・結び目など敵でない対象を狙っているとき・ワイヤーがつながっているときはクローを使う
     const impactArm = this.impactInUse(claw)
     if (!locked && impactArm && frame.pressed.has('claw_fire') && combat.impact()) hud.pulseArm(this.equipment.selected)
-    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && clawArm(this.equipment) !== null, this.camera)
+    // 時空裂き（物語 v7）：照準が止める・裂く対象なら、ワイヤーは撃たずにその場に効かせる
+    const f = (n: string) => this.story.get(n)
+    a.chrono.unlocked = riftClawUnlocked(f)
+    const sel = claw.selectedTarget
+    const chronoSel = !impactArm && !!sel && isChronoTarget(sel.type) && claw.wire.phase === 'idle'
+    if (!locked && chronoSel && sel && frame.pressed.has('claw_fire') && clawArm(this.equipment) !== null && a.chrono.act(sel)) {
+      this.fireTimer = 0.3
+      player.turnToward(sel.point.x - player.position.x, sel.point.z - player.position.z, 1, 99)
+      hud.pulseArm('right')
+    }
+    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && !chronoSel && clawArm(this.equipment) !== null, this.camera)
     const ms = combat.moveScale
     const move = locked ? ZERO_AXIS : ms < 1 ? { x: frame.move.x * ms, y: frame.move.y * ms } : frame.move
     player.update(dt, { move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed && !combat.downed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
@@ -905,7 +994,7 @@ export class Game {
     stage.update(dt, frame, rt)
     if (this.cine.active) camRig.update(dt, ZERO_AXIS, player.position)
     else camRig.update(dt, frame.look, player.position, this.input.mouseDX, this.input.mouseDY)
-    this.applyCine(dt)
+    this.applyCine(dt, a)
 
     // ネクマックスの位置・向き・ポーズ
     const nexmax = this.nexmax
@@ -919,7 +1008,7 @@ export class Game {
     this.landTimer = Math.max(0, this.landTimer - dt)
     this.fireTimer = Math.max(0, this.fireTimer - dt)
     const w = claw.wire
-    const pose = choosePose({
+    const pose = this.poseOverride ?? choosePose({
       wirePhase: w.phase,
       targetType: w.target?.type ?? null,
       grounded: player.isExternal ? false : player.grounded || this.airTime < 0.12,
@@ -948,6 +1037,8 @@ export class Game {
       hud.setHints(v.hud)
       this.clawLabel = v.claw
     } else hud.setHints(hints)
+    // 背中の石の光のつぶ（物語 v7 を始めてから）
+    hud.setLights(v7Started(f) ? lightsLeft(f) : null)
     const o = stage.objective(rt)
     hud.setObjective(o.title, o.sub)
     hud.setCompass(camRig.yaw, stage.objectiveTarget?.(rt) ?? null, player.position)
@@ -975,8 +1066,9 @@ export class Game {
     if (len > 0.8) {
       dir.divideScalar(len)
       const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
-      const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, true)
-      if (hit !== null) cam.copy(start).addScaledVector(dir, Math.max(0.5, hit - 0.4))
+      const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, 'camera')
+      // 0 に近い当たりは、見る点が当たり判定の中にあるとき（石・地面など）。そのときは寄せない
+      if (hit !== null && hit > 0.05) cam.copy(start).addScaledVector(dir, Math.max(0.5, hit - 0.4))
     }
     return cam
   }
@@ -991,9 +1083,10 @@ export class Game {
   }
 
   /** CameraRig の後：ショットを混ぜ、目印を置き、揺れを足す */
-  private applyCine(dt: number): void {
+  private applyCine(dt: number, a?: Active): void {
     if (this.cine.active) {
       const done = this.cine.apply(dt, this.camera)
+      if (!done && a) this.keepCineOutOfWalls(a)
       if (done) this.endCineUi()
       else if (this.cine.current?.marker) {
         // CameraRig の lookAt が古い姿勢で行列を作っているので、札の投影の前に作り直す
@@ -1005,6 +1098,21 @@ export class Game {
       }
     }
     this.cine.applyShake(dt, this.camera)
+  }
+
+  /** 演出のカメラが壁の向こうに入ったら、見る点の側へ寄せる（向きはそのまま、見る点を見たまま） */
+  private readonly cineFix = new THREE.Vector3()
+  private keepCineOutOfWalls(a: Active): void {
+    if (!this.cine.current) return
+    // パン（lookTo）の途中も、いま見ている点から調べる
+    const look = this.cine.currentLook
+    const dir = this.cineFix.subVectors(this.camera.position, look)
+    const len = dir.length()
+    if (len < 0.9) return
+    dir.divideScalar(len)
+    const start = this.lightCenter.copy(look).addScaledVector(dir, 0.35)
+    const hit = a.phys.raycast(start, dir, len - 0.35, a.player.collider, 'camera')
+    if (hit !== null && hit > 0.05) this.camera.position.copy(start).addScaledVector(dir, Math.max(0.4, hit - 0.25))
   }
 
   private cancelCinematic(): void {
@@ -1048,6 +1156,7 @@ export class Game {
   /** キー案内（必要なときだけ）：ワイヤー → 照準 → ステージ（話す・調べる）→ 開始直後の操作案内 */
   private computeHints(a: Active): Hint[] {
     const { claw } = a
+    if (this.chapterCard.active) return [{ key: 'F', label: 'つぎへ' }]
     if (this.talk) return [{ key: 'F', label: '次へ' }]
     if (this.cine.active) return this.cine.skippable ? [{ key: 'F', label: 'スキップ' }] : []
     const w = claw.wire
@@ -1085,7 +1194,9 @@ export class Game {
     if (impactArm) return [{ key: 'J', label: 'はじく' }, ...fight, { key: 'E', label: '右腕へ' }]
     const sel = claw.selectedTarget
     if (sel) {
-      const list: Hint[] = [{ key: 'J', label: FIRE_VERB[sel.type] }, ...fight]
+      // まだ時空裂きを持っていないとき、裏側の物（黒い手など）にはふつうにクローを撃つつもりになる
+      const verb = sel.type === 'chrono_ura' && !a.chrono.unlocked ? 'つかむ' : FIRE_VERB[sel.type]
+      const list: Hint[] = [{ key: 'J', label: verb }, ...fight]
       if (claw.candidateCount > 1) list.push({ key: 'R', label: '対象を切替' })
       return list
     }
@@ -1134,6 +1245,15 @@ export class Game {
       },
       get equipment() {
         return g.equipment
+      },
+      get chrono() {
+        return g.active?.chrono
+      },
+      get combat() {
+        return g.active?.combat
+      },
+      get rt() {
+        return g.active?.rt
       },
       story: g.story,
       /** 開発用：画質・フレームレート・音楽の音量を変える（例 graphics({ quality: 'low', fps: 30, music: 2 })）。いまの設定を返す */

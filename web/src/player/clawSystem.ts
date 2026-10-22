@@ -67,6 +67,9 @@ const HOLD_VERB: Record<ClawTargetType, string> = {
   hold_mechanism: '支えている',
   enemy_pull: '引き寄せている',
   enemy_zip: '飛び込んでいる',
+  chrono_freeze: '止めている',
+  chrono_seam: '裂いている',
+  chrono_ura: '裂いている',
 }
 
 export type ScreenTarget = { def: ClawTargetDef; x: number; y: number; r: number }

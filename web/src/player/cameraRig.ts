@@ -1,5 +1,6 @@
 // 三人称カメラのスプリングアーム：方向キー（look アクション）で回す。押し始めはゆっくり、
-// 押し続けると加速（inputActions.stepLook）。壁に当たったら手前に縮む（Rapier のレイ）。
+// 押し続けると加速（inputActions.stepLook）。壁に当たったら手前に縮む（Rapier のレイ。まん中と四隅の 5 本で、
+// カメラの画面のはしが壁に入るのも防ぐ。縮むときはそのフレームで安全な距離まで縮める）。
 // マウスは任意（ポインタロック中だけ加算）。
 import * as THREE from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
@@ -7,11 +8,19 @@ import type { Physics } from './physics'
 import { createLookState, stepLook, type Axis2 } from './inputActions'
 
 export const CAMERA_TUNING = {
-  /** カメラの高さ角（rad）。小さいほど低い位置から見上げる */
-  pitchMin: -0.55,
+  /** カメラの高さ角（rad）。小さいほど低い位置から見上げる（高い所の金具も照準に入るように、深めに見上げられる） */
+  pitchMin: -0.8,
   pitchMax: 1.2,
   mouseSensitivity: 0.0024,
 }
+
+/** 四隅のレイのずらし（m）：横 ±0.22、縦 ±0.14（近い面の大きさのめやす） */
+const CORNERS: ReadonlyArray<readonly [number, number]> = [
+  [0.22, 0.14],
+  [-0.22, 0.14],
+  [0.22, -0.14],
+  [-0.22, -0.14],
+]
 
 export class CameraRig {
   yaw = 0
@@ -21,6 +30,9 @@ export class CameraRig {
   private readonly target = new THREE.Vector3()
   private readonly smoothTarget = new THREE.Vector3()
   private readonly dir = new THREE.Vector3()
+  private readonly right = new THREE.Vector3()
+  private readonly upv = new THREE.Vector3()
+  private readonly origin = new THREE.Vector3()
   private readonly up = new THREE.Vector3(0, 0.95, 0)
   private readonly look = createLookState()
   private initialized = false
@@ -65,13 +77,26 @@ export class CameraRig {
     }
     this.smoothTarget.lerp(this.target, 1 - Math.exp(-dt * 14))
     this.dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch))
-    const hit = this.phys.raycast(this.smoothTarget, this.dir, this.distance + 0.3, this.exclude, true)
-    const want = hit !== null ? Math.max(0.6, hit - 0.3) : this.distance
-    // 縮むときは速く、伸びるときはゆっくり
-    const k = want < this.current ? 20 : 3
-    this.current += (want - this.current) * Math.min(1, k * dt)
+    const want = this.safeDistance()
+    // 縮むときはそのフレームで（壁の中を映さない）、伸びるときはゆっくり
+    if (want < this.current) this.current = want
+    else this.current += (want - this.current) * Math.min(1, 3 * dt)
     this.camera.position.copy(this.smoothTarget).addScaledVector(this.dir, this.current)
     this.camera.lookAt(this.smoothTarget.x, this.smoothTarget.y + 0.25, this.smoothTarget.z)
+  }
+
+  /** 壁に入らない距離：まん中と、画面の四隅に当たる 4 本のレイのうち、いちばん近い当たり */
+  private safeDistance(): number {
+    const len = this.distance + 0.3
+    let best = this.phys.raycast(this.smoothTarget, this.dir, len, this.exclude, 'camera') ?? Infinity
+    this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw))
+    this.upv.crossVectors(this.right, this.dir).normalize()
+    for (const [sx, sy] of CORNERS) {
+      this.origin.copy(this.smoothTarget).addScaledVector(this.right, sx).addScaledVector(this.upv, sy)
+      const h = this.phys.raycast(this.origin, this.dir, len, this.exclude, 'camera')
+      if (h !== null && h < best) best = h
+    }
+    return best === Infinity ? this.distance : Math.max(0.35, best - 0.25)
   }
 
   /** なめらかに向きを変える（yaw はカメラが置かれる側の向き。方向キーで取り消せる） */

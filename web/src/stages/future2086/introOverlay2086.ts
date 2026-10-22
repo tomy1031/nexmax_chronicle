@@ -169,7 +169,8 @@ export class Flashback {
   private swapAt = 0
   onDone: (() => void) | null = null
 
-  constructor(lines: readonly FlashbackLine[]) {
+  /** opts（物語 v7）：image＝絵の URL（既定は導入編の絵）、place＝左上の場所の文字（[大きい行, 小さい行]）、noCanvas＝仮の絵を描かない */
+  constructor(lines: readonly FlashbackLine[], opts: { image?: string; place?: [string, string]; noCanvas?: boolean } = {}) {
     this.lines = lines
     this.plan = flashbackSchedule(lines)
     const touch = document.documentElement.classList.contains('touch-ui')
@@ -177,7 +178,7 @@ export class Flashback {
     el.className = 'intro-flashback'
     el.innerHTML =
       '<div class="ifb-photo"><canvas></canvas><img alt=""></div><div class="ifb-tint"></div><div class="ifb-tone"></div><div class="ifb-grain"></div>' +
-      '<div class="ifb-place"><b>15年前</b>旧なんば地下・ロボット回収施設</div>' +
+      `<div class="ifb-place"><b>${escapeHtml(opts.place?.[0] ?? '15年前')}</b>${escapeHtml(opts.place?.[1] ?? '旧なんば地下・ロボット回収施設')}</div>` +
       '<div class="ifb-quote"><span class="who"></span><span class="line"></span></div>' +
       `<div class="ifb-white"></div><div class="ifb-skip">${touch ? 'タップで次へ' : 'F：次へ'}</div>`
     // タッチ：画面をタップで次の行へ
@@ -196,11 +197,16 @@ export class Flashback {
     this.who = el.querySelector('.ifb-quote .who') as HTMLSpanElement
     this.line = el.querySelector('.ifb-quote .line') as HTMLSpanElement
     this.white = el.querySelector('.ifb-white') as HTMLDivElement
-    paintFlashback(el.querySelector('canvas') as HTMLCanvasElement)
+    const cv = el.querySelector('canvas') as HTMLCanvasElement
+    if (opts.noCanvas) {
+      cv.width = cv.height = 4
+      ;(cv.getContext('2d') as CanvasRenderingContext2D).fillStyle = '#0a0d18'
+      ;(cv.getContext('2d') as CanvasRenderingContext2D).fillRect(0, 0, 4, 4)
+    } else paintFlashback(cv)
     const img = el.querySelector('img') as HTMLImageElement
     img.onload = () => img.classList.add('on')
     img.onerror = () => img.remove()
-    img.src = FLASHBACK_IMAGE
+    img.src = opts.image ?? FLASHBACK_IMAGE
   }
 
   get playing(): boolean {

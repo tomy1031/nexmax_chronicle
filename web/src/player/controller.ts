@@ -11,6 +11,14 @@ const RADIUS = 0.27
 const HALF = 0.25
 const FOOT = HALF + RADIUS
 
+
+/** 足もとのまわりを調べる 4 点（m） */
+const AROUND: ReadonlyArray<readonly [number, number]> = [
+  [0.35, 0],
+  [-0.35, 0],
+  [0, 0.35],
+  [0, -0.35],
+]
 export const MOVE_TUNING = {
   walk: 3.3,
   dash: 6.4,
@@ -43,6 +51,11 @@ export class PlayerController {
   speed = 0
   /** false のときは移動入力を受けない（仕掛けを支えている間など）。重力は効く */
   enabled = true
+  /**
+   * これより下に落ちたら近くの安全な所へ戻す高さ（m）。既定は MOVE_TUNING.killY。
+   * 地下や裏側のある舞台では、ステージが場所に合わせて毎フレーム変えてよい（ステージごとに作り直すので戻さなくてよい）
+   */
+  killY = MOVE_TUNING.killY
   /** true の間は外部（ワイヤー）が位置を決める */
   private external = false
   /** ワイヤー離脱後、着地するまで勢いを保つ */
@@ -205,11 +218,24 @@ export class PlayerController {
       // 向きは攻撃・回避の側（combat/）が決める
     } else if (this.speed > 0.2 && len > 0) this.turnToward(this.velocity.x, this.velocity.z, step, 12)
     else if (this.speed > 0.2 && this.momentum) this.turnToward(this.velocity.x, this.velocity.z, step, 6)
-    if (this.grounded) this.lastSafe.copy(this.position)
-    if (this.position.y < T.killY) {
+    // 落ちたときにもどす所：足もとのまわりにも床がある所だけ覚える（足場のふちにもどして、またすぐ落ちないように）
+    if (this.grounded && this.footingAround()) this.lastSafe.copy(this.position)
+    if (this.position.y < this.killY) {
       this.teleport(this.lastSafe.clone().add(new THREE.Vector3(0, 0.3, 0)))
       this.onRespawn?.()
     }
+  }
+
+  private readonly probe = new THREE.Vector3()
+  private readonly down = new THREE.Vector3(0, -1, 0)
+
+  /** 足もとの前後左右 0.35m にも床があるか */
+  private footingAround(): boolean {
+    for (const [dx, dz] of AROUND) {
+      this.probe.set(this.position.x + dx, this.position.y + 0.25, this.position.z + dz)
+      if (this.phys.raycast(this.probe, this.down, 0.6, this.collider, true) === null) return false
+    }
+    return true
   }
 
   /** 向きを (vx, vz) の方向へ回す */

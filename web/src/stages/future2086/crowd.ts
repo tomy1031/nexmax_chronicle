@@ -257,9 +257,13 @@ export const INTRO_CROWD: ReadonlyArray<{ tag: string; x: number; y: number; z: 
   { tag: 'balloon_parent', x: -3.3, y: 0, z: 11.35, yaw: 0.5, role: 'street' },
 ]
 
-export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
+/** 人を置かない範囲（物語 v7 の舞台：時計台の足元・地下への入口など）。足元の XZ */
+export type CrowdClearRect = { x0: number; x1: number; z0: number; z1: number }
+
+export function buildCrowd(root: THREE.Group, col: ColliderList | null, opts: { clear?: readonly CrowdClearRect[] } = {}): Crowd {
   const rng = mulberry32(8086)
   const people: Person[] = []
+  const clear = opts.clear ?? []
   type AddOpts = { y?: number; keep?: boolean; walk?: Person['walk']; child?: boolean; collide?: boolean; role?: Role }
   const add = (x: number, z: number, yaw: number, o: AddOpts = {}) => {
     // 配置の乱数列を以前と同じに保つため、1 人あたりちょうど 7 回引く
@@ -270,6 +274,9 @@ export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
     const skinR = rng()
     const hairR = rng()
     const style = Math.floor(rng() * HAIR_STYLES) % HAIR_STYLES
+    // 置かない範囲の中なら、乱数だけ引いて置かない（ほかの人の見た目・位置は変わらない）。歩く人は道すじの両端で判定
+    const blocked = (px: number, pz: number) => (o.y ?? 0) < 1 && clear.some((r) => px >= r.x0 - 0.3 && px <= r.x1 + 0.3 && pz >= r.z0 - 0.3 && pz <= r.z1 + 0.3)
+    if (blocked(x, z) || (o.walk && blocked(o.walk.bx, o.walk.bz))) return
     const stride = 0.74 * (h / 1.65)
     people.push({
       pos: new THREE.Vector3(x, o.y ?? 0, z),
@@ -339,8 +346,9 @@ export function buildCrowd(root: THREE.Group, col: ColliderList | null): Crowd {
   walkers.forEach(([ax, az, bx, bz], i) => add(ax, az, 0, { walk: { ax, az, bx, bz, speed: range(rng, 0.9, 1.25), t0: i * 3.7 }, collide: false }))
   // 導入編で足す人（印付き。最後に足す）
   for (const x of INTRO_CROWD) {
+    const n = people.length
     add(x.x, x.z, x.yaw, { y: x.y, role: x.role, child: x.child, collide: x.y < 0.5 })
-    people[people.length - 1].tag = x.tag
+    if (people.length > n) people[people.length - 1].tag = x.tag
   }
   const hiddenTags = new Set<string>()
 

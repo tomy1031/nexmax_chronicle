@@ -28,6 +28,7 @@ import type { RiftFx } from './riftFx'
 import type { CineShot } from './cinematic'
 import type { ObjectiveMark } from './objectiveMarker'
 import type { CombatSystem } from '../combat/combatSystem'
+import type { ChronoSystem } from '../chronicle/chrono'
 
 export type { StageKey, TravelRequest, CineShot, ObjectiveMark }
 
@@ -96,6 +97,8 @@ export type StageRuntime = {
   claw: ClawSystem
   /** 戦闘（体力・攻撃・敵）。ステージが enabled にして敵を出す（combat/combatSystem.ts） */
   combat: CombatSystem
+  /** 時空裂きのNMクロー（物語 v7：止める・裂く。chronicle/chrono.ts）。ステージが対象を add する */
+  chrono: ChronoSystem
   phys: Physics
   /** 主人公の見た目（シェルが持つ。ステージは解放しない） */
   nexmax: Character
@@ -121,6 +124,11 @@ export type StageRuntime = {
   /** プレイヤー操作を止める（イベント中） */
   setControlLocked(on: boolean): void
   /**
+   * ネクマックスのポーズを決める（'sit'：root を座面の高さに置くとすわる）。null で元に戻す（動きから選ぶ）。
+   * 時空移動・ステージの入れかえでも元に戻る
+   */
+  setPlayerPose(pose: 'sit' | null): void
+  /**
    * カメラの演出（cinematic.ts の CineShot）：操作を止め、プレイのカメラから shot へなめらかに寄って保持し、戻る。
    * その間はキー案内・照準を隠し、上下に黒帯、shot.marker があれば目印（光る輪・光の柱・名前の札）を出す。
    * 会話（dialogue）は同時に流せる（F は会話の早送り。会話が無く shot.skippable なら F・Space・J で戻りに入る）。
@@ -133,6 +141,11 @@ export type StageRuntime = {
   readonly inCinematic: boolean
   /** 画面の揺れ（0〜1 くらい。少しずつ収まる。プレイ中にも使える） */
   shake(amount: number): void
+  /**
+   * 物語 v7 の章のとびら（chronicle/chapterCard.ts）を出す。n を省くとフラグから決まる今の章。
+   * もう出した章なら何もしない。終わると resolve（その間は操作を止める）。時代を移って着いたときはシェルが自動で出す
+   */
+  chapter(n?: number): Promise<void>
   readonly playTime: number
 }
 

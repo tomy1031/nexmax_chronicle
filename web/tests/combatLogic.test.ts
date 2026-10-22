@@ -157,3 +157,18 @@ describe('敵の行動', () => {
     expect(o.move).toBe('home')
   })
 })
+
+describe('子ども向けの敵の数値', () => {
+  it('どの敵も、構え（溜め）が見えてから当たるまで 1.2 秒以上・当たりはハート 1 つ', () => {
+    for (const s of Object.values(ENEMY_STATS)) {
+      expect(s.windup, s.name).toBeGreaterThanOrEqual(1.2)
+      expect(s.damage, s.name).toBe(1)
+    }
+  })
+  it('敵ごとの数値の上書き（共有の ENEMY_STATS は変えない）', () => {
+    const b = new EnemyBrain('brute', 1, { windup: 1.6, hp: 20 })
+    expect(b.stats.windup).toBe(1.6)
+    expect(b.hp).toBe(20)
+    expect(ENEMY_STATS.brute.windup).toBeLessThan(1.6)
+  })
+})

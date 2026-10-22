@@ -11,7 +11,10 @@ import type { PlayerController } from '../player/controller'
 import type { ClawSystem } from '../player/clawSystem'
 import type { ClawTargetDef, WireEvent } from '../player/clawLogic'
 import type { Hud } from '../ui/hud'
-import { ATTACK_STEPS, AttackCombo, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind } from './combatLogic'
+import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHealth, angleTo, inArc, type EnemyKind, type EnemyStats } from './combatLogic'
+
+/** やられて戻ったあと、敵が襲ってこない時間（秒） */
+const RESPAWN_GRACE = 2.2
 import { EnemyModel, type EnemyStyle } from './enemyModels'
 import './combat.css'
 
@@ -30,12 +33,34 @@ export type SpawnOptions = {
   style?: EnemyStyle
   /** 体力の上書き（ボスなど） */
   hp?: number
+  /** この敵だけの数値の上書き（溜めの長さ・当たりの強さなど） */
+  stats?: Partial<EnemyStats>
+  /** やられて戻ったときも、この敵の体力を満タンに戻さない（ボス：けずった分を残す） */
+  keepHpOnRespawn?: boolean
   /** 大きさの倍率（見た目と当たり） */
   scale?: number
   /** 出てくるまで隠す（appear() で出す） */
   hidden?: boolean
   /** 装甲（はじくで割れるまで攻撃が通らない。欠け重の形だけ見た目が付く） */
   armored?: boolean
+  /**
+   * よろいの板（物語 v7 の影獣：鉄板・看板を体にはりつける）。モデルに付け、クローで 1 枚ずつはがす（盾と同じく手元へ飛んでくる）。
+   * 全部はがすまで攻撃が通らない。はじくでは割れない。armored より優先
+   */
+  plates?: THREE.Object3D[]
+  /** よろいの板が 1 枚はがれた（残りの枚数） */
+  onPlate?: (left: number) => void
+}
+
+/** K の攻撃が当たる、敵でない物（ボスの体の一部・トワなど）。ステージが addHitTarget で足す */
+export type HitTarget = {
+  id: string
+  /** 中心（毎回読む。動かしてよい） */
+  pos: THREE.Vector3
+  radius: number
+  enabled: boolean
+  /** 当たった（damage は連続攻撃の段のダメージ、step は 0〜2） */
+  onHit: (damage: number, step: number) => void
 }
 
 export type EnemyHandle = {
@@ -70,10 +95,15 @@ type Enemy = EnemyHandle & {
   yank: { from: THREE.Vector3; to: THREE.Vector3 } | null
   /** 盾をはがしている途中（盾が手元へ飛んでくる） */
   shieldFly: { obj: THREE.Object3D; from: THREE.Vector3; t: number; dropT: number } | null
+  /** よろいの板（残り）。null ならよろいなし */
+  plates: THREE.Object3D[] | null
+  onPlate: ((left: number) => void) | null
   struck: boolean
   dyingT: number
   hidden: boolean
   removed: boolean
+  /** やられて戻ったときも体力を残す */
+  keepHp: boolean
 }
 
 /** 小さな破片・火花（使い回し） */
@@ -164,6 +194,8 @@ export class CombatSystem {
   enabled = false
   /** 敵が襲ってこない（会話・演出の間。ステージが切り替える） */
   passive = false
+  /** やられて戻ったあと、敵が襲ってこない残りの秒数 */
+  private graceT = 0
   readonly group = new THREE.Group()
   readonly health = new PlayerHealth()
   /** 体力 0 のときに戻る場所（ステージが設定。無ければ到着地点） */
@@ -177,6 +209,7 @@ export class CombatSystem {
   private readonly enemies: Enemy[] = []
   private readonly byDef = new Map<ClawTargetDef, Enemy>()
   private readonly breakables: Breakable[] = []
+  private readonly hitTargets: HitTarget[] = []
   private readonly combo = new AttackCombo()
   private readonly dodgeState = new Dodge()
   private readonly sparks = new Sparks()
@@ -193,7 +226,7 @@ export class CombatSystem {
   private clock = 0
   private armorHintAt = -99
   private readonly fade: HTMLDivElement
-  private bossBar: { el: HTMLDivElement; fill: HTMLDivElement; e: Enemy } | null = null
+  private bossBar: { el: HTMLDivElement; fill: HTMLDivElement; e: Enemy | null; frac: number } | null = null
   private readonly start = v3()
   private readonly tmp = v3()
   private readonly tmp2 = v3()
@@ -220,13 +253,18 @@ export class CombatSystem {
   /** 敵を出す */
   spawn(kind: EnemyKind, pos: THREE.Vector3, o: SpawnOptions = {}): EnemyHandle {
     const id = `kake_${kind}_${++this.seq}`
-    const brain = new EnemyBrain(kind, this.seq)
+    const brain = new EnemyBrain(kind, this.seq, o.stats)
     if (o.hp) brain.hp = o.hp
     const model = new EnemyModel(kind, o.style)
     const scale = o.scale ?? 1
     model.baseScale = scale
     model.root.scale.setScalar(scale)
-    if (o.armored) {
+    const plates = o.plates?.length ? [...o.plates] : null
+    if (plates) {
+      // よろいの板：クローではがすまで攻撃が通らない（装甲のように時間で戻らない）
+      brain.setArmored(true)
+      for (const p of plates) model.root.add(p)
+    } else if (o.armored) {
       brain.setArmored(true)
       model.setArmor(true)
     }
@@ -237,8 +275,8 @@ export class CombatSystem {
     const s = brain.stats
     const def: ClawTargetDef = {
       id,
-      type: s.mass === 'heavy' ? 'enemy_zip' : 'enemy_pull',
-      label: s.mass === 'heavy' ? `${s.name}（飛び込む）` : brain.shield ? `${s.name}（盾をはがす）` : s.name,
+      type: plates ? 'enemy_pull' : s.mass === 'heavy' ? 'enemy_zip' : 'enemy_pull',
+      label: plates ? `${s.name}（よろいをはがす）` : s.mass === 'heavy' ? `${s.name}（飛び込む）` : brain.shield ? `${s.name}（盾をはがす）` : s.name,
       point: pos.clone().add(new THREE.Vector3(0, model.chestY * scale, 0)),
       radius: s.radius * scale + 0.15,
       enabled: !o.hidden,
@@ -254,6 +292,7 @@ export class CombatSystem {
       model,
       pos: model.root.position,
       maxHp: brain.hp,
+      keepHp: o.keepHpOnRespawn ?? false,
       get yaw() {
         return model.root.rotation.y
       },
@@ -271,6 +310,8 @@ export class CombatSystem {
       knock: v3(),
       yank: null,
       shieldFly: null,
+      plates,
+      onPlate: o.onPlate ?? null,
       struck: false,
       dyingT: -1,
       hidden: !!o.hidden,
@@ -310,6 +351,39 @@ export class CombatSystem {
     this.breakables.push(b)
   }
 
+  /** K の攻撃が当たる物を足す（同じ id は置きかえる） */
+  addHitTarget(t: HitTarget): void {
+    this.removeHitTarget(t.id)
+    this.hitTargets.push(t)
+  }
+
+  removeHitTarget(id: string): void {
+    const i = this.hitTargets.findIndex((x) => x.id === id)
+    if (i >= 0) this.hitTargets.splice(i, 1)
+  }
+
+  /** 敵でないボス（時の鐘人形・トワ・オルムの心臓など）の体力を画面の上に出す。frac は 0〜1。name が null で消す */
+  showBossBar(name: string | null, frac = 1): void {
+    this.bossBar?.el.remove()
+    this.bossBar = null
+    if (name === null) return
+    const el = document.createElement('div')
+    el.className = 'combat-boss'
+    el.innerHTML = `<div class="cb-name"></div><div class="cb-bar"><div class="cb-fill"></div></div>`
+    ;(el.querySelector('.cb-name') as HTMLDivElement).textContent = name
+    ;(this.host.ui ?? document.body).appendChild(el)
+    this.bossBar = { el, fill: el.querySelector('.cb-fill') as HTMLDivElement, e: null, frac }
+    this.setBossBar(frac)
+  }
+
+  /** showBossBar で出した体力（0〜1） */
+  setBossBar(frac: number): void {
+    const b = this.bossBar
+    if (!b || b.e) return
+    b.frac = Math.max(0, Math.min(1, frac))
+    b.fill.style.transform = `scaleX(${b.frac.toFixed(3)})`
+  }
+
   setCheckpoint(p: THREE.Vector3, yaw = 0): void {
     this.checkpoint = p.clone()
     this.checkpointYaw = yaw
@@ -326,7 +400,7 @@ export class CombatSystem {
     el.innerHTML = `<div class="cb-name"></div><div class="cb-bar"><div class="cb-fill"></div></div>`
     ;(el.querySelector('.cb-name') as HTMLDivElement).textContent = name || e.brain.stats.name
     ;(this.host.ui ?? document.body).appendChild(el)
-    this.bossBar = { el, fill: el.querySelector('.cb-fill') as HTMLDivElement, e }
+    this.bossBar = { el, fill: el.querySelector('.cb-fill') as HTMLDivElement, e, frac: 1 }
   }
 
   // ---------------------------------------------------------------- 状態
@@ -339,7 +413,8 @@ export class CombatSystem {
 
   /** ボスの体力が出ていて、ボスがまだ倒れていない（番人の曲） */
   get bossActive(): boolean {
-    return this.bossBar !== null && this.bossBar.e.alive
+    const b = this.bossBar
+    return b !== null && (b.e ? b.e.alive : b.frac > 0)
   }
 
   /** 体力 0 から戻る途中（操作を止める） */
@@ -413,7 +488,9 @@ export class CombatSystem {
     switch (ev.kind) {
       case 'connected':
         if (ev.target.type === 'enemy_pull') {
-          if (e.brain.shield && e.model.shield) {
+          if (e.plates && e.plates.length) {
+            this.stripPlate(e)
+          } else if (e.brain.shield && e.model.shield) {
             // 盾をはがす：盾だけが手元へ飛んでくる
             const obj = e.model.shield
             const wp = obj.getWorldPosition(v3())
@@ -454,6 +531,33 @@ export class CombatSystem {
     }
   }
 
+  /** よろいの板を 1 枚はがす（盾と同じく手元へ飛んでくる）。最後の 1 枚で攻撃が通るようになる */
+  private stripPlate(e: Enemy): void {
+    const obj = e.plates?.pop()
+    if (!obj) return
+    const wp = obj.getWorldPosition(v3())
+    const wq = obj.getWorldQuaternion(new THREE.Quaternion())
+    obj.removeFromParent()
+    obj.position.copy(wp)
+    obj.quaternion.copy(wq)
+    this.group.add(obj)
+    if (e.shieldFly) e.shieldFly.obj.removeFromParent()
+    e.shieldFly = { obj, from: wp.clone(), t: 0, dropT: -1 }
+    e.brain.stun(1.1)
+    this.sparks.burst(wp, '#ffb347', 14, 3.5)
+    this.host.shake(0.18)
+    const left = e.plates?.length ?? 0
+    if (left === 0) {
+      e.plates = null
+      e.brain.armored = false
+      e.brain.armor = false
+      e.def.type = e.brain.stats.mass === 'heavy' ? 'enemy_zip' : 'enemy_pull'
+      e.def.label = e.brain.stats.mass === 'heavy' ? `${e.brain.stats.name}（飛び込む）` : e.brain.stats.name
+      this.host.hud.toast('よろいがはがれた！ 今のうちに攻撃！', 2.4)
+    }
+    e.onPlate?.(left)
+  }
+
   // ---------------------------------------------------------------- 毎フレーム
 
   update(dt: number): void {
@@ -462,6 +566,7 @@ export class CombatSystem {
     this.clock += dt
     this.health.tick(dt)
     this.dodgeState.tick(dt)
+    this.graceT = Math.max(0, this.graceT - dt)
     this.hurtT = Math.max(0, this.hurtT - dt)
     this.impactCd = Math.max(0, this.impactCd - dt)
     // 体力 0 → 暗転して戻る
@@ -502,10 +607,11 @@ export class CombatSystem {
     for (let i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i].removed) this.enemies.splice(i, 1)
     this.sparks.update(dt)
     hud.setHp(this.health.hp)
-    if (this.bossBar) {
+    if (this.bossBar?.e) {
       const b = this.bossBar
-      b.fill.style.transform = `scaleX(${Math.max(0, b.e.brain.hp / b.e.maxHp).toFixed(3)})`
-      if (!b.e.alive && b.e.dyingT > 0.8) this.showBoss(null)
+      const be = b.e as Enemy
+      b.fill.style.transform = `scaleX(${Math.max(0, be.brain.hp / be.maxHp).toFixed(3)})`
+      if (!be.alive && be.dyingT > 0.8) this.showBoss(null)
     }
   }
 
@@ -530,7 +636,8 @@ export class CombatSystem {
     if (kind === 'swing') {
       // 近くの敵へ向き直る（ゆるい自動の狙い）
       const near = this.nearestEnemy(4, 1.5)
-      if (near) pl.facing = Math.atan2(-(near.pos.x - pl.position.x), -(near.pos.z - pl.position.z))
+      const at = near ? near.pos : this.nearestHitTarget(4, 1.5)
+      if (at) pl.facing = Math.atan2(-(at.x - pl.position.x), -(at.z - pl.position.z))
       return
     }
     if (kind !== 'hit') return
@@ -545,6 +652,16 @@ export class CombatSystem {
       const front = this.fromFront(e, P)
       const res = e.brain.hurt(s.damage, s.stagger, front)
       this.onEnemyHurt(e, res, s.knock * (e.brain.stats.mass === 'heavy' ? 0.25 : 1), step === 2 ? 0.07 : 0.04)
+      hitAny = true
+    }
+    // 敵でない的（ボスの体の一部など）
+    for (const t of this.hitTargets) {
+      if (!t.enabled) continue
+      if (Math.abs(t.pos.y - P.y) > 1.6 + t.radius) continue
+      if (!inArc(P.x, P.z, pl.facing, t.pos.x, t.pos.z, s.range, s.halfArc, t.radius)) continue
+      t.onHit(s.damage, step)
+      this.sparks.burst(this.tmp.copy(t.pos), '#ff6fa8', step === 2 ? 14 : 8, 3)
+      this.hitstop = Math.max(this.hitstop, step === 2 ? 0.07 : 0.04)
       hitAny = true
     }
     // 壊せる物：3 段目だけ
@@ -618,7 +735,7 @@ export class CombatSystem {
       this.sparks.burst(chest, '#9fd8ff', 6, 2.5)
       if (e.brain.armor && this.armorHintAt + 6 < this.clock) {
         this.armorHintAt = this.clock
-        this.host.hud.toast('装甲が硬い……はじくNMClaw で割ろう', 2.4)
+        this.host.hud.toast(e.plates ? 'よろいが硬い……クローで 1 枚ずつはがそう' : '装甲が硬い……はじくNMClaw で割ろう', 2.4)
       }
       e.knock.addScaledVector(this.tmp, 2.5)
       // 盾で弾かれて、こちらも少し下がる
@@ -661,6 +778,26 @@ export class CombatSystem {
     return best
   }
 
+  /** 近くの敵でない的（ボスの体の一部など）の位置 */
+  private nearestHitTarget(maxDist: number, maxAngle: number): THREE.Vector3 | null {
+    const pl = this.host.player
+    let best: THREE.Vector3 | null = null
+    let bd = Infinity
+    for (const t of this.hitTargets) {
+      if (!t.enabled) continue
+      const dx = t.pos.x - pl.position.x
+      const dz = t.pos.z - pl.position.z
+      const d = Math.hypot(dx, dz) - t.radius
+      if (d > maxDist || Math.abs(t.pos.y - pl.position.y) > 1.6 + t.radius) continue
+      if (Math.abs(angleTo(pl.facing, dx, dz)) > maxAngle) continue
+      if (d < bd) {
+        bd = d
+        best = t.pos
+      }
+    }
+    return best
+  }
+
   private updateEnemy(e: Enemy, dt: number, playerDown: boolean): void {
     const pl = this.host.player
     const P = pl.position
@@ -685,8 +822,8 @@ export class CombatSystem {
       }
       return
     }
-    // 装甲が戻った
-    if (e.brain.armored && e.brain.armor !== e.model.armorShown) {
+    // 装甲が戻った（よろいの板の敵は板が見た目）
+    if (e.brain.armored && !e.plates && e.brain.armor !== e.model.armorShown) {
       e.model.setArmor(e.brain.armor)
       if (e.brain.armor) this.sparks.burst(e.model.armorPoint(this.tmp), '#b04cff', 16, 3)
     }
@@ -695,7 +832,7 @@ export class CombatSystem {
     const dist = Math.hypot(dx, dz)
     if (dist > FAR_HIDE && e.brain.state === 'idle' && !e.yank && e.knock.lengthSq() < 1e-4) return
     const leashed = e.pos.distanceTo(e.home) < e.leash
-    const out = e.brain.update(dt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown })
+    const out = e.brain.update(dt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown || this.graceT > 0 })
     if (e.brain.state === 'windup' && e.brain.t <= dt + 1e-6) e.struck = false
     if (out.face && dist > 0.05) this.turn(e, dx, dz, dt, st.mass === 'heavy' ? 4 : 9)
     // 動き
@@ -811,10 +948,22 @@ export class CombatSystem {
     e.yaw = e.yaw + d * Math.min(1, rate * dt)
   }
 
-  private hurtPlayer(damage: number, dir: THREE.Vector3, knock: number): void {
+  /**
+   * プレイヤーが攻撃を受けた（無敵時間・回避・体力 0 の暗転までまとめて）。敵でないボスの攻撃からも呼べる。
+   * lethal = false なら最後の 1 は残す（台本の場面の中で倒れてやり直しにならないように）
+   */
+  hurtPlayer(damage: number, dir: THREE.Vector3, knock: number, lethal = true): void {
     const pl = this.host.player
     if (this.dodgeState.invulnerable || this.health.invuln > 0) return
-    const res = this.health.damage(damage)
+    const n = lethal ? damage : Math.min(damage, this.health.hp - 1)
+    if (n <= 0) {
+      // 残り 1：へらさず、当たった手応えと無敵時間だけ
+      this.health.invuln = COMBAT_TUNING.invulnSec
+      this.hurtT = 0.35
+      this.host.hud.flash('danger')
+      return
+    }
+    const res = this.health.damage(n)
     if (res === 'ignored') return
     this.combo.cancel()
     this.hurtT = 0.35
@@ -842,11 +991,13 @@ export class CombatSystem {
       e.yaw = e.homeYaw
       e.knock.set(0, 0, 0)
       e.yank = null
-      e.brain.hp = e.maxHp
+      if (!e.keepHp) e.brain.hp = e.maxHp
       e.brain.state = 'idle'
       e.brain.t = 0
       if (e.brain.armored) e.brain.setArmored(true)
     }
+    // 戻ってすぐは襲わない（子どもが立て直せるように）
+    this.graceT = RESPAWN_GRACE
     this.onRespawn?.()
   }
 

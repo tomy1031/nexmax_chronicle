@@ -65,7 +65,7 @@ export type HudFutureOptions = {
   speakerIcons?: boolean
   /** ポートレートの描画回数（1 秒あたり、既定 20） */
   portraitFps?: number
-  /** ひとつ前の台詞を小さく残す最長の秒数（既定 3.2） */
+  /** ひとつ前の台詞を小さく残す最長の秒数（既定 0：残さない。オーナーの希望） */
   ghostSeconds?: number
 }
 
@@ -391,7 +391,7 @@ export class HudFuture {
   }
 
   constructor(ui: HTMLElement, options: HudFutureOptions = {}) {
-    this.opts = { livePortrait: options.livePortrait ?? true, speakerIcons: options.speakerIcons ?? true, portraitFps: options.portraitFps ?? 20, ghostSeconds: options.ghostSeconds ?? 3.2 }
+    this.opts = { livePortrait: options.livePortrait ?? true, speakerIcons: options.speakerIcons ?? true, portraitFps: options.portraitFps ?? 20, ghostSeconds: options.ghostSeconds ?? 0 }
     this.board.ghostMax = this.opts.ghostSeconds
     ensureFonts()
     this.root = document.createElement('div')
@@ -1001,7 +1001,7 @@ export class HudFuture {
 
   // ================================================================ 会話
 
-  /** 台詞（話者名＋一言）。新しい台詞をウィンドウに、ひとつ前の台詞は上に小さく残す */
+  /** 台詞（話者名＋一言）。新しい台詞をウィンドウに出す */
   say(speaker: string, text: string, seconds = 3.8): void {
     if (this.touch) text = toTouchText(text)
     const now = performance.now() / 1000

@@ -267,6 +267,9 @@
   gap: clamp(8px, 1.8vmin, 16px);
   width: min(100%, 360px);
 }
+.nt-menu[hidden] {
+  display: none;
+}
 
 /* 六角の札（HUD の「話す」と同じ形） */
 .nt-btn {
@@ -401,30 +404,37 @@
   font-size: 12px;
   color: rgba(169, 198, 234, 0.6);
 }
-.nt-update {
+.nt-updating {
   display: flex;
-  align-items: center;
-  gap: 0.8em;
+  flex-direction: column;
+  gap: 0.55em;
+  width: min(100%, 360px);
+  padding: 0.9em 1.2em 1em;
   color: var(--t-ink);
-  font-size: clamp(12px, 1.6vmin, 14px);
-  background: rgba(8, 22, 58, 0.8);
-  border: 1px solid rgba(94, 230, 255, 0.35);
-  border-radius: 999px;
-  padding: 0.25em 0.9em 0.25em 1.1em;
+  background: rgba(8, 22, 58, 0.82);
+  border: 1px solid rgba(94, 230, 255, 0.45);
+  border-radius: 12px;
 }
-.nt-update .nt-link {
-  min-height: 32px;
-  font-size: inherit;
+.nt-updating[hidden] {
+  display: none;
 }
-.nt-update-bar {
+.nt-updating-title {
+  font-weight: 800;
+  font-size: clamp(15px, min(2.2vw, 4vh), 20px);
+  letter-spacing: 0.06em;
+}
+.nt-updating-meta {
+  font-size: clamp(11px, min(1.5vw, 2.8vh), 14px);
+  color: var(--t-ink-dim);
+}
+.nt-updating-bar {
   display: block;
-  width: 80px;
-  height: 4px;
-  border-radius: 2px;
+  height: 6px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.15);
   overflow: hidden;
 }
-.nt-update-bar b {
+.nt-updating-bar b {
   display: block;
   height: 100%;
   background: var(--t-holo);

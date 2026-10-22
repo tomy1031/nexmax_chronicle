@@ -858,8 +858,9 @@ export class CombatSystem {
     const P = pl.position
     const h = this.held
     if (h) {
-      h.obj.position.set(P.x - Math.sin(pl.facing) * 0.75, P.y + 0.95, P.z - Math.cos(pl.facing) * 0.75)
-      h.obj.rotation.set(0, pl.facing + Math.PI, 0)
+      // 頭の上に持ち上げる（うしろのカメラからも見えるように）
+      h.obj.position.set(P.x - Math.sin(pl.facing) * 0.2, P.y + 1.85 + Math.sin(this.clock * 6) * 0.04, P.z - Math.cos(pl.facing) * 0.2)
+      h.obj.rotation.set(-0.35, pl.facing + Math.PI, 0)
     }
     for (let i = this.thrown.length - 1; i >= 0; i--) {
       const t = this.thrown[i]

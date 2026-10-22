@@ -221,6 +221,7 @@ export class BeastFight {
   // ---------------------------------------------------------------- 毎フレーム（戦闘の更新のあと）
 
   private startRoarSoon = -1
+  private roarHp = 0
   private throwCheck: { t: number; hits: number } | null = null
 
   update(dt: number): void {
@@ -269,8 +270,15 @@ export class BeastFight {
     const bs = h.brain.state
     if ((bs === 'stunned' || bs === 'stagger') && m.k !== 'crashed' && m.k !== 'hurt' && m.k !== 'grab') {
       const armor = m.k === 'paw' || m.k === 'charge' || m.k === 'air' || m.k === 'roar' || m.k === 'pounce'
-      if (bs === 'stunned' || !armor) this.toHurt()
+      // おこったあとのひっかきは、構えの途中でパンチしても止まらない（腕をふり上げたら、はなれる。ふり下ろしたあとが、やり返すとき）
+      const scratchArmor = m.k === 'scratch' && this.angry && bs === 'stagger' && m.t < T.scratch.windup
+      if (scratchArmor) {
+        h.brain.state = 'windup'
+        h.brain.t = m.t
+      } else if (bs === 'stunned' || !armor) this.toHurt()
     }
+    // ほえている間は、パンチがきかない
+    if (m.k === 'roar' && this.roarHp > 0) h.brain.hp = Math.max(h.brain.hp, this.roarHp)
     if (passive && this.mode.k !== 'crashed' && this.mode.k !== 'hurt') {
       // 会話・演出・やられたあと：いまの動きをやめて、その場で待つ（構えの途中で当たらないように）
       const k = this.mode.k
@@ -591,6 +599,18 @@ export class BeastFight {
     this.angryT = 0
     this.fx.clear()
     this.mode = { k: 'roar', t: 0 }
+    this.roarHp = this.h.brain.hp
+    // ほえる勢いで、近くのネクマックスを押しもどす（けがはしない）
+    const P = this.rt.player.position
+    const dx = P.x - this.h.pos.x
+    const dz = P.z - this.h.pos.z
+    const d = Math.hypot(dx, dz)
+    if (d < 4.5 && d > 1e-3 && !this.rt.player.isExternal) {
+      this.rt.player.burstMove((dx / d) * 9, (dz / d) * 9, 0.28)
+      this.rt.player.velocity.y = Math.max(this.rt.player.velocity.y, 3)
+    }
+    this.rt.shake(0.35)
+    this.fx.puff(this.tmp.copy(this.h.pos), 10, 1.6, 1.2)
     this.h.def.label = 'よろいの影獣'
     this.host.say('beast_roar')
   }

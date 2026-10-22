@@ -654,9 +654,9 @@ export class ChronicleEdoStage implements Stage {
 
   /** プレイヤーに当たった（体力 1）。from：当てた物（木槌の頭・衝撃波の中心）。歯車をつかんでいたら、ふりほどかれる */
   private hurt(rt: StageRuntime, dmg: number, from: THREE.Vector3, knock: number): void {
-    // 当てた物からネクマックスへの向き（真上から当たったときは、人形から外へ）
+    // 当てた物からネクマックスへの向き（ほぼ真上から当たったときは、人形から外へ。人形の足もとへ飛ばさない）
     const dir = this.tmp.copy(rt.player.position).sub(from).setY(0)
-    if (dir.lengthSq() < 0.04) dir.copy(rt.player.position).sub(this.w.doll.position).setY(0)
+    if (dir.lengthSq() < 0.36) dir.copy(rt.player.position).sub(this.w.doll.position).setY(0)
     if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1)
     dir.normalize()
     if (this.gears.holding >= 0) {

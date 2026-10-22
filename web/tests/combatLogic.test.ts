@@ -172,3 +172,22 @@ describe('子ども向けの敵の数値', () => {
     expect(ENEMY_STATS.brute.windup).toBeLessThan(1.6)
   })
 })
+
+describe('投げた板（よろいの影獣）', () => {
+  it('装甲があっても通り、しばらく動けなくなる', () => {
+    const b = new EnemyBrain('brute', 1)
+    b.setArmored(true)
+    const hp = b.hp
+    expect(b.hurt(1, 0.3, true)).toBe('blocked')
+    expect(b.hurtThrough(2, 2.4)).toBe('hurt')
+    expect(b.hp).toBe(hp - 2)
+    expect(b.state).toBe('stunned')
+    expect(b.armor).toBe(true)
+  })
+
+  it('体力が尽きれば倒れる', () => {
+    const b = new EnemyBrain('mite', 1)
+    expect(b.hurtThrough(99, 1)).toBe('killed')
+    expect(b.alive).toBe(false)
+  })
+})

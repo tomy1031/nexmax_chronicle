@@ -192,3 +192,12 @@ describe("clawTargeting: ネクマックスの向きの照準", () => {
     expect(b.forward.toArray()).toEqual([0, 0, -1]);
   });
 });
+
+describe("clawTargeting: 照準の吸い付きの倍率（cone）", () => {
+  it("cone を小さくすると、少し横の対象は、正面へ向けないと選ばれない", () => {
+    const p = v(1.0, 1, -5);
+    expect(evaluateTarget(target("plate", p), basis(), chest)?.valid).toBe(true);
+    expect(evaluateTarget(target("plate", p, { cone: 0.45 }), basis(), chest)?.valid).toBe(false);
+    expect(evaluateTarget(target("plate", v(0.2, 1, -5), { cone: 0.45 }), basis(), chest)?.valid).toBe(true);
+  });
+});

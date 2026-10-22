@@ -435,7 +435,7 @@ export class Game {
     const claw = new ClawSystem(phys, player, world.claw.targets, world.claw.movables)
     this.scene.add(claw.beam.group)
     // 戦闘（ステージが rt.combat.enabled にして敵を出す）と、物語の進み具合からの装備
-    const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n) })
+    const combat = new CombatSystem({ phys, player, claw, hud: this.hud, ui: this.uiEl, shake: (n) => this.cine.addShake(n), camera: this.camera })
     this.scene.add(combat.group)
     // 時空裂きのNMクロー（物語 v7。持つまでは「すりぬける」だけ）
     const chrono = new ChronoSystem({ claw, toast: (t, s) => this.hud.toast(t, s), shake: (n) => this.cine.addShake(n) })
@@ -984,7 +984,10 @@ export class Game {
       player.turnToward(sel.point.x - player.position.x, sel.point.z - player.position.z, 1, 99)
       hud.pulseArm('right')
     }
-    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && !chronoSel && clawArm(this.equipment) !== null, this.camera)
+    // はがして手に持ったよろいの板（物語 v7 の影獣）：J で投げる（そのときはクローを撃たない）
+    const plateInHand = combat.holdingPlate
+    if (!locked && plateInHand && frame.pressed.has('claw_fire') && combat.throwPlate()) hud.pulseArm('right')
+    const { jumpConsumed } = locked ? { jumpConsumed: false } : claw.handleInput(frame, !impactArm && !chronoSel && !plateInHand && clawArm(this.equipment) !== null, this.camera)
     const ms = combat.moveScale
     const move = locked ? ZERO_AXIS : ms < 1 ? { x: frame.move.x * ms, y: frame.move.y * ms } : frame.move
     player.update(dt, { move, jump: !locked && frame.pressed.has('jump') && !jumpConsumed && !combat.downed, dash: !locked && frame.held.has('dash') }, camRig.yaw)
@@ -1191,6 +1194,7 @@ export class Game {
     }
     const impactArm = this.impactInUse(claw)
     const fight: Hint[] = a.combat.enabled && a.combat.inCombat ? [{ key: 'K', label: '攻撃' }, { key: 'Shift', label: '回避' }] : []
+    if (a.combat.holdingPlate) return [{ key: 'J', label: '板を投げる' }, ...fight]
     if (impactArm) return [{ key: 'J', label: 'はじく' }, ...fight, { key: 'E', label: '右腕へ' }]
     const sel = claw.selectedTarget
     if (sel) {

@@ -55,6 +55,11 @@ export type ClawTargetDef = {
    * ステージが、いま狙ってほしい物（次の歯車など）に付ける。R の切りかえの順にも効く
    */
   priority?: number
+  /**
+   * 照準の吸い付き範囲の倍率（1 がふつう）。小さいほど、ネクマックスの正面へきちんと向けないと選ばれない
+   * （ボスのよろいの板など、ねらう手ごたえがほしい物に 0.4〜0.6）
+   */
+  cone?: number
   /** pull_player：着地点（足元） */
   landing?: THREE.Vector3
   /** pull_player：途中で必ず通る点（手すりや屋根を越えるため） */
@@ -155,8 +160,9 @@ export function evaluateTarget(
   if (!def.enabled) return null
   const v = viewOf(basis, def.point)
   if (!v) return null
-  const ex = v.x / tuning.coneX
-  const ey = v.y / tuning.coneY
+  const cone = def.cone ?? 1
+  const ex = v.x / (tuning.coneX * cone)
+  const ey = v.y / (tuning.coneY * cone)
   const ell = Math.hypot(ex, ey)
   const inCone = ell <= 1
   if (Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) return null

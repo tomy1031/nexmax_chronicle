@@ -50,6 +50,18 @@ export type SpawnOptions = {
   plates?: THREE.Object3D[]
   /** よろいの板が 1 枚はがれた（残りの枚数） */
   onPlate?: (left: number) => void
+  /** よろいの板は、ゆるむまで（loosenPlates）はがせない。ゆるんでいないときに J で引くと、がっちりはじかれる */
+  platesLocked?: boolean
+  /** はがした板を手に持つ（もう一度 J で投げる。当たると装甲に関係なくダメージで、大きくひるむ） */
+  plateThrow?: boolean
+  /** 投げた板が当たったときのダメージ（既定 2） */
+  throwDamage?: number
+  /** ゆるんでいない板を J で引いた（ステージがヒントを出す） */
+  onPlateLocked?: () => void
+  /** 投げた板が、この敵に当たった */
+  onPlateHit?: () => void
+  /** 照準の吸い付き範囲の倍率（ClawTargetDef.cone。小さいほど、正面へきちんと向けないと選ばれない） */
+  aimCone?: number
 }
 
 /** K の攻撃が当たる、敵でない物（ボスの体の一部・トワなど）。ステージが addHitTarget で足す */
@@ -104,7 +116,23 @@ type Enemy = EnemyHandle & {
   removed: boolean
   /** やられて戻ったときも体力を残す */
   keepHp: boolean
+  /** よろいの板はゆるむまではがせない */
+  platesLocked: boolean
+  /** よろいの板がゆるんでいる残りの秒 */
+  looseT: number
+  plateThrow: boolean
+  throwDamage: number
+  onPlateLocked: (() => void) | null
+  onPlateHit: (() => void) | null
 }
+
+/** 手に持った・投げたよろいの板 */
+type HeldPlate = { obj: THREE.Object3D; damage: number }
+type ThrownPlate = HeldPlate & { vel: THREE.Vector3; t: number; dropT: number }
+
+/** 投げた板の速さ（m/s）と、まわりの敵へ向きを寄せる角度（ラジアン） */
+const THROW_SPEED = 17
+const THROW_HOMING = 0.45
 
 /** 小さな破片・火花（使い回し） */
 class Sparks {
@@ -187,6 +215,8 @@ export type CombatHost = {
   ui: HTMLElement | null
   /** 画面の揺れ（シェルの rt.shake） */
   shake(amount: number): void
+  /** 当たった所の輪をカメラへ向ける */
+  camera?: THREE.Camera
 }
 
 export class CombatSystem {
@@ -215,12 +245,17 @@ export class CombatSystem {
   private readonly sparks = new Sparks()
   private readonly ring: THREE.Mesh
   private ringT = -1
+  /** パンチ・投げた板が当たった所に広がる輪（どこに当たったか、ひと目でわかるように） */
+  private readonly hitRings: Array<{ mesh: THREE.Mesh; t: number; size: number }> = []
   private hurtT = 0
   private impactT = 0
   private impactCd = 0
   private impactFired = false
   /** 当たった瞬間の止まり（実時間の秒） */
   private hitstop = 0
+  /** はがして手に持ったよろいの板・投げて飛んでいる板 */
+  private held: HeldPlate | null = null
+  private readonly thrown: ThrownPlate[] = []
   private downT = -1
   private seq = 0
   private clock = 0
@@ -242,6 +277,13 @@ export class CombatSystem {
     )
     this.ring.visible = false
     this.group.add(this.ring)
+    const hitGeo = new THREE.RingGeometry(0.55, 1, 28)
+    for (let i = 0; i < 4; i++) {
+      const mesh = new THREE.Mesh(hitGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.6, 2.2), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }))
+      mesh.visible = false
+      this.group.add(mesh)
+      this.hitRings.push({ mesh, t: -1, size: 1 })
+    }
     this.start.copy(host.player.position)
     this.fade = document.createElement('div')
     this.fade.className = 'combat-fade'
@@ -283,6 +325,7 @@ export class CombatSystem {
       noLineOfSight: false,
       range: 11,
       landing: pos.clone(),
+      cone: o.aimCone,
     }
     const e: Enemy = {
       id,
@@ -316,11 +359,70 @@ export class CombatSystem {
       dyingT: -1,
       hidden: !!o.hidden,
       removed: false,
+      platesLocked: !!o.platesLocked,
+      looseT: 0,
+      plateThrow: !!o.plateThrow,
+      throwDamage: o.throwDamage ?? 2,
+      onPlateLocked: o.onPlateLocked ?? null,
+      onPlateHit: o.onPlateHit ?? null,
     }
     this.enemies.push(e)
     this.byDef.set(def, e)
     this.host.claw.targets.push(def)
     return e
+  }
+
+  /** よろいの板を sec 秒だけゆるめる（その間だけ J ではがせる）。ステージが「柱にぶつかった」などで呼ぶ。0 で締め直す */
+  loosenPlates(h: EnemyHandle, sec: number): void {
+    const e = this.enemies.find((x) => x.id === h.id)
+    if (e) e.looseT = Math.max(0, sec)
+  }
+
+  /** いま、よろいの板をはがせるか（ゆるんでいる、または締めていない敵） */
+  platesLoose(h: EnemyHandle): boolean {
+    const e = this.enemies.find((x) => x.id === h.id)
+    return !!e?.plates?.length && (!e.platesLocked || e.looseT > 0)
+  }
+
+  /** はがしたよろいの板を手に持っている（J で投げる） */
+  get holdingPlate(): boolean {
+    return this.held !== null
+  }
+
+  /** 持っている板を、向いている方へ投げる（正面の近くに敵がいれば、そちらへ少し寄せる） */
+  throwPlate(): boolean {
+    const h = this.held
+    if (!h || this.downT >= 0) return false
+    this.held = null
+    const pl = this.host.player
+    const P = pl.position
+    const dir = new THREE.Vector3(-Math.sin(pl.facing), 0, -Math.cos(pl.facing))
+    let best: Enemy | null = null
+    let bestA = THROW_HOMING
+    for (const e of this.enemies) {
+      if (!e.alive || e.hidden || e.removed) continue
+      const dx = e.pos.x - P.x
+      const dz = e.pos.z - P.z
+      if (dx * dx + dz * dz > 14 * 14) continue
+      const a = Math.abs(angleTo(pl.facing, dx, dz))
+      if (a < bestA) {
+        bestA = a
+        best = e
+      }
+    }
+    if (best) dir.set(best.pos.x - h.obj.position.x, best.pos.y + best.model.chestY * best.scale - h.obj.position.y, best.pos.z - h.obj.position.z).normalize()
+    this.thrown.push({ ...h, vel: dir.multiplyScalar(THROW_SPEED).add(new THREE.Vector3(0, 1.2, 0)), t: 0, dropT: -1 })
+    this.combo.cancel()
+    pl.burstMove(dir.x * -1.2, dir.z * -1.2, 0.08)
+    return true
+  }
+
+  /** 持っている板・飛んでいる板を片付ける（場面の切りかえ・やられたとき） */
+  dropPlates(): void {
+    if (this.held) this.held.obj.removeFromParent()
+    this.held = null
+    for (const t of this.thrown) t.obj.removeFromParent()
+    this.thrown.length = 0
   }
 
   /** 隠して出した敵を出す（ボスの登場など） */
@@ -488,7 +590,12 @@ export class CombatSystem {
     switch (ev.kind) {
       case 'connected':
         if (ev.target.type === 'enemy_pull') {
-          if (e.plates && e.plates.length) {
+          if (e.plates && e.plates.length && e.platesLocked && e.looseT <= 0) {
+            // ゆるんでいない：がっちりくっついていて、はがれない
+            this.sparks.burst(e.def.point, '#9fd8ff', 12, 3)
+            this.host.shake(0.12)
+            e.onPlateLocked?.()
+          } else if (e.plates && e.plates.length) {
             this.stripPlate(e)
           } else if (e.brain.shield && e.model.shield) {
             // 盾をはがす：盾だけが手元へ飛んでくる
@@ -516,7 +623,13 @@ export class CombatSystem {
           e.yank = null
           this.sparks.burst(this.tmp.copy(e.pos).setY(e.pos.y + 0.4), '#c77dff', 8, 2.5)
         }
-        if (e.shieldFly) e.shieldFly.dropT = 0
+        if (e.shieldFly && e.plateThrow && e.shieldFly.dropT < 0) {
+          // はがした板を手に持つ（もう一度 J で投げる）
+          if (this.held) this.held.obj.removeFromParent()
+          this.held = { obj: e.shieldFly.obj, damage: e.throwDamage }
+          e.shieldFly = null
+          this.host.hud.toast('J で、板を投げ返そう！', 2.4)
+        } else if (e.shieldFly) e.shieldFly.dropT = 0
         break
       case 'arrived':
         if (ev.target.type === 'enemy_zip') {
@@ -544,6 +657,7 @@ export class CombatSystem {
     if (e.shieldFly) e.shieldFly.obj.removeFromParent()
     e.shieldFly = { obj, from: wp.clone(), t: 0, dropT: -1 }
     e.brain.stun(1.1)
+    e.looseT = 0
     this.sparks.burst(wp, '#ffb347', 14, 3.5)
     this.host.shake(0.18)
     const left = e.plates?.length ?? 0
@@ -591,6 +705,18 @@ export class CombatSystem {
         this.fireImpact()
       }
     }
+    for (const r of this.hitRings) {
+      if (r.t < 0) continue
+      r.t += dt
+      const k = r.t / 0.22
+      r.mesh.scale.setScalar(r.size * (0.3 + k * 1.1))
+      r.mesh.quaternion.copy(this.host.camera?.quaternion ?? r.mesh.quaternion)
+      ;(r.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - k)
+      if (k >= 1) {
+        r.t = -1
+        r.mesh.visible = false
+      }
+    }
     if (this.ringT >= 0) {
       this.ringT += dt
       const k = this.ringT / 0.32
@@ -605,6 +731,7 @@ export class CombatSystem {
     const playerDown = this.downT >= 0 || this.health.dead
     for (const e of this.enemies) if (!e.removed) this.updateEnemy(e, dt, playerDown)
     for (let i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i].removed) this.enemies.splice(i, 1)
+    this.updatePlates(dt)
     this.sparks.update(dt)
     hud.setHp(this.health.hp)
     if (this.bossBar?.e) {
@@ -725,6 +852,63 @@ export class CombatSystem {
     if (hit) this.hitstop = Math.max(this.hitstop, 0.08)
   }
 
+  /** 手に持った板（体の前）と、投げた板（まっすぐ飛んで、敵に当たるか、壁・地面で落ちる） */
+  private updatePlates(dt: number): void {
+    const pl = this.host.player
+    const P = pl.position
+    const h = this.held
+    if (h) {
+      h.obj.position.set(P.x - Math.sin(pl.facing) * 0.75, P.y + 0.95, P.z - Math.cos(pl.facing) * 0.75)
+      h.obj.rotation.set(0, pl.facing + Math.PI, 0)
+    }
+    for (let i = this.thrown.length - 1; i >= 0; i--) {
+      const t = this.thrown[i]
+      const o = t.obj.position
+      if (t.dropT >= 0) {
+        t.dropT += dt
+        o.y = Math.max(P.y - 0.4, o.y - dt * 3)
+        t.obj.scale.setScalar(Math.max(0.01, 1 - t.dropT / 0.7))
+        if (t.dropT > 0.7) {
+          t.obj.removeFromParent()
+          this.thrown.splice(i, 1)
+        }
+        continue
+      }
+      t.t += dt
+      t.vel.y -= 5 * dt
+      const step = t.vel.length() * dt
+      this.tmp.copy(t.vel).normalize()
+      const wall = this.host.phys.raycast(o, this.tmp, step + 0.2, pl.collider, true)
+      o.addScaledVector(t.vel, dt)
+      t.obj.rotation.x += dt * 14
+      // 敵に当たったか
+      let hit: Enemy | null = null
+      for (const e of this.enemies) {
+        if (!e.alive || e.hidden || e.removed) continue
+        const r = e.brain.stats.radius * e.scale + 0.45
+        const cy = e.pos.y + e.model.chestY * e.scale
+        if (Math.hypot(o.x - e.pos.x, o.z - e.pos.z) < r && o.y > e.pos.y - 0.2 && o.y < cy + 1.2 * e.scale) {
+          hit = e
+          break
+        }
+      }
+      if (hit) {
+        const res = hit.brain.hurtThrough(t.damage, 2.4)
+        this.onEnemyHurt(hit, res, 3, 0.12)
+        this.sparks.burst(this.tmp.copy(o), '#ffd36a', 26, 6)
+        this.host.shake(0.4)
+        hit.onPlateHit?.()
+        t.obj.removeFromParent()
+        this.thrown.splice(i, 1)
+        continue
+      }
+      if (wall !== null || t.t > 1.4 || o.y < P.y - 3) {
+        this.sparks.burst(this.tmp.copy(o), '#ffb347', 8, 2.5)
+        t.dropT = 0
+      }
+    }
+  }
+
   private onEnemyHurt(e: Enemy, res: 'blocked' | 'hurt' | 'killed', knock: number, stop: number): void {
     const P = this.host.player.position
     const chest = this.tmp2.copy(e.pos).setY(e.pos.y + e.model.chestY * e.scale)
@@ -744,6 +928,7 @@ export class CombatSystem {
       return
     }
     e.model.hit()
+    this.popHitRing(chest, stop >= 0.07 ? 0.9 : 0.6)
     e.knock.addScaledVector(this.tmp, knock)
     this.sparks.burst(chest, res === 'killed' ? '#c77dff' : '#ff6fa8', res === 'killed' ? 22 : 9, res === 'killed' ? 5 : 3)
     this.hitstop = Math.max(this.hitstop, stop)
@@ -752,6 +937,16 @@ export class CombatSystem {
       e.def.enabled = false
       e.yank = null
     }
+  }
+
+  /** 当たった所に白い輪を出す（いちばん古い輪を使い回す） */
+  private popHitRing(at: THREE.Vector3, size: number): void {
+    let r = this.hitRings.find((x) => x.t < 0)
+    if (!r) r = this.hitRings.reduce((a, b) => (a.t > b.t ? a : b))
+    r.t = 0
+    r.size = size
+    r.mesh.position.copy(at)
+    r.mesh.visible = true
   }
 
   /** 敵の正面から当たったか（盾で防げる向き） */
@@ -822,6 +1017,7 @@ export class CombatSystem {
       }
       return
     }
+    if (e.looseT > 0) e.looseT = Math.max(0, e.looseT - dt)
     // 装甲が戻った（よろいの板の敵は板が見た目）
     if (e.brain.armored && !e.plates && e.brain.armor !== e.model.armorShown) {
       e.model.setArmor(e.brain.armor)
@@ -983,6 +1179,7 @@ export class CombatSystem {
     this.downT = -1
     this.health.refill()
     this.combo.cancel()
+    this.dropPlates()
     pl.teleport(this.checkpoint ?? this.start, this.checkpoint ? this.checkpointYaw : undefined)
     // 敵は住みかへ戻って元どおり
     for (const e of this.enemies) {
@@ -1002,6 +1199,7 @@ export class CombatSystem {
   }
 
   dispose(): void {
+    this.dropPlates()
     this.showBoss(null)
     this.fade.remove()
     for (const e of this.enemies) {
@@ -1014,6 +1212,8 @@ export class CombatSystem {
     this.sparks.dispose()
     this.ring.geometry.dispose()
     ;(this.ring.material as THREE.Material).dispose()
+    this.hitRings[0]?.mesh.geometry.dispose()
+    for (const r of this.hitRings) (r.mesh.material as THREE.Material).dispose()
     this.group.removeFromParent()
   }
 }

@@ -1076,6 +1076,7 @@ export class TimeBellDoll {
   bellWave(): number {
     if (!this.ready) return -1
     this.walkTarget = null
+    this.struck = true
     this.enter('bellUp')
     return (T.bellUp + T.bellHit) / this.rage
   }
@@ -1148,6 +1149,7 @@ export class TimeBellDoll {
   /** 攻撃を打ち切る（歯車をつかまれて、あばれ始めたとき）。衝撃波も消える */
   interrupt(): void {
     this.walkTarget = null
+    this.struck = true
     this.warn.set(0, 0, 0)
     this.waveR = -1
     this.wave.set(this.waveCenter, 0, 0)
@@ -1157,6 +1159,7 @@ export class TimeBellDoll {
   /** 戦いをやり直す（体力 0 から戻ったとき）：攻撃と衝撃波を消し、台座の前に立たせる。止めた歯車はそのまま */
   resetFight(): void {
     this.walkTarget = null
+    this.struck = true
     this.faceTarget = null
     this.warn.set(0, 0, 0)
     this.waveR = -1

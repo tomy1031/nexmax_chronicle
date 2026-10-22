@@ -669,11 +669,10 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
   }
 
   function updateFace(dt: number): void {
-    // 表情：自動ならポーズに合わせる
+    // 表情：自動ならポーズに合わせる。クローでつかむ・引っぱられるときは変えない（キリッとした目が、こわく見えるので）
     let want = baseExpr
     if (character.autoExpression) {
-      if (pose === 'hold' || pose === 'pulled') want = 'determined'
-      else if (pose === 'fall' && t - slotStart.fall > 0.35) want = 'surprised'
+      if (pose === 'fall' && t - slotStart.fall > 0.35) want = 'surprised'
     }
     // まばたき（表情の切り替えはまぶたを閉じた瞬間に）
     blinkIn -= dt

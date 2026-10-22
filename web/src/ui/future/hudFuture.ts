@@ -745,9 +745,9 @@ export class HudFuture {
     this.applyMood()
   }
 
-  /** プレイヤーのポーズ（保持・引き寄せ＝必死、落下＝驚き） */
+  /** プレイヤーのポーズ（落下＝驚き）。クローでつかむ・引っぱられる・ぶら下がるときは表情を変えない（キリッとした目が、こわく見えるので） */
   setPlayerPose(p: PlayerPoseHint | string | null): void {
-    const m: PortraitExpression | null = p === 'hold' || p === 'pulled' || p === 'swing' || p === 'crank' ? 'determined' : p === 'fall' ? 'surprised' : null
+    const m: PortraitExpression | null = p === 'fall' ? 'surprised' : null
     if (m === this.poseMood) return
     this.poseMood = m
     this.applyMood()
@@ -771,7 +771,6 @@ export class HudFuture {
     if (this.moodOverride) return this.moodOverride
     if (this.moodTimed) return this.moodTimed.e
     if (this.poseMood) return this.poseMood
-    if (this.armsBusy) return 'determined'
     if (this.hp <= 1) return 'worried'
     return 'happy'
   }

@@ -432,6 +432,52 @@ export class ChronicleNambaStage implements Stage {
     return this.saeki.root.position.clone().setY(1.1)
   }
 
+  /**
+   * ネクマックスの背中の、すりへった「NEXTMAKE」の板（背中の石の下）。主人公のモデルには無いので、
+   * 社長が板を読む場面だけ、ステージが小さな板を付けて、場面のおわりで外す（解放もここで）
+   */
+  private attachBackPlate(rt: StageRuntime): THREE.Mesh | null {
+    const root = rt.nexmax.root
+    const ore = root.getObjectByName('ore') as THREE.Mesh | undefined
+    if (!ore?.geometry) return null
+    ore.geometry.computeBoundingBox()
+    const c = (ore.geometry.boundingBox as THREE.Box3).getCenter(new THREE.Vector3())
+    root.updateMatrixWorld(true)
+    ore.localToWorld(c)
+    root.worldToLocal(c)
+    const cv = document.createElement('canvas')
+    cv.width = 256
+    cv.height = 112
+    const g = cv.getContext('2d') as CanvasRenderingContext2D
+    const gr = g.createLinearGradient(0, 0, 256, 112)
+    gr.addColorStop(0, '#b8c2cc')
+    gr.addColorStop(1, '#8a949e')
+    g.fillStyle = gr
+    g.fillRect(0, 0, 256, 112)
+    g.strokeStyle = '#5a6470'
+    g.lineWidth = 6
+    g.strokeRect(3, 3, 250, 106)
+    g.fillStyle = '#26303a'
+    g.font = '900 40px "Hiragino Sans","Noto Sans JP",sans-serif'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText('NEXTMAKE', 128, 44)
+    g.font = '700 26px "Hiragino Sans","Noto Sans JP",sans-serif'
+    g.fillText('0 \u2591 1', 128, 86)
+    // すりへった跡
+    for (let i = 0; i < 160; i++) {
+      g.fillStyle = `rgba(230,236,240,${(0.15 + Math.random() * 0.35).toFixed(2)})`
+      g.fillRect(Math.random() * 256, Math.random() * 112, 2 + Math.random() * 10, 1 + Math.random() * 2)
+    }
+    const tex = new THREE.CanvasTexture(cv)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.0875), new THREE.MeshStandardMaterial({ map: tex, metalness: 0.5, roughness: 0.45 }))
+    m.name = 'v7_back_plate'
+    m.position.set(c.x, c.y - 0.15, c.z + 0.035)
+    root.add(m)
+    return m
+  }
+
   /** 遊歩道を歩く町の人（影獣が出たら、にげていなくなる・たおしたら戻る） */
   private setPromenadeCrowd(on: boolean): void {
     for (const c of this.ns.pedestrians.group.children) if (c.position.z > 5 && c.position.z < 10.5 && c.position.x < 10) c.visible = on
@@ -502,8 +548,12 @@ export class ChronicleNambaStage implements Stage {
     // うしろを向く（前 = 社長から遠ざかる向き）
     const back = Math.atan2(-(p.x - mAt.x), -(p.z - mAt.z))
     rt.player.teleport(p, back)
-    const plateAt = v(p.x, 0.62, p.z)
-    void rt.cinematic({ look: plateAt, from: v(p.x + (mAt.x - p.x) * 0.55, 1.05, p.z + (mAt.z - p.z) * 0.55), hold: Infinity, inSec: 0.9, fov: 38, arc: 0 })
+    // 背中の板（すりへった「NEXTMAKE」の板。この場面だけ、背中の石の下に見せる）
+    const backPlate = this.attachBackPlate(rt)
+    // 社長の肩ごしに、ネクマックスの背中の板（少しはなれて、背中ぜんたいが見える）
+    const tm = this.tmp.set(mAt.x - p.x, 0, mAt.z - p.z).normalize()
+    const plateAt = v(p.x, 0.6, p.z)
+    void rt.cinematic({ look: plateAt, from: v(p.x + tm.x * 1.9 - tm.z * 0.75 * sgn, 1.1, p.z + tm.z * 1.9 + tm.x * 0.75 * sgn), hold: Infinity, inSec: 0.9, fov: 40, arc: 0 })
     await this.clock.wait(1.1)
     const PL = lines.lines('paradox_plate')
     this.antics.play(m, 'hop2')
@@ -520,6 +570,13 @@ export class ChronicleNambaStage implements Stage {
     this.antics.play(m, 'headHold', 3.2)
     this.antics.emote(m, 'swirl', 3.2)
     await rt.dialogue(PL.slice(2))
+    if (backPlate) {
+      backPlate.removeFromParent()
+      backPlate.geometry.dispose()
+      const bm = backPlate.material as THREE.MeshStandardMaterial
+      bm.map?.dispose()
+      bm.dispose()
+    }
     void rt.cinematic({ look: v((p.x + mAt.x + sAt.x) / 3, 1.15, (p.z + mAt.z + sAt.z) / 3), from: camFrom, hold: Infinity, inSec: 1.0, fov: 50 })
     await rt.dialogue(lines.lines('tell_2086'))
     rt.endCinematic()

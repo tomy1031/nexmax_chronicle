@@ -39,8 +39,8 @@ export const TOWNSFOLK: TownPersonDef[] = [
   { id: 't_gossip_b', x: -26.6, z: 12.9, yaw: Math.PI / 2 - 0.4, h: 1.5, hair: 1, cloth: '#8a3a32', obi: '#2a2f4a' },
   // 岸の大工（どの家にもからくり時計）
   { id: 't_carpenter', x: -23.0, z: 8.45, yaw: Math.PI - 0.6, h: 1.66, hair: 0, cloth: '#5a6a4a', obi: '#3a2a1a' },
-  // 子ども（「あのからくり、どこの工房のん？」）
-  { id: 't_child', x: -21.6, z: 9.3, yaw: Math.PI / 2 - 0.4, h: 1.08, hair: 2, cloth: '#c86a3a', obi: '#f2c84b' },
+  // 子ども（「あのからくり、どこの工房のん？」）。大工と近すぎると、F でどちらと話すか選びにくいので少しはなす
+  { id: 't_child', x: -20.2, z: 10.1, yaw: Math.PI / 2 - 0.2, h: 1.08, hair: 2, cloth: '#c86a3a', obi: '#f2c84b' },
   // 茶屋のおかみ（茶運び人形のしくみ）
   { id: 't_teahouse', x: -33.2, z: 12.5, yaw: Math.PI - 0.2, h: 1.5, hair: 1, cloth: '#6a5a8a', obi: '#e8d8b0' },
   // 舟着き場の船頭（時の鐘が舟を出す合図）

@@ -23,10 +23,11 @@ import { Lamp, SHADE_STYLE, createPerson, type PersonCharacter, type PersonPose 
 import { buildKhmerScene, KHMER_BALL_ID, type KhmerScene } from './sceneKhmer'
 import { KHMER_ENVIRONMENTS, KhmerEnvMaps, applyKhmerTime, type TimeOfDay } from './environment'
 import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, towerPoint, type Spot, type TowerId } from './layout'
-import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
+import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerMobPhase, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
 import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
 import { createKhmerVillagers, type KhmerVillager } from './people'
+import { MobTalkKhmer } from './mobTalkKhmer'
 import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
 
@@ -53,6 +54,9 @@ const URA_EXIT = v(K.URA_ENTRY.x - 0.4, K.TOP_Y, K.URA_ENTRY.z - 2.6)
 /** 宝の箱（折れた刃のかけらをしまう） */
 const TREASURE_BOX = v(23.6, K.TOP_Y, -9.4)
 /** 夜の影が出る所（上の台） */
+/** 落ちてくる石が体に当たる水平の近さ（石の半分の幅＋体の太さ）と、飛ばされる速さ */
+const STONE_HIT_R = 0.46 + 0.36
+const STONE_KNOCK = 6
 const TOP_SPAWNS = [v(24, K.TOP_Y, -10.2), v(28, K.TOP_Y, -10.2), v(24, K.TOP_Y, 2.2), v(28.2, K.TOP_Y, 2.2), v(32.2, K.TOP_Y, -4), v(32.2, K.TOP_Y, -7.6)]
 
 export class KhmerStage implements Stage {
@@ -69,6 +73,8 @@ export class KhmerStage implements Stage {
   private towa!: PersonCharacter
   private lamp!: Lamp
   private villagers: KhmerVillager[] = []
+  /** 村の人の吹き出しと F の会話 */
+  private mobs: MobTalkKhmer | null = null
   private rt: StageRuntime | null = null
   private readonly clock = new SceneClock()
   private readonly walker = new Walker()
@@ -92,6 +98,7 @@ export class KhmerStage implements Stage {
   private towaFloat = 0
   private towaShown = false
   private readonly marks: ObjectiveMark[] = []
+  private readonly hitDir = new THREE.Vector3()
   /** 落ちる石を、足場にならない高さで止めた回数（ヒント用） */
   private stoneMiss = 0
   /** rt.chrono に渡した止める対象（enabled を毎フレーム切りかえる） */
@@ -162,6 +169,7 @@ export class KhmerStage implements Stage {
     this.rt = rt
     this.sc.attachPhysics(rt.phys)
     this.curtain = new Curtain()
+    this.mobs = new MobTalkKhmer(this.villagers, rt.renderer.domElement.ownerDocument.getElementById('ui'), rt.camera, () => this.time !== 'night')
     this.maps = new KhmerEnvMaps(rt.renderer)
     this.maps.borrow(this.time, rt.scene.environment)
     // 1186 年に来ているなら、時空裂きのNMクロー（10 章）はもう持っている（開発で ?stage=1186 から始めたときのため）
@@ -736,6 +744,8 @@ export class KhmerStage implements Stage {
     const f = this.f(rt)
     // 止められる物（いま止めて意味のある物だけ狙える）
     this.updateFreezables(rt, step)
+    // 村の人の吹き出し（夜・裏側・場面の間は黙る）
+    this.mobs?.update(dt, rt, khmerMobPhase(step, this.ballGiven), this.busy || this.ura.active)
     // チャンダについて行く → 上の台でおばあさん
     if (step === 'meet' && this.meet === 'follow' && !this.busy && this.onTop(rt) && this.chanda.root.position.distanceTo(NPC.chanda.altar.pos) < 3) void this.runAltar(rt)
     // 鏡：塔に近づいたら一言
@@ -749,6 +759,8 @@ export class KhmerStage implements Stage {
     }
     // 夜：のぼっている間、上の台に着いたら
     if (step === 'night' && this.night === 'defend') this.chandaFight(dt, rt)
+    // 夜：トワがくずした段から落ちてくる石は、体に当たったら軽く吹っ飛ばす
+    if (step === 'night' && (this.night === 'climb' || this.night === 'defend') && !this.busy) this.stoneHits(rt)
     // トワが下がる
     if (this.towaRetreat >= 0) {
       this.towaRetreat += dt
@@ -772,6 +784,28 @@ export class KhmerStage implements Stage {
       else if (fz.id.startsWith('khmer_stone_south')) on = on && step === 'mirrors'
       else on = on && step === 'night'
       t.enabled = on
+    }
+  }
+
+  /**
+   * 夜：落ちてくる石（止めていない・落ちている最中）が、本当にネクマックスの体に重なったら、
+   * 石からネクマックスへの向きに軽く吹っ飛ばす（体力は 1 へるが、最後の 1 は残す。無敵時間はシェル）。
+   * 石の上に乗っているとき（石が足の下）は当たらない
+   */
+  private stoneHits(rt: StageRuntime): void {
+    const P = rt.player.position
+    for (const st of this.sc.stairs.stones) {
+      const L = st.logic
+      if (!L.active || L.frozen || L.phase !== 'fall' || L.resting) continue
+      // 高さ：石が足もとより上・頭より下にかかっている
+      if (L.pos.y - L.half > P.y + 1.0 || L.pos.y + L.half < P.y + 0.2) continue
+      const dx = P.x - L.pos.x
+      const dz = P.z - L.pos.z
+      if (Math.hypot(dx, dz) > STONE_HIT_R) continue
+      // 真上から落ちてきたときは、段の下（西）へ
+      const dir = Math.hypot(dx, dz) > 0.08 ? this.hitDir.set(dx, 0, dz) : this.hitDir.set(-1, 0, 0)
+      rt.combat.hurtPlayer(1, dir.normalize(), STONE_KNOCK, false)
+      rt.shake(0.3)
     }
   }
 
@@ -849,6 +883,7 @@ export class KhmerStage implements Stage {
       v0.ch.root.visible = !far && this.time !== 'night'
       if (!far) v0.ch.update(dt, 0)
     }
+    this.mobs?.render(dt)
     this.ura.animate(dt, t)
   }
 
@@ -888,27 +923,26 @@ export class KhmerStage implements Stage {
       }
     }
     // まりを子どもに返す
-    if (!this.ballGiven && rt.claw.wire.phase === 'carrying' && rt.claw.wire.target?.id === KHMER_BALL_ID) {
-      const kid = this.villagers.find((x) => x.id === 'kid1')
-      if (kid && near(kid.ch.root, 3)) {
-        this.giveBall(rt, kid.ch)
-        return true
-      }
-    }
-    // 村の人
-    for (const vv of this.villagers) {
-      if (!vv.ch.root.visible || !near(vv.ch.root, 2.2)) continue
-      const all = this.lines('villager_talk')
-      const line = vv.id.startsWith('kid') && !this.ballGiven ? this.lines('kids_ball')[0] : all[Math.floor(Math.random() * all.length)]
-      this.walker.face(vv.ch, p)
-      void rt.dialogue([line])
+    const kid = this.ballKid(rt)
+    if (kid) {
+      this.giveBall(rt, kid.ch)
       return true
     }
+    // 村の人（話しかけた人は、ネクマックスの方を向く）
+    if (this.mobs?.interact(rt, (vv) => this.walker.face(vv.ch, p))) return true
     if (this.ringOpen && rt.player.position.distanceTo(RETURN_RING) < 2.6) {
       this.leave(rt)
       return true
     }
     return false
+  }
+
+  /** まりを持って、子ども（kid1）のそばにいる（F で返せる） */
+  private ballKid(rt: StageRuntime): KhmerVillager | null {
+    if (this.ballGiven || rt.claw.wire.phase !== 'carrying' || rt.claw.wire.target?.id !== KHMER_BALL_ID) return null
+    const kid = this.villagers.find((x) => x.id === 'kid1')
+    const p = rt.player.position
+    return kid && kid.ch.root.position.distanceTo(p) < 3 && Math.abs(kid.ch.root.position.y - p.y) < 1.5 ? kid : null
   }
 
   private giveBall(rt: StageRuntime, kid: PersonCharacter): void {
@@ -940,8 +974,8 @@ export class KhmerStage implements Stage {
       if (id && canPlaceMirror(id, this.f(rt), this.sc.turntable.solved)) return [{ key: 'F', label: '鏡を立てる' }]
     }
     if (this.ringOpen && p.distanceTo(RETURN_RING) < 2.6) return [{ key: 'F', label: '帰る' }]
-    for (const vv of this.villagers) if (vv.ch.root.visible && near(vv.ch.root, 2.2)) return [{ key: 'F', label: '話す' }]
-    return null
+    if (this.ballKid(rt)) return [{ key: 'F', label: 'まりを返す' }]
+    return this.mobs?.hints(rt) ?? null
   }
 
   objective(rt: StageRuntime): { title: string; sub: string } {
@@ -1066,6 +1100,7 @@ export class KhmerStage implements Stage {
       collapsed: this.sc.stairs.collapsedList,
       ring: this.ringOpen,
       near: this.nearTower,
+      mobs: this.mobs?.debugInfo() ?? null,
       ...(this.ura?.debug() ?? {}),
     }
   }
@@ -1074,6 +1109,8 @@ export class KhmerStage implements Stage {
     this.clock.dispose()
     this.walker.clear()
     this.curtain?.dispose()
+    this.mobs?.dispose()
+    this.mobs = null
     this.maps?.dispose()
     this.ura?.dispose()
     this.sc?.dispose()

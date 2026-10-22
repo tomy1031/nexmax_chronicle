@@ -343,13 +343,17 @@ export const VILLAGERS: VillagerSpot[] = [
   { id: 'elder', ...spot(-60.5, 0, 4, -1.6), role: 'sit' },
   { id: 'weaver', ...spot(-74.4, 0, 22.6, 0.2), role: 'sit' },
   { id: 'fisher1', ...spot(-30.6, -0.1, -46.2, 0.8), role: 'fish' },
-  { id: 'fisher2', ...spot(-49, K.WALK_Y, -54.6, 0), role: 'stand' },
+  // 水の上の家の人：東へのびる板の道（z=-58）の北のふち。自分の家（v2）の方を向く（前は板の道と家のあいだの水の上に浮いていた）
+  { id: 'fisher2', ...spot(-49.6, K.WALK_Y, -57.3, 0.2), role: 'stand' },
   { id: 'watch1', ...spot(-28.4, 0, -12, -2.4), role: 'stand' },
   { id: 'watch2', ...spot(-34.4, 0, -36.6, -0.6), role: 'stand' },
   { id: 'monk1', ...spot(6.6, 0, 6.4, -1.6), role: 'monk' },
   { id: 'monk2', ...spot(-4.6, 0, -9.4, -1.3), role: 'monk' },
   { id: 'temple1', ...spot(34, 0, 14, 2.2), role: 'stand' },
   { id: 'road1', ...spot(18, 0, 43.4, -1.6), role: 'carry' },
+  // ナーガの橋の西のたもと（獅子の像のそば）の番人・象のりばの象使い（池の象を見ている）
+  { id: 'bridge1', ...spot(-31.5, 0, -7.6, -0.4), role: 'stand' },
+  { id: 'mahout', ...spot(-9.5, 0, -33.8, -0.8), role: 'stand' },
 ]
 
 // ------------------------------------------------------------------ 到着地点

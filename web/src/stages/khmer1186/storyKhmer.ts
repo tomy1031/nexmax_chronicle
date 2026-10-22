@@ -49,6 +49,18 @@ export function khmerTime(step: KhmerStep): 'afternoon' | 'night' | 'dawn' {
   return 'afternoon'
 }
 
+/**
+ * 村の人の台詞の場面（mob_lines_v7.json）：day（着いてからおばあさんに会うまで）・mirrors（鏡を立てる間）・
+ * night（村の人は出ない）・dawn（夜明けのあと）。ball：木に引っかかったまりを子どもに返した（昼だけ *_ball）
+ */
+export function khmerMobPhase(step: KhmerStep, ball = false): string {
+  const t = khmerTime(step)
+  if (t === 'night') return 'night'
+  if (t === 'dawn') return 'dawn'
+  const p = step === 'mirrors' ? 'mirrors' : 'day'
+  return ball ? `${p}_ball` : p
+}
+
 /** 夜の防衛の中の段階（実行中だけ。セーブはしない：夜の頭からやり直す） */
 export type NightPhase = 'intro' | 'climb' | 'defend' | 'talk' | 'dawn'
 

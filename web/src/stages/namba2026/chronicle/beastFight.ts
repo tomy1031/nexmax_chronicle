@@ -231,6 +231,9 @@ export class BeastFight {
       this.fx.clear()
       return
     }
+    // 最後の板をはがすと、戦闘が獣の的を「飛び込む」に変えるので、手元へ引いたワイヤーが「持っている」のまま残る
+    //（K のパンチも J も効かなくなる）。板は戦闘が手に持たせているので、ワイヤーだけもどす
+    if (rt.claw.wire.phase === 'carrying' && rt.claw.wire.target === h.def) rt.claw.reset()
     // 板を投げた（持っていたのに、もう無い）→ 少しして当たっていなければ、ひとこと
     const holdNow = rt.combat.holdingPlate
     if (this.holding && !holdNow && !rt.combat.downed) {

@@ -1075,8 +1075,11 @@ export class CombatSystem {
         }
         case 'leap':
           if (e.brain.t < 0.22) {
-            vx = -Math.sin(e.yaw) * st.leap
-            vz = -Math.cos(e.yaw) * st.leap
+            // とびかかり：向きは溜めの終わりで決まったまま、プレイヤーの近くまでとどく速さで（遠すぎるときは決まった速さまで）
+            const want = Math.max(0, dist - st.hitRange * 0.6 * e.scale)
+            const spd = Math.min(st.leap * 1.4, want / 0.22)
+            vx = -Math.sin(e.yaw) * spd
+            vz = -Math.cos(e.yaw) * spd
           }
           break
       }
@@ -1087,7 +1090,8 @@ export class CombatSystem {
       // 壁：進む向きにレイを飛ばして、当たるなら止まる
       const sp = Math.hypot(vx, vz)
       if (sp > 1e-3) {
-        this.tmp.set(e.pos.x, e.pos.y + Math.min(0.6, st.height * 0.5), e.pos.z)
+        // 壁を見る高さは 0.5m 以上（階段の段や低い段差は、壁とみなさずに上る。上る高さは下の「地面に沿う」で合わせる）
+        this.tmp.set(e.pos.x, e.pos.y + Math.max(0.5, Math.min(0.9, st.height * 0.6)), e.pos.z)
         this.tmp2.set(vx / sp, 0, vz / sp)
         const hit = this.host.phys.raycast(this.tmp, this.tmp2, sp * dt + r, pl.collider)
         if (hit === null) {

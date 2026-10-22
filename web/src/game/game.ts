@@ -36,7 +36,7 @@ import { TravelFx } from './travelFx'
 import { RiftFx } from './riftFx'
 import { applyEnvironment, type AppliedEnvironment } from './env'
 import { disposeObject3D } from './dispose'
-import { DialogueQueue, lineDuration, type DialogueLine } from './dialogueQueue'
+import { DialogueQueue, type DialogueLine } from './dialogueQueue'
 import { createStage, DEFAULT_STAGE, STAGE_INFO } from './registry'
 import { CineDirector, autoFramePosition, type CineShot } from './cinematic'
 import { CineMarkerFx } from './cineMarker'
@@ -86,6 +86,8 @@ const ZERO_AXIS = Object.freeze({ x: 0, y: 0 })
 
 /** 開始直後に出す操作案内（秒） */
 const START_HINT_TIME = 14
+/** 会話の 1 行をウィンドウに出しておく最長の秒（実時間。ふつうは次の行・会話の終わりで消える） */
+const DIALOGUE_HOLD_SEC = 600
 
 /** 読み込んでいるステージと、そのステージ用に作った物理・プレイヤー・クロー */
 type Active = {
@@ -690,13 +692,18 @@ export class Game {
     })
   }
 
+  /**
+   * 会話の 1 行：次の行へ進むか会話が終わるまで出したまま（ウィンドウは実時間で消えるが、会話はゲームの時間で進むので、
+   * フレームが遅い端末で会話の途中にウィンドウが先に消えないように）
+   */
   private showLine(l: DialogueLine): void {
-    this.hud.say(l.speaker, l.text, lineDuration(l.text) + 1.6)
+    this.hud.say(l.speaker, l.text, DIALOGUE_HOLD_SEC)
   }
 
   private endDialogue(): void {
     const t = this.talk
     this.talk = null
+    if (t) this.hud.clearDialog()
     t?.resolve()
   }
 

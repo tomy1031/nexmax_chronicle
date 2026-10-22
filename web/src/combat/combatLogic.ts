@@ -449,7 +449,8 @@ export class EnemyBrain {
         }
         return { ...out, move: i.leashed ? 'none' : 'home' }
       case 'chase':
-        if (i.passive || i.dist > s.lose || !i.leashed) {
+        // 住みかから離れすぎたら帰る。ただし、プレイヤーがすぐそば（とどく所）にいるときは帰らずに戦う
+        if (i.passive || i.dist > s.lose || (!i.leashed && i.dist > s.reach)) {
           this.state = 'idle'
           this.t = 0
           return { ...out, move: 'home' }

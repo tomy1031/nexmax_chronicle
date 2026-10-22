@@ -191,3 +191,20 @@ describe('投げた板（よろいの影獣）', () => {
     expect(b.alive).toBe(false)
   })
 })
+
+describe('住みかから離れた敵', () => {
+  it('プレイヤーがとどく所にいれば、帰らずに攻撃する。遠ければ帰る', () => {
+    const b = new EnemyBrain('mite', 1)
+    b.update(0.016, { dist: 5, leashed: true, passive: false })
+    expect(b.state).toBe('chase')
+    b.update(0.016, { dist: 1.2, leashed: false, passive: false })
+    expect(b.state).toBe('chase')
+    b.update(1.5, { dist: 1.2, leashed: false, passive: false })
+    b.update(0.016, { dist: 1.2, leashed: false, passive: false })
+    expect(b.state).toBe('windup')
+    const c = new EnemyBrain('mite', 2)
+    c.update(0.016, { dist: 5, leashed: true, passive: false })
+    c.update(0.016, { dist: 6, leashed: false, passive: false })
+    expect(c.state).toBe('idle')
+  })
+})

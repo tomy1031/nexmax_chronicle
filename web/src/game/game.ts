@@ -19,7 +19,7 @@ import { TARGET_CATEGORY, isChronoTarget, type ClawTargetType } from '../player/
 import { PART_NAMES, canOpenHub, clawArm, equipFromFlags, initialEquipment, selectArm, selectedPart, type Equipment } from '../player/equipment'
 import { CombatSystem } from '../combat/combatSystem'
 import { ChronoSystem } from '../chronicle/chrono'
-import { CHAPTER_ERA, chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
+import { BIG_CHAPTER, CHAPTER_ERA, chapterOf, lightsLeft, riftClawUnlocked, v7Started, type Chapter } from '../chronicle/progress'
 import { ChapterCard } from '../chronicle/chapterCard'
 import { applyV7Portraits } from '../chronicle/art'
 import { applyPose, applyRigClaw, applyRigOreGlow, applyRigSwing, choosePose } from '../player/poseDriver'
@@ -156,7 +156,7 @@ export class Game {
   private readonly cineBars: HTMLDivElement
   /** 物語 v7 の章のとびら。chapterShown はもう出した章（起動時の章は出さない） */
   private readonly chapterCard: ChapterCard
-  private chapterShown = -1
+  private chapterShown: Chapter = 0
   private chapterIdle = 0
   private readonly cineAuto = new THREE.Vector3()
   private readonly cineDir = new THREE.Vector3()
@@ -632,8 +632,7 @@ export class Game {
         const c = (n ?? chapterOf((k) => this.story.get(k))) as Chapter
         // 番号を指定しないときは、その章の時代にいるときだけ出す（前の時代の終わりで章が進んだとき）
         if (c <= this.chapterShown || (n === undefined && CHAPTER_ERA[c] !== a.stage.key)) return Promise.resolve()
-        this.chapterShown = c
-        return this.chapterCard.show(c)
+        return this.openChapter(c, false)
       },
       get playTime() {
         return g.playTime
@@ -652,6 +651,25 @@ export class Game {
     this.travelFx.setProgress(0, '')
     this.departT = 0
     return v
+  }
+
+  /**
+   * 章が進んだ：大きな章が変わればとびら（終わるまで待つ）、同じ大きな章の中なら場面の題を小さく出すだけ（すぐ返る）。
+   * instant：とびらを、はじめから全部おおった形で出す（画面を見せる前に）
+   */
+  private openChapter(c: Chapter, instant: boolean): Promise<void> {
+    const prev = this.chapterShown
+    this.chapterShown = c
+    if (BIG_CHAPTER[c] !== BIG_CHAPTER[prev]) return this.chapterCard.show(BIG_CHAPTER[c], 5.2, instant)
+    this.chapterCard.caption(c)
+    return Promise.resolve()
+  }
+
+  /** 着いた時代で出す章（まだ出していない章で、その章の時代に着いたとき）。無ければ null */
+  private chapterDueHere(a: Active): Chapter | null {
+    const f = (n: string) => this.story.get(n)
+    const c = chapterOf(f)
+    return v7Started(f) && c > this.chapterShown && CHAPTER_ERA[c] === a.stage.key ? c : null
   }
 
   private showEraCard(key: StageKey, sub: string): void {
@@ -740,6 +758,8 @@ export class Game {
     const t = claw.selectedTarget
     return !t || t.type === 'enemy_pull' || t.type === 'enemy_zip'
   }
+  /** 時代を移って着いたときの章のとびらを出している（閉じたら場面を始める） */
+  private arrivalCard = false
   /** 前のフレームで照準を R でロックしていたか（ロック中は止まっていれば対象の方を向く） */
   private lastLocked = false
 
@@ -753,19 +773,27 @@ export class Game {
     // 時空移動
     for (const e of this.travel.tick(dt)) {
       if (e.kind === 'cover') void this.swap(e.request)
-      else if (e.kind === 'revealed') this.showEraCard(e.request.to, this.active?.stage.subtitle ?? '')
-      else if (e.kind === 'done') {
+      else if (e.kind === 'revealed') {
+        // 物語 v7：大きな章が変わるときは、画面を見せる前に（まだ光でおおわれているうちに）とびらで隠し、
+        // とびらが閉じてから時代の札と場面を始める（フィールドが先に見えないように）
         const a = this.active
-        if (a) {
-          // 物語 v7：章が進んでいたら、着いた所で章のとびらを出してから場面を始める
-          const f = (n: string) => this.story.get(n)
-          const c = chapterOf(f)
-          if (v7Started(f) && c > this.chapterShown && CHAPTER_ERA[c] === a.stage.key) {
-            this.chapterShown = c
-            void this.chapterCard.show(c).then(() => {
-              if (this.active === a && !a.dead) a.stage.revealed?.(a.rt)
-            })
-          } else a.stage.revealed?.(a.rt)
+        const c = a ? this.chapterDueHere(a) : null
+        if (a && c !== null && BIG_CHAPTER[c] !== BIG_CHAPTER[this.chapterShown]) {
+          this.arrivalCard = true
+          void this.openChapter(c, true).then(() => {
+            this.arrivalCard = false
+            if (this.active !== a || a.dead) return
+            this.showEraCard(e.request.to, a.stage.subtitle ?? '')
+            a.stage.revealed?.(a.rt)
+          })
+        } else this.showEraCard(e.request.to, this.active?.stage.subtitle ?? '')
+      } else if (e.kind === 'done') {
+        const a = this.active
+        if (a && !this.arrivalCard) {
+          // 同じ大きな章の中で、着いた所で場面が変わる：場面の題を小さく出して始める
+          const c = this.chapterDueHere(a)
+          if (c !== null) void this.openChapter(c, false)
+          a.stage.revealed?.(a.rt)
         }
       }
     }
@@ -817,7 +845,7 @@ export class Game {
     a.combat.animate(ndt * a.combat.timeScale, uTime.value)
     a.chrono.update(ndt, this.camera)
     if (!frozen) this.tickDialogue(ndt, false)
-    this.chapterCard.update()
+    this.chapterCard.update(dt)
     // クロー（右手首の発射口から）
     this.nexmax.root.updateMatrixWorld(true)
     this.nexmax.handAnchor.getWorldPosition(this.hand)

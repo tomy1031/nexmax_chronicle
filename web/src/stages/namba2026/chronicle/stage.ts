@@ -1258,7 +1258,7 @@ export class ChronicleNambaStage implements Stage {
     this.armorFx?.update(dt, t)
     this.surgeC?.update(dt, t, rt.camera)
     this.search?.update(dt)
-    this.qr?.update(dt)
+    this.qr?.update(dt, rt.camera)
     this.mob?.render(dt)
     const p = rt.player.position
     for (const ch of [this.matsui, this.saeki, this.ofuji]) {

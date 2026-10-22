@@ -323,7 +323,7 @@ export class BeastFight {
           h.pos.x = Math.min(ARENA.x1, Math.max(ARENA.x0, h.pos.x + m.sx * k))
           h.pos.z = Math.min(ARENA.zMax, h.pos.z + m.sz * k)
         }
-        this.head.copy(h.pos).setY(h.pos.y + 2.75 * T.scale * 0.85)
+        this.head.copy(h.pos).setY(h.pos.y + 2.0 * T.scale)
         this.fx.setStars(this.head)
         if (b.state !== 'stunned' && m.t > 0.5) {
           this.fx.setStars(null)
@@ -749,6 +749,7 @@ export class BeastFight {
   /** ゆるんだ板：光って、ガタガタ（次にはがれる板＝いちばん後ろの板） */
   private updatePlates(_dt: number): void {
     const loose = this.plates > 0 && this.rt.combat.platesLoose(this.h)
+    if (!loose) this.fx.setPlateGlow(null)
     const i = this.plates - 1
     if (i < 0) return
     const mesh = this.plateMeshes[i]
@@ -758,7 +759,8 @@ export class BeastFight {
     this.h.def.noLineOfSight = loose
     if (loose) {
       const t = performance.now() / 1000
-      mat.emissiveIntensity = 0.9 + 0.7 * Math.abs(Math.sin(t * 9))
+      mat.emissiveIntensity = 1.4 + 1.4 * Math.abs(Math.sin(t * 9))
+      this.fx.setPlateGlow(mesh.getWorldPosition(this.tmp2))
       mesh.rotation.set(base.r.x + Math.sin(t * 41) * 0.09, base.r.y + Math.sin(t * 37) * 0.07, base.r.z + Math.sin(t * 29) * 0.08)
       mesh.position.set(base.p.x + Math.sin(t * 33) * 0.03, base.p.y + Math.abs(Math.sin(t * 23)) * 0.05, base.p.z - 0.06)
     } else if (mat.emissiveIntensity !== 0) {

@@ -111,6 +111,10 @@ export class BeastFx {
   private readonly starMat: THREE.SpriteMaterial
   private starsOn = false
   private readonly starAt = new THREE.Vector3()
+  // ゆるんだ板の光（キラキラ）
+  private readonly glow: THREE.Sprite
+  private readonly glowMat: THREE.SpriteMaterial
+  private glowOn = false
   // 土ぼこり
   private readonly puffs: Puff[] = []
   private readonly puffMat: THREE.SpriteMaterial
@@ -180,6 +184,14 @@ export class BeastFx {
       this.stars.push(s)
       this.group.add(s)
     }
+    // ゆるんだ板の光：黄色いやわらかい光（加算）
+    this.glowMat = new THREE.SpriteMaterial({ map: puffTexture(), color: new THREE.Color(2.4, 1.9, 0.5), transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0 })
+    this.glow = new THREE.Sprite(this.glowMat)
+    this.glow.visible = false
+    this.glow.renderOrder = 9
+    this.group.add(this.glow)
+    this.mats.push(this.glowMat)
+    this.texs.push(this.glowMat.map as THREE.Texture)
     // 土ぼこり
     const puffTex = puffTexture()
     this.puffMat = new THREE.SpriteMaterial({ map: puffTex, color: '#d8ccb8', transparent: true, depthWrite: false, opacity: 0.8 })
@@ -263,6 +275,13 @@ export class BeastFx {
     for (const s of this.stars) s.visible = this.starsOn
   }
 
+  /** ゆるんだ板の光（板のまん中。null で消す） */
+  setPlateGlow(at: THREE.Vector3 | null): void {
+    this.glowOn = !!at
+    this.glow.visible = this.glowOn
+    if (at) this.glow.position.copy(at)
+  }
+
   /** 土ぼこり（足元から n 個） */
   puff(at: THREE.Vector3, n = 6, spread = 0.8, size = 0.9): void {
     for (let k = 0; k < n; k++) {
@@ -293,6 +312,11 @@ export class BeastFx {
       this.pillarRing.scale.setScalar(0.7 + 0.15 * Math.sin(t * 7))
       this.bang.position.y += Math.sin(t * 9) * 0.004
     }
+    if (this.glowOn) {
+      const k = 0.5 + 0.5 * Math.sin(t * 10)
+      this.glowMat.opacity = 0.45 + 0.4 * k
+      this.glow.scale.setScalar(1.3 + 0.35 * k)
+    }
     if (this.starsOn) {
       for (let i = 0; i < this.stars.length; i++) {
         const a = t * 4.2 + (i / this.stars.length) * Math.PI * 2
@@ -318,6 +342,7 @@ export class BeastFx {
     this.showTarget(null)
     this.stopWave()
     this.setStars(null)
+    this.setPlateGlow(null)
     for (const p of this.puffs) {
       p.t = p.life
       p.s.visible = false

@@ -130,7 +130,8 @@ export class KanbanQr {
     this.resonance = v
   }
 
-  update(dt: number): void {
+  /** camera：うかぶ QR をカメラの方へ向ける（横だけ回す） */
+  update(dt: number, camera?: THREE.Camera): void {
     this.t += dt
     this.level += (this.target - this.level) * Math.min(1, dt * 6)
     const on = this.level > 0.01
@@ -140,6 +141,11 @@ export class KanbanQr {
     const wob = r * 0.025 * Math.sin(this.t * 40)
     this.holo.position.copy(this.center).addScaledVector(this.up, Math.sin(this.t * 2) * 0.03 + wob)
     this.holo.scale.setScalar(0.6 + 0.4 * this.level + r * 0.12)
+    if (camera) {
+      const yaw = Math.atan2(camera.position.x - this.holo.position.x, camera.position.z - this.holo.position.z)
+      this.holo.rotation.set(0, yaw, 0)
+      this.line.rotation.set(0, yaw, 0)
+    }
     this.holoMat.opacity = this.level * (0.85 + 0.15 * Math.sin(this.t * 12))
     this.holoMat.color.setRGB(1.4 + r * 1.4, 1.8 + r * 0.6, 2.0 - r * 1.2)
     const k = Math.sin(this.t * 3.4)

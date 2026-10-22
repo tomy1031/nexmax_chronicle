@@ -27,7 +27,7 @@ export const BEAST_TUNING = {
   /** 柱以外（壁・行き止まり）で止まった・走りきった：ふり返るまで */
   miss: { bonk: 1.1, skid: 0.9 },
   /** とびかかり：構え・ねらいが決まるのは跳ぶ何秒前か・空中・衝撃の輪の速さと大きさ・高さ・吹っ飛ばし */
-  pounce: { windup: 1.35, lockBefore: 0.55, air: 0.75, ringSpeed: 4.6, ringMax: 6.0, ringBand: 0.45, ringHeight: 0.3, landR: 1.7, knock: 7 },
+  pounce: { windup: 1.35, lockBefore: 0.55, air: 0.75, ringSpeed: 4.2, ringMax: 5.5, ringBand: 0.4, ringHeight: 0.22, landR: 1.7, knock: 7 },
   /** よろいがなくなっておこる（ほえる）秒 */
   roar: 1.4,
   /** 佐伯さんをつかむ：おこってから何秒後か（または体力がこの数以下）・はなすまで */

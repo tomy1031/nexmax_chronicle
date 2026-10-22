@@ -28,31 +28,91 @@ const TZ1 = -20.0
 const CK = { x0: 5.1, x1: 9.9, z0: -24.3, z1: -19.5, y0: 16.0, y1: 21.6 }
 const DECK_Y = 22.4
 
-/** 西の壁の足場（上面の高さ・範囲）。ネクマックスがのぼる順 */
+/** 足場（上面の高さ・範囲）。rail：手すり付き */
 export type Ledge = { id: string; y: number; x0: number; x1: number; z0: number; z1: number; rail?: boolean }
 
+/** 塔の西の壁の足場（下から）。l2 = 針の橋の向こう（C）、l3 = 金具の先（D）、l4 = 時計の部分の下をぐるりと回る回廊（E） */
 const LEDGES: Ledge[] = [
-  { id: 'l1', y: 3.6, x0: 4.4, x1: TX0, z0: -21.9, z1: -20.3 },
-  // とちゅうの足場（手すり付きのバルコニー。チェックポイント）
+  // 針の橋の向こうの、手すり付きのバルコニー（C）
   { id: 'l2', y: 7.4, x0: 4.2, x1: TX0, z0: TZ0, z1: TZ1, rail: true },
-  { id: 'l3', y: 11.2, x0: 4.4, x1: TX0, z0: -23.6, z1: -22.0 },
-  // 時計の部分の下をぐるりと回る回廊（西の側に着く。2 つ目のとちゅうの足場）
+  // 金具でのぼった先の細い足場（D）。北の端で、回る歯車の金具を待つ
+  { id: 'l3', y: 11.2, x0: 4.4, x1: TX0, z0: -23.6, z1: -20.3 },
+  // 時計の部分の下をぐるりと回る回廊（E。西の側を、がれきをよけて南へ）
   { id: 'l4', y: CK.y0, x0: 4.2, x1: CK.x0, z0: -25.2, z1: -18.6, rail: true },
-  // 北西の角の柱の小さな足場
-  { id: 'l5', y: 19.2, x0: 4.2, x1: CK.x0, z0: -24.5, z1: -23.62 },
 ]
 
 /** 金具（pull_player）：壁の金具の位置と着地点。下から上へ */
 export type HookSpec = { id: string; point: THREE.Vector3; landing: THREE.Vector3; via?: THREE.Vector3 }
 
 const HOOKS: HookSpec[] = [
-  { id: 'clock_hook_1', point: v(TX0 - 0.17, 5.1, -21.1), landing: v(5.0, 3.6, -21.1) },
-  // 着地はバルコニーの南の端：次の金具 3 が真上にならないように（真上の金具は、カメラを上げきっても照準に入らない）
-  { id: 'clock_hook_2', point: v(TX0 - 0.17, 8.85, -22.7), landing: v(4.95, 7.4, -20.5), via: v(3.9, 8.6, -21.4) },
   { id: 'clock_hook_3', point: v(TX0 - 0.17, 12.65, -22.8), landing: v(5.0, 11.2, -22.8), via: v(4.6, 12.8, -22.6) },
-  { id: 'clock_hook_4', point: v(CK.x0 - 0.17, 17.4, -19.86), landing: v(4.65, 16.0, -20.2), via: v(4.3, 17.3, -21.3) },
-  { id: 'clock_hook_5', point: v(CK.x0 - 0.17, 20.6, -24.06), landing: v(4.65, 19.2, -24.06), via: v(4.3, 20.4, -23.7) },
-  { id: 'clock_hook_top', point: v(4.68, 22.85, -22.9), landing: v(6.0, DECK_Y, -22.9), via: v(4.6, 23.9, -22.9) },
+  { id: 'clock_hook_top', point: v(4.68, 22.85, -22.4), landing: v(6.0, DECK_Y, -22.4), via: v(4.6, 23.9, -22.4) },
+]
+
+/**
+ * 4 章の時計台のぼり（アクション）。下から：
+ * (1) 回る大歯車（3 枚。乗ると一緒に回る）を Space でとびうつって、北の足場 A へ
+ * (2) 回る歯車のふちの金具：上に回ってきて金色に光った時だけ J → 渡り廊下 B へ
+ * (3) 渡り廊下 B：壁が赤く光ったら黒い手が足もとをはらう → Space でとびこえて、南の端へ
+ * (4) 大きな針（長い分針。軸は C の北の端）：北で止まると B の南の端へかかる橋になる。止まったらわたって C へ（西へ回っていく間も、軸のほうへ歩けば C）
+ * (5) 金具（J）→ 細い足場 D　(6) 回る歯車のふちの金具（J）→ 時計の下の回廊 E
+ * (7) 回廊 E：赤い輪にがれきが落ちてくる → よけながら南へ　(8) てっぺんの金具（J）→ 屋上
+ * 段ごとにやり直しの位置（CHECKPOINTS）。落ちたら、着いたことのあるいちばん上の位置へ
+ */
+export type GearSpec = { c: THREE.Vector3; r: number; w: number }
+export type GearHookSpec = {
+  id: string
+  /** 歯車の中心（壁の面に立つ。軸は X） */
+  c: THREE.Vector3
+  r: number
+  /** 回る速さ（rad/s） */
+  w: number
+  /** 金具が「上」にいるとみなす角度の幅（てっぺんを 0 として ±） */
+  window: number
+  landing: THREE.Vector3
+  via: THREE.Vector3
+  /** 待つ所（ここから見上げる） */
+  wait: THREE.Vector3
+}
+
+const COURSE_A: Ledge = { id: 'A', y: 2.75, x0: 2.4, x1: 6.2, z0: -32.4, z1: -29.7 }
+const COURSE_B: Ledge = { id: 'B', y: 7.4, x0: 4.6, x1: 6.2, z0: -33.0, z1: -28.6, rail: true }
+const LEDGE_E: Ledge = { id: 'E', y: CK.y0, x0: 4.2, x1: CK.x0, z0: -25.2, z1: -18.6 }
+
+export const COURSE = {
+  /** 大歯車（上面の中心・半径・回る速さ）。乗っている間は一緒に回る */
+  // すき間は 0.3m ほど（落ちても、すき間にはまらない）。高さは 0.7m ずつ（とべる高さ 0.92m）
+  gears: [
+    { c: v(2.1, 0.7, -22.95), r: 1.15, w: 0.5 },
+    { c: v(2.55, 1.4, -25.53), r: 1.15, w: -0.55 },
+    { c: v(3.0, 2.05, -28.1), r: 1.15, w: 0.6 },
+  ] as GearSpec[],
+  A: COURSE_A,
+  /** 北の足場 A の上の、建物の壁の大歯車の金具 → B */
+  hook1: { id: 'gear_hook_1', c: v(6.12, 4.9, -31.0), r: 1.7, w: 0.75, window: 0.85, landing: v(5.4, 7.4, -32.4), via: v(4.2, 8.7, -32.0), wait: v(3.1, 2.75, -31.0) } as GearHookSpec,
+  B: COURSE_B,
+  /** 黒い手がはらう帯（B の上、建物の壁ぞい） */
+  sweep: { x: 6.15, y: 7.4, z0: COURSE_B.z0, z1: COURSE_B.z1 },
+  /** 大きな針：軸（C の北の端。上面の高さ）・長さ・幅。北で dwell 秒止まって B へかかる → 西（通りの上）へ回って away 秒 → もどる */
+  hand: { pivot: v(5.0, 7.4, -23.45), len: 5.25, width: 1.1, dwell: 3.2, away: 2.0, travel: 2.4 },
+  /** 塔の西の壁の、回る歯車の金具 → E（時計の下の回廊の北西のすみ） */
+  hook2: { id: 'gear_hook_2', c: v(5.5, 13.6, -21.4), r: 1.25, w: -0.75, window: 0.85, landing: v(4.65, CK.y0, -24.6), via: v(3.9, 17.4, -23.6), wait: v(4.85, 11.2, -23.25) } as GearHookSpec,
+  /** がれきが落ちる所（E の西の帯） */
+  debris: { x0: 4.25, x1: CK.x0 - 0.05, z0: -25.0, z1: -19.0, y: CK.y0 },
+  /** てっぺんの金具をねらえる所（E の西の帯の、この z より南） */
+  topFromZ: -21.4,
+} as const
+
+export type CheckpointId = 'street' | 'A' | 'B' | 'C' | 'D' | 'E'
+
+/** やり直しの位置（下から）。area：そこに立ったら、その位置まで進んだことにする */
+export const CHECKPOINTS: ReadonlyArray<{ id: CheckpointId; pos: THREE.Vector3; area: Ledge }> = [
+  { id: 'street', pos: v(0.6, 0, -21.4), area: { id: 'street', y: 0, x0: -3, x1: 6, z0: -34, z1: -19.6 } },
+  { id: 'A', pos: v(3.2, COURSE_A.y, -31.0), area: COURSE_A },
+  { id: 'B', pos: v(5.4, COURSE_B.y, -32.4), area: COURSE_B },
+  { id: 'C', pos: v(4.9, 7.4, -20.6), area: LEDGES[0] },
+  { id: 'D', pos: v(4.9, 11.2, -22.8), area: LEDGES[1] },
+  { id: 'E', pos: v(4.65, CK.y0, -24.6), area: LEDGE_E },
 ]
 
 export const TOWER = {
@@ -76,13 +136,8 @@ export const TOWER = {
   towa: { pos: v(7.5, DECK_Y, -19.62), yaw: Math.PI },
   /** 12章：時計台の上の大きなゆらぎ（空を大きく裂く所） */
   seamTop: v(7.5, 28.8, -21.9),
-  /**
-   * のぼり始める所（通りの上）。壁から 3m ほど離す：近すぎると、最初の金具が足場の板にかくれ、
-   * カメラを上げきっても照準に入らない
-   */
-  foot: v(2.2, 0, -21.4),
-  /** 黒い手が壁をなでる所（西の壁の帯。y はその帯の高さ。予告の光をここに出す） */
-  sweeps: [5.6, 9.4, 13.8, 17.6, 20.9].map((y, i) => ({ id: `sweep_${i + 1}`, y, x: TX0 - 0.03, z0: CK.z0, z1: CK.z1 })),
+  /** のぼり始める所（通りの上。最初の大歯車の南西） */
+  foot: v(0.6, 0, -21.4),
 } as const
 
 // ------------------------------------------------------------------ 地下通路（祭りの地下通路「なんばウォーク」の一部）
@@ -188,12 +243,12 @@ export const KEY_STALL = { x: F.STALLS.x, z: 11.75, w: 3.2, d: F.STALLS.d, buy: 
 
 // ------------------------------------------------------------------ まとめ（buildFutureScene に渡す変更）
 
-/** 人・通りの植え込みを置かない所（時計台の足元・地下の入口・跡地の門の前・ソラのわっかの前（リングの中の体験客も）） */
+/** 人・通りの植え込みを置かない所（時計台の足元とのぼりのコース・地下の入口・跡地の門の前・ソラのわっかと展示の台の前（リングの中の体験客も）） */
 export const CLEAR_AREAS: GroundRect[] = [
   { x0: -6.0, x1: -2.8, z0: -32.0, z1: -23.0 },
-  { x0: 2.4, x1: 6.2, z0: -25.0, z1: -19.6 },
+  { x0: -0.2, x1: 6.4, z0: -34.0, z1: -19.6 },
   { x0: 3.2, x1: 6.4, z0: -43.0, z1: -35.6 },
-  { x0: -12.4, x1: -5.0, z0: -5.6, z1: 0.4 },
+  { x0: -12.4, x1: -5.0, z0: -5.6, z1: 2.2 },
 ]
 
 /** 北の通りの行き止まり（跡地の先） */

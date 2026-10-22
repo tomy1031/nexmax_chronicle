@@ -15,6 +15,7 @@ import {
   morningOf,
   musicOf,
   objectiveOf,
+  screenOn,
   siteVariantOf,
   spawnFor,
   step2086,
@@ -56,6 +57,20 @@ describe("2086 年の段階（フラグだけから）", () => {
     for (const k of ORDER) seen.add(step2086(upTo(k)));
     // 帰還の直後（到着のフラグを立てる前）の段階
     for (const s of STEPS_2086) expect(seen.has(s), s).toBe(true);
+  });
+
+  it("1 章のお使い：レンズ → 中継アンテナ（開場）→ QR の見せ場 → キーホルダー", () => {
+    expect(step2086(upTo("v7_lens_done"))).toBe("ch1_antenna");
+    expect(step2086(upTo("v7_antenna_done"))).toBe("ch1_qr");
+    expect(step2086(upTo("v7_qr_demo"))).toBe("ch1_keychain");
+    // 一度目の 10月18日は、レンズをわたしたあとはずっとはまっている。大画面は、アンテナをつなぐまで「映像信号なし」
+    expect(lensMounted("ch1_antenna", false)).toBe(true);
+    expect(lensMounted("ch2_night", false)).toBe(true);
+    expect(screenOn("ch1_antenna", false)).toBe(false);
+    expect(screenOn("ch1_antenna", true)).toBe(true);
+    expect(screenOn("ch3_morning", false)).toBe(true);
+    expect(defaultPhase("ch1_antenna")).toBe("antenna_hook");
+    expect(defaultPhase("ch5_door")).toBe("qr_door");
   });
 
   it("おもな切りかわり", () => {

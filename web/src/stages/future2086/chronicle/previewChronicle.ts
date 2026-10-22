@@ -194,8 +194,8 @@ export function setupChroniclePreview(x: ChroniclePreviewCtx): { update(dt: numb
   // 時計（既定：昼 10:00、夜 20:40）
   const clock = (urlp.get('clock') ?? (cam.time === 'night' || urlp.get('time') === 'night' ? '20:40' : '10:00')).split(':').map(Number)
   ch.tower.setTime(clock[0] ?? 10, clock[1] ?? 0)
-  if (urlp.has('sweep')) ch.tower.setSweepWarn(Number(urlp.get('sweep')), 1)
-  ch.tower.setNextHook(urlp.has('hook') ? Number(urlp.get('hook')) : camName === 'climb' ? 2 : null)
+  if (urlp.has('sweep')) ch.course.setSweepWarn(Number(urlp.get('sweep')))
+  ch.tower.setNextHook(urlp.has('hook') ? Number(urlp.get('hook')) : camName === 'climb' ? 0 : null)
   if (urlp.has('skyseam')) ch.tower.setSkySeam(Number(urlp.get('skyseam')))
   if (urlp.has('breach')) ch.underground.breach(Number(urlp.get('breach')))
   if (x.street) {
@@ -237,6 +237,7 @@ export function setupChroniclePreview(x: ChroniclePreviewCtx): { update(dt: numb
     update(dt: number) {
       t += dt
       panel?.update(dt)
+      ch.course.update(dt)
       if (ghost && t > 1.2 && t - dt <= 1.2) void ch.site.ghostSwap(variant, Number(urlp.get('ghostSec') ?? 4))
       if (urlp.get('toolbox') === 'freeze' && !frozeTool && t > 0.25) {
         frozeTool = true

@@ -1,15 +1,15 @@
 // 時計台（物語 v7 の 2・4・12 章）：北の通りの入口、北東の段々のビルの角に立つ高さ約 20m の塔。
 // ・白いパネルの胴（角に光る線）、紺の時計の部分に 4 面の大きな文字盤（夜は内側から灯る。針はシェーダで描くので 1 回の描画）
 // ・てっぺんの足場（トワが立つ。低い胸壁・四隅の提灯・北に細い尖塔と光る輪）
-// ・通りに面した西の壁：のぼる金具 6 個（pull_player、着地点つき）と足場 5 段（2 段目と 4 段目は手すり付きのとちゅうの足場）。
+// ・通りに面した西の壁：足場（C のバルコニー・D の細い足場・E の時計の下の回廊）と金具 2 個（pull_player、着地点つき）。
+//   4 章ののぼりのコース（大歯車・大きな針・回る歯車の金具・がれき）は towerCourse.ts。
 //   次につかむ金具だけを金色の輪と脈打つ光で目立たせる（setNextHook。ほかは細い水色の輪だけ）
-// ・黒い手が壁をなでる所の予告（西の壁の横の帯が赤紫に脈打つ）
 import * as THREE from 'three'
 import { M, rbox } from '../../../render/batch'
 import { uTime } from '../../../render/materials'
 import type { ClawTargetDef } from '../../../player/clawLogic'
 import { NEON, chochin, fbox, glowRailing, neon, type FCtx } from '../kit2086'
-import { TOWER } from './layoutChronicle'
+import { COURSE, TOWER } from './layoutChronicle'
 import { additive, canvasTexture, createSeamMaterial, font, softDotTexture, verticalText } from './kitChronicle'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
@@ -22,8 +22,6 @@ export type ClockTowerParts = {
   setTime(hours: number, minutes: number): void
   /** 次につかむ金具（hooks の番号。null で金色の印を消す） */
   setNextHook(index: number | null): void
-  /** 黒い手が壁をなでる予告の強さ（lane は TOWER.sweeps の番号、k は 0..1） */
-  setSweepWarn(lane: number, k: number): void
   /** 屋上にトワが立っているか（夜、トワの後ろの後光を強くして、夜空に姿が読めるように） */
   setTowaOnTop(on: boolean): void
   /** 12 章：時計台の上の空の大きなゆらぎ（裂く所。0..1。0 で消す） */
@@ -121,22 +119,6 @@ void main() {
   col = mix(col, vec3(1.0, 0.8, 0.35) * mix(1.1, 1.9, uNight), cap);
   col += vec3(0.5, 0.85, 1.6) * uFlash * (1.2 - r);
   gl_FragColor = vec4(col, 1.0);
-}
-`
-
-// ------------------------------------------------------------------ 予告の帯
-
-const warnFrag = /* glsl */ `
-uniform float uK;
-uniform float uTime;
-varying vec2 vUv;
-void main() {
-  float y = abs(vUv.y - 0.5) * 2.0;
-  float band = (1.0 - smoothstep(0.2, 1.0, y));
-  float sweep = 0.55 + 0.45 * sin(vUv.x * 18.0 + uTime * 12.0);
-  float pulse = 0.6 + 0.4 * sin(uTime * 9.0);
-  float a = band * uK * pulse * (0.6 + 0.4 * sweep);
-  gl_FragColor = vec4(vec3(2.6, 0.3, 1.2) * a, a);
 }
 `
 
@@ -238,9 +220,8 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
       c.col.box((x0 + x1) / 2, L.y - 0.16, lz, x1 - x0, 0.32, ld)
       neon(c, v(x0 - 0.01, L.y - 0.22, L.z0), v(x0 - 0.01, L.y - 0.22, L.z1), 0.04, NEON.cyan)
       neon(c, v(x0, L.y - 0.22, L.z1 + 0.01), v(x1, L.y - 0.22, L.z1 + 0.01), 0.04, NEON.cyan)
-      // 手すり（西・南・北の外の縁。西は金具の所だけ低く）
-      railing(x0 + 0.05, L.z0 + 0.05, x0 + 0.05, -21.0, L.y, 0.9)
-      railing(x0 + 0.05, -19.4, x0 + 0.05, L.z1 - 0.05, L.y, 0.6)
+      // 手すり（西・南・北の外の縁）
+      railing(x0 + 0.05, L.z0 + 0.05, x0 + 0.05, L.z1 - 0.05, L.y, 0.9)
       railing(x0 + 0.05, L.z1 - 0.05, x1 - 0.05, L.z1 - 0.05, L.y, 0.9)
       railing(x0 + 0.05, L.z0 + 0.05, x1 - 0.05, L.z0 + 0.05, L.y, 0.9)
       // 下の支え（斜めの腕）
@@ -254,7 +235,8 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
     c.b.add(new THREE.RingGeometry(0.28, 0.34, 24), c.fm.glow, M(lx, L.y + 0.012, lz, -Math.PI / 2, 0, 0), { tint: new THREE.Color(0.25, 0.7, 1.0), cast: false, receive: false })
     // 下の支え（三角の腕）
     for (const z of [L.z0 + 0.25, L.z1 - 0.25]) c.b.add(rbox(0.1, 0.9, 0.1, 0.02), c.fm.darkMetal, M(L.x0 + lw * 0.45, L.y - 0.6, z, 0, 0, -0.75))
-    if (L.rail) railing(L.x0 + 0.05, L.z0 + 0.05, L.x0 + 0.05, L.z1 - 0.05, L.y, 0.85)
+    // 手すり（西の縁）。C は北の端を、大きな針が回ってくるので空けておく
+    if (L.rail) railing(L.x0 + 0.05, L.id === 'l2' ? COURSE.hand.pivot.z + COURSE.hand.width / 2 + 0.25 : L.z0 + 0.05, L.x0 + 0.05, L.z1 - 0.05, L.y, 0.85)
   }
 
   // ---- 時計の部分（紺の箱・白い角柱・4 面の文字盤）
@@ -403,20 +385,6 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
   next.add(backGlow, nextRing, halo)
   group.add(next)
 
-  // ---- 黒い手の予告の帯（西の壁）
-  const warns: Array<{ mesh: THREE.Mesh; mat: THREE.ShaderMaterial }> = []
-  for (const s of T.sweeps) {
-    const mat = new THREE.ShaderMaterial({ vertexShader: dialVert, fragmentShader: warnFrag, uniforms: { uK: { value: 0 }, uTime }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
-    const len = s.z1 - s.z0
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(len + 0.6, 1.1), mat)
-    const x = s.y > C.y0 ? C.x0 - 0.05 : s.x - 0.05
-    mesh.position.set(x, s.y, (s.z0 + s.z1) / 2)
-    mesh.rotation.y = -Math.PI / 2
-    mesh.renderOrder = 5
-    mesh.visible = false
-    group.add(mesh)
-    warns.push({ mesh, mat })
-  }
   // 屋上の後光（夜、トワの後ろがうすく光る：広場から見上げたとき、夜空に黒いトワの姿が読めるように。南を向いた板）
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6), additive('#b4a8ff', 0.0, softDotTexture()))
   glow.position.set(T.towa.pos.x, T.deckY + 1.2, T.towa.pos.z - 0.6)
@@ -476,12 +444,6 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
       const h = index === null ? undefined : T.hooks[index]
       next.visible = !!h
       if (h) next.position.copy(h.point).add(v(-0.02, 0, 0))
-    },
-    setSweepWarn(lane: number, k: number) {
-      const w = warns[lane]
-      if (!w) return
-      w.mat.uniforms.uK.value = k
-      w.mesh.visible = k > 0.001
     },
     setTowaOnTop(on: boolean) {
       towaOnTop = on

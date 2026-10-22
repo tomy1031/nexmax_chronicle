@@ -99,6 +99,9 @@ describe("勝ち方の手順と目標の欄", () => {
     expect(nextMove({ armored: true, dist: 2, scratchReady: false, last: null })).toBe("charge");
     expect(nextMove({ armored: false, dist: 6, scratchReady: true, last: "charge" })).toBe("pounce");
     expect(nextMove({ armored: false, dist: 6, scratchReady: true, last: "pounce" })).toBe("charge");
+    // おこったあとは、ひっかいたら次はかならず大きな動き（前の大きな動きと入れかわる）
+    expect(nextMove({ armored: false, dist: 2, scratchReady: true, last: "scratch", lastBig: "pounce" })).toBe("charge");
+    expect(nextMove({ armored: false, dist: 2, scratchReady: true, last: "scratch", lastBig: "charge" })).toBe("pounce");
   });
 });
 

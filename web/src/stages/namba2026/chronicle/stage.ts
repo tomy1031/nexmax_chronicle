@@ -42,7 +42,7 @@ import { DefenseDirector } from './defenseDirector'
 import { ARMOR_SOURCES, KANBAN, LAB, SHRINE, SPOTS_V7, V7_SPAWNS, type KanbanId } from './layoutV7'
 import { KANBAN_RECORD, STEP_SPAWN, STEP_TIME, combatStep, nambaV7Objective, nambaV7Step, stepMusic, type NambaV7Ctx, type NambaV7Step } from './storyNamba'
 import { BEAST_STATS, BeastFight, type BeastHandle } from './beastFight'
-import { BEAST_TUNING } from './beastLogic'
+import { BEAST_TUNING, beastBossName } from './beastLogic'
 import { KanbanQr } from './qrSign'
 import { NpcAntics } from './npcAntics'
 import { paintEdoMorning } from './recordArt'
@@ -350,7 +350,10 @@ export class ChronicleNambaStage implements Stage {
       plateThrow: true,
       throwDamage: T.throwDamage,
       aimCone: T.aimCone,
-      onPlate: (left) => this.fight?.onPlate(left),
+      onPlate: (left) => {
+        this.fight?.onPlate(left)
+        rt.combat.showBoss(h, beastBossName(left))
+      },
       onPlateLocked: () => this.fight?.onPlateLocked(),
       onPlateHit: () => this.fight?.onPlateHit(),
     }) as BeastHandle
@@ -389,7 +392,7 @@ export class ChronicleNambaStage implements Stage {
     // 戦い
     rt.combat.enabled = true
     rt.combat.setCheckpoint(BEAST.retry, Math.atan2(-(center.x - BEAST.retry.x), -(center.z - BEAST.retry.z)))
-    rt.combat.showBoss(h, 'よろいの影獣')
+    rt.combat.showBoss(h, beastBossName(plateObjs.length))
     this.fight = new BeastFight(rt, h, plateObjs, this.ns.root, {
       saeki: this.saeki,
       walker: this.walker,
@@ -468,13 +471,14 @@ export class ChronicleNambaStage implements Stage {
       q.z = Math.min(10.4, Math.max(1.4, q.z))
       return q
     }
-    const mAt = toward(1.3, 1.0)
-    const sAt = toward(-1.3, 1.1)
+    // 二人は広い方（広場の側）から来る。カメラは二人のうしろから、ネクマックスの顔を見る（建物にめりこまない）
+    const sgn = p.z > 6 ? -1 : 1
+    const mAt = toward(1.3, 1.0 * sgn)
+    const sAt = toward(-1.3, 1.1 * sgn)
     void this.walker.walkTo(m, [mAt], 2.6, p)
     void this.walker.walkTo(s, [sAt], 2.4, p)
     rt.player.teleport(p, Math.atan2(-(mAt.x - p.x), -(mAt.z - p.z)))
-    const side = this.tmp.set(mAt.x - sAt.x, 0, mAt.z - sAt.z).normalize()
-    const camFrom = v(p.x - side.z * 3.2 + (mAt.x + sAt.x - 2 * p.x) * 0.5, 1.6, p.z + side.x * 3.2 + (mAt.z + sAt.z - 2 * p.z) * 0.5)
+    const camFrom = v(p.x + 0.3, 1.6, p.z + sgn * 4.3)
     void rt.cinematic({ look: v((p.x + mAt.x + sAt.x) / 3, 1.15, (p.z + mAt.z + sAt.z) / 3), from: camFrom, hold: Infinity, inSec: 1.2, fov: 50 })
     const D = lines.lines('beast_down')
     await rt.dialogue(D.slice(0, 1))
@@ -505,7 +509,8 @@ export class ChronicleNambaStage implements Stage {
     this.antics.emote(m, 'bang', 1.8)
     await rt.dialogue(PL.slice(0, 1))
     rt.player.teleport(p, Math.atan2(-(mAt.x - p.x), -(mAt.z - p.z)))
-    void rt.cinematic({ look: v(mAt.x, 1.35, mAt.z), from: v(p.x + (mAt.x - p.x) * 0.2 - side.z * 1.4, 1.55, p.z + (mAt.z - p.z) * 0.2 + side.x * 1.4), hold: Infinity, inSec: 0.8, fov: 44 })
+    const toP = this.tmp.set(p.x - mAt.x, 0, p.z - mAt.z).normalize()
+    void rt.cinematic({ look: v(mAt.x, 1.35, mAt.z), from: v(mAt.x + toP.x * 2.1 - toP.z * 0.8, 1.55, mAt.z + toP.z * 2.1 + toP.x * 0.8), hold: Infinity, inSec: 0.8, fov: 44 })
     this.antics.play(m, 'leanBack', 1.2)
     this.antics.emote(m, 'bangq', 2.4)
     await rt.dialogue(PL.slice(1, 2))
@@ -712,7 +717,7 @@ export class ChronicleNambaStage implements Stage {
     await rt.dialogue(lines.lines('depart_touch'))
     // QR を読む：板の前に大きな QR がうかび、目から光
     const hc = qr.holoCenter
-    void rt.cinematic({ look: hc.clone(), from: v(hc.x + 1.9, hc.y + 0.15, hc.z - 1.1), hold: Infinity, inSec: 0.8, fov: 46, arc: 0 })
+    void rt.cinematic({ look: hc.clone(), from: v(Math.min(17.75, hc.x + 1.4), hc.y + 0.1, hc.z - 1.6), hold: Infinity, inSec: 0.8, fov: 46, arc: 0 })
     qr.setHolo(1)
     for (let i = 0; i < 6; i++) {
       c.setScan(this.eyePos(rt), Math.min(1, (i + 1) / 3))

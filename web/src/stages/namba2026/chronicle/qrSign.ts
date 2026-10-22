@@ -97,7 +97,7 @@ export class KanbanQr {
     this.holo = new THREE.Mesh(hg, this.holoMat)
     const rot = new THREE.Euler(0, holoOn.yaw, 0)
     const front = new THREE.Vector3(Math.sin(holoOn.yaw), 0, Math.cos(holoOn.yaw))
-    this.center.copy(holoOn.marker.plate).addScaledVector(front, 0.42).setY(holoOn.marker.plate.y + 0.62)
+    this.center.copy(holoOn.marker.plate).addScaledVector(front, 0.36).setY(holoOn.marker.plate.y + 0.72)
     this.holo.position.copy(this.center)
     this.holo.rotation.copy(rot)
     this.holo.visible = false

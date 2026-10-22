@@ -86,6 +86,7 @@ export class BeastFight {
   private readonly pillars: PillarDisc[]
   private readonly muted: ClawTargetDef[] = []
   private last: BeastMove | null = null
+  private lastBig: BeastMove | null = null
   private scratchCd = 1.5
   private grace = 0
   private angryT = 0
@@ -339,9 +340,16 @@ export class BeastFight {
           this.beginGrab()
           return
         }
-        const ready = this.scratchCd <= 0
+        // おこったあとは、ひっかいたら次は大きな動き（すぐまたひっかかない）
+        const ready = this.scratchCd <= 0 && !(this.angry && this.last === 'scratch')
         if (ready && dist < T.scratch.near && m.t > 0.35) this.begin('scratch', dist)
-        else if (m.t >= m.dur) this.begin(nextMove({ armored: !this.angry, dist, scratchReady: ready, last: this.last }), dist)
+        else if (m.t >= m.dur) {
+          const mv = nextMove({ armored: !this.angry, dist, scratchReady: ready, last: this.last, lastBig: this.lastBig })
+          // 目の前に柱があって勢いがつかないときは、もう少し回りこんでから
+          const blocked = mv === 'charge' && dist > 0.1 && firstPillarOnPath(h.pos.x, h.pos.z, dx / dist, dz / dist, T.charge.minRun + 0.4, this.pillars, T.bodyR) !== null
+          if (blocked && m.t < m.dur + 2.5) return
+          this.begin(mv, dist)
+        }
         return
       }
       case 'scratch':
@@ -437,6 +445,7 @@ export class BeastFight {
   private begin(move: BeastMove, dist: number): void {
     const h = this.h
     this.last = move
+    if (move !== 'scratch') this.lastBig = move
     if (move === 'scratch') {
       this.scratchCd = T.scratch.cooldown + (this.angry ? 0 : 0.8)
       softenEnemy(h, { hitRange: T.scratch.hitRange, windup: T.scratch.windup })
@@ -690,16 +699,30 @@ export class BeastFight {
 
   /** 歩いて動く（壁と戦いの場のはしで止まる） */
   private moveBy(dx: number, dz: number, step: number): void {
+    // まっすぐ行けなければ、柱や物のわきを回りこむ（45°・90° ずつ左右をためす）
+    for (const a of [0, 0.8, -0.8, 1.5, -1.5]) {
+      const c = Math.cos(a)
+      const s = Math.sin(a)
+      const x = dx * c - dz * s
+      const z = dx * s + dz * c
+      if (this.canStep(x, z, step)) {
+        this.h.pos.x += x * step
+        this.h.pos.z += z * step
+        return
+      }
+    }
+  }
+
+  /** その向きへ step だけ進めるか（壁・戦いの場のはし・柱）。柱は少し先まで見る */
+  private canStep(dx: number, dz: number, step: number): boolean {
     const h = this.h
     this.tmp.set(h.pos.x, h.pos.y + 0.45, h.pos.z)
     this.dir.set(dx, 0, dz)
-    if (this.rt.phys.raycast(this.tmp, this.dir, step + T.bodyR * 0.9, this.rt.player.collider) !== null) return
+    if (this.rt.phys.raycast(this.tmp, this.dir, step + T.bodyR * 0.9, this.rt.player.collider) !== null) return false
     const nx = h.pos.x + dx * step
     const nz = h.pos.z + dz * step
-    if (nx < ARENA.x0 || nx > ARENA.x1 || nz > ARENA.zMax) return
-    if (firstPillarOnPath(h.pos.x, h.pos.z, dx, dz, step, this.pillars, T.bodyR * 0.8)) return
-    h.pos.x = nx
-    h.pos.z = nz
+    if (nx < ARENA.x0 || nx > ARENA.x1 || nz > ARENA.zMax) return false
+    return !firstPillarOnPath(h.pos.x, h.pos.z, dx, dz, step + 0.3, this.pillars, T.bodyR * 0.8)
   }
 
   /** 突進の帯（向きと、最初にぶつかる物までの長さ）と、柱の印 */

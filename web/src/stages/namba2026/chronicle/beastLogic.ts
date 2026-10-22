@@ -82,12 +82,13 @@ export type BeastMove = 'scratch' | 'charge' | 'pounce'
 
 /**
  * 近づいたあとの次の動き。よろいがある間は突進が中心（柱にぶつけるのが勝ち方）。近すぎれば、ひっかく。
- * おこったら、とびかかりと突進をかわりばんこ
+ * おこったら、とびかかりと突進をかわりばんこ（ひっかいたあとは、かならず大きな動き。lastBig は前の大きな動き）
  */
-export function nextMove(o: { armored: boolean; dist: number; scratchReady: boolean; last: BeastMove | null }): BeastMove {
-  if (o.scratchReady && o.dist < BEAST_TUNING.scratch.near) return 'scratch'
+export function nextMove(o: { armored: boolean; dist: number; scratchReady: boolean; last: BeastMove | null; lastBig?: BeastMove | null }): BeastMove {
+  const afterScratch = !o.armored && o.last === 'scratch'
+  if (o.scratchReady && !afterScratch && o.dist < BEAST_TUNING.scratch.near) return 'scratch'
   if (o.armored) return 'charge'
-  return o.last === 'pounce' ? 'charge' : 'pounce'
+  return (o.lastBig ?? o.last) === 'pounce' ? 'charge' : 'pounce'
 }
 
 /** いまの手順（目標の欄・ヒント） */
@@ -118,4 +119,10 @@ export function beastObjective(step: BeastStep, plates: number, misses = 0): { t
     case 'rescue':
       return { title: '佐伯さんを助けよう', sub: '佐伯さんをつかんだ影の腕に、J' }
   }
+}
+
+/** 体力のゲージの名前（よろいの残りを ■ で）。0 枚なら名前だけ */
+export function beastBossName(plates: number, total = 3): string {
+  if (plates <= 0) return 'よろいの影獣'
+  return 'よろいの影獣　よろい ' + '■'.repeat(plates) + '□'.repeat(Math.max(0, total - plates))
 }

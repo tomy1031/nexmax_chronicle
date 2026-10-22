@@ -108,6 +108,49 @@ export const CHAPTER_TITLES: Record<Chapter, string> = {
   13: 'おわりに　10月19日の朝',
 }
 
+/**
+ * 大きな章（とびらの絵を出す区切り）。12 の小さな章（場面）は短いので、5 つの大きな章にまとめる（オーナーの希望）。
+ * 0 = はじめに、1〜5 = 第1〜5章、6 = おわりに。小さな章の題は、場面の題として小さく出す（chapterCard.ts の caption）
+ */
+export type BigChapter = 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+export const BIG_CHAPTER: Readonly<Record<Chapter, BigChapter>> = {
+  0: 0,
+  1: 1,
+  2: 1,
+  3: 1,
+  4: 1,
+  5: 1,
+  6: 2,
+  7: 2,
+  8: 3,
+  9: 3,
+  10: 3,
+  11: 4,
+  12: 5,
+  13: 6,
+}
+
+export const BIG_CHAPTER_TITLES: Readonly<Record<BigChapter, string>> = {
+  0: '地下の倉庫の、小さなロボット',
+  1: 'くり返す10月18日',
+  2: '時をこえて',
+  3: '変わる今',
+  4: '900年前のカンボジア',
+  5: '最後の夜',
+  6: '10月19日の朝',
+}
+
+/** 大きな章の番号の見出し（「はじめに」「第 1 章」…） */
+export function bigChapterLabel(b: BigChapter): string {
+  return b === 0 ? 'はじめに' : b === 6 ? 'おわりに' : `第 ${b} 章`
+}
+
+/** 小さな章（場面）の題（番号なし。「空のひび」など） */
+export function sceneTitle(c: Chapter): string {
+  return CHAPTER_TITLES[c].replace(/^(はじめに|おわりに|\d+)\s*　?/, '')
+}
+
 /** いまの章（フラグだけから。セーブの要約や目標の既定に使う） */
 export function chapterOf(f: Flags): Chapter {
   if (f('v7_ending')) return 13

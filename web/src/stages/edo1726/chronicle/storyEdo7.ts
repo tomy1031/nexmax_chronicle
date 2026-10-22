@@ -40,6 +40,12 @@ export function edoTime(step: EdoStep): 'day' | 'night' | 'morning' {
   return 'day'
 }
 
+/** 町の人の台詞の場面（mob_lines_v7.json）：day（人形が来る前）・night（町の人は出ない）・morning（夜明けのあと） */
+export function edoMobPhase(step: EdoStep): 'day' | 'night' | 'morning' {
+  const t = edoTime(step)
+  return t === 'day' ? 'day' : t === 'night' ? 'night' : 'morning'
+}
+
 /** 段階の中の細かい進み（フラグにしない、その場だけの状態） */
 export type EdoSub = {
   /** arrive：人形を止めた（おはると会う場面の前） */

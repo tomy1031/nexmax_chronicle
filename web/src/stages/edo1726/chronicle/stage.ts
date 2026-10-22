@@ -23,13 +23,14 @@ import { SceneClock } from '../../../chronicle/kit/clock'
 import { Walker } from '../../../chronicle/kit/walker'
 import { Curtain } from '../../../chronicle/kit/curtain'
 import { TeaDoll } from '../karakuri'
-import { Townsfolk } from '../townsfolk'
+import { Townsfolk } from './townsfolk7'
+import { MobTalkEdo7 } from './mobTalkEdo7'
 import { buildChronicleEdo, type ChronicleEdoWorld } from './scene'
 import { C, CHRONICLE_SPAWNS, ARRIVE_RING, RETURN_RING, WORKSHOP_SPOTS, YAW } from './layout'
 import { EDO_LOOKS, type EdoSkyCycle } from './skyCycle'
 import { KarakuriBox, shrineMaterialsFrom } from './shrine'
 import { TimeClawProp, ResonanceWave } from './clawProp'
-import { GEAR_NAMES, SWING_RADIUS, type DollImpact } from './bellDoll'
+import { GEAR_NAMES, SWING_HIT, type DollImpact } from './bellDoll'
 import { GearOrder, edoObjective, edoSpawn, edoStep, edoTime, type EdoStep, type EdoSub } from './storyEdo7'
 import linesJson from './lines_v7.json'
 
@@ -58,8 +59,8 @@ const PLAZA_ENTRY = v(-16.0, 0.03, 24.2)
 const BOX_HOME = v(-13.65, 0.06, 18.25)
 const BOX_ID = 'v7_karakuri_box'
 const TEA_ID = 'v7_tea_doll'
-/** ボスの間合い */
-const BOSS = { swingCd: 3.0, bellCd: 4.4, near: 7.5, far: 9.5, hurtKnock: 7 }
+/** 時の鐘人形：攻撃の間（秒）・衝撃波にする遠さ・当たったときに飛ばされる速さ（衝撃波は waveKnock） */
+const BOSS = { swingCd: 3.0, bellCd: 4.4, far: 9.5, hurtKnock: 7, waveKnock: 6 }
 
 type Who = 'genbei' | 'oharu'
 
@@ -82,6 +83,8 @@ export class ChronicleEdoStage implements Stage {
   private oharu!: Character
   private tea!: TeaDoll
   private folk!: Townsfolk
+  /** 町の人の吹き出しと F の会話 */
+  private mobs: MobTalkEdo7 | null = null
   private box!: KarakuriBox
   private boxMov!: MovableInput
   private teaDef!: ClawTargetDef
@@ -173,6 +176,7 @@ export class ChronicleEdoStage implements Stage {
     this.wave = new ResonanceWave(rt.renderer.domElement.ownerDocument.getElementById('ui') ?? document.body)
     this.sky = this.w.createSky({ renderer: rt.renderer, scene: rt.scene, sky: rt.sky, sun: rt.sun, post: rt.post })
     this.sky.prepare()
+    this.mobs = new MobTalkEdo7(this.folk, rt.renderer.domElement.ownerDocument.getElementById('ui'), rt.camera)
     this.w.doll.onImpact = (e) => this.onDollImpact(e)
     this.w.doll.onStep = (p) => {
       const d = dist2(p, rt.player.position)
@@ -582,7 +586,7 @@ export class ChronicleEdoStage implements Stage {
     if (wf.active) {
       if (!this.waveHit && d.waveHits(p, rt.player.grounded, p.y)) {
         this.waveHit = true
-        this.hurt(rt, 1, wf.center, 6)
+        this.hurt(rt, 1, wf.center, BOSS.waveKnock)
       }
     } else this.waveHit = false
     // 保持：3 秒で止まる。その間は攻撃しない
@@ -607,24 +611,24 @@ export class ChronicleEdoStage implements Stage {
       return
     }
     this.attacks++
-    if (dd > BOSS.far || this.attacks % 3 === 0) {
+    // 体の右と左、どちらにいるか
+    const rx = Math.cos(d.yaw)
+    const rz = -Math.sin(d.yaw)
+    const side = (p.x - d.position.x) * rx + (p.z - d.position.z) * rz > 0 ? 'right' : 'left'
+    // 木槌（鐘）がとどく遠さ。少し遠いくらいなら、ふりおろす（とどかない分は手前の地面をたたく）。
+    // 足もとに近すぎて木槌がとどかないときは、鐘の音にする
+    const [rMin, rMax] = dd > BOSS.far || this.attacks % 3 === 0 ? [0, 0] : d.swingReach(side)
+    const reach = rMax + 1.2
+    if (rMax === 0 || dd < rMin - 0.6 || (dd > reach && d.gearIsStopped(1))) {
       d.bellWave()
       this.bossCd = BOSS.bellCd / d.rage
       if (rt.playTime - this.warnedBell > 14) {
         this.warnedBell = rt.playTime
         rt.say('おはる', lines.lines('warn_bell')[0].text, 2.4)
       }
-    } else if (dd < BOSS.near) {
-      // 体の右と左、どちらにいるか
-      const yaw = d.yaw
-      const rx = Math.cos(yaw)
-      const rz = -Math.sin(yaw)
-      const side = (p.x - d.position.x) * rx + (p.z - d.position.z) * rz > 0 ? 'right' : 'left'
-      // ふりおろす所：プレイヤーの足元（体から 2.5〜4.5m にとどめる）
-      const at = this.tmp2.copy(p)
-      const k = Math.max(2.5, Math.min(4.5, dd)) / Math.max(dd, 0.01)
-      at.set(d.position.x + (p.x - d.position.x) * k, 0.03, d.position.z + (p.z - d.position.z) * k)
-      if (d.swing(side, at) > 0) {
+    } else if (dd <= reach) {
+      // ふりおろす所：ネクマックスの足もと。人形は、木槌の頭がそこへ落ちるように向きとかがみを決める
+      if (d.swing(side, this.tmp2.copy(p).setY(C.PLAZA.y)) > 0) {
         this.bossCd = BOSS.swingCd / d.rage
         if (rt.playTime - this.warnedSwing > 16) {
           this.warnedSwing = rt.playTime
@@ -633,7 +637,7 @@ export class ChronicleEdoStage implements Stage {
       }
     } else {
       this.bossCd = 0.6
-      if (!d.gearIsStopped(1)) d.walkTo(this.tmp2.copy(p).lerp(d.position, 0.5), 1.8)
+      d.walkTo(this.tmp2.copy(p).lerp(d.position, 0.5), 1.8)
     }
   }
 
@@ -641,15 +645,18 @@ export class ChronicleEdoStage implements Stage {
     const rt = this.rt
     if (!rt) return
     rt.shake(e.kind === 'bell' ? 0.45 : 0.6)
+    // ふりおろし：木槌（鐘）の頭が地面をたたいた所から SWING_HIT の中にいたら当たり（頭の上をとびこえていればよけた）
     if (e.kind === 'swing' && this.sub.boss === 'fight') {
       const p = rt.player.position
-      if (dist2(p, e.pos) < SWING_RADIUS + 0.35 && p.y < e.pos.y + 1.2) this.hurt(rt, 1, e.pos, BOSS.hurtKnock)
+      if (dist2(p, e.pos) < SWING_HIT && p.y < e.pos.y + 1.3) this.hurt(rt, 1, e.pos, BOSS.hurtKnock)
     }
   }
 
-  /** プレイヤーに当たった（体力 1）。歯車をつかんでいたら、ふりほどかれる */
+  /** プレイヤーに当たった（体力 1）。from：当てた物（木槌の頭・衝撃波の中心）。歯車をつかんでいたら、ふりほどかれる */
   private hurt(rt: StageRuntime, dmg: number, from: THREE.Vector3, knock: number): void {
+    // 当てた物からネクマックスへの向き（ほぼ真上から当たったときは、人形から外へ。人形の足もとへ飛ばさない）
     const dir = this.tmp.copy(rt.player.position).sub(from).setY(0)
+    if (dir.lengthSq() < 0.36) dir.copy(rt.player.position).sub(this.w.doll.position).setY(0)
     if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1)
     dir.normalize()
     if (this.gears.holding >= 0) {
@@ -658,14 +665,8 @@ export class ChronicleEdoStage implements Stage {
       rt.claw.reset()
       rt.say('おはる', lines.lines('shaken')[0].text, 2.2)
     }
-    // 戦闘の体力（シェルの hurtPlayer：無敵時間・回避・体力 0 の暗転までまとめて）
-    const c = rt.combat as unknown as { hurtPlayer?: (damage: number, d: THREE.Vector3, k: number) => void }
-    if (typeof c.hurtPlayer === 'function') c.hurtPlayer(dmg, dir, knock)
-    else {
-      rt.combat.health.damage(dmg)
-      rt.hud.flash('danger')
-      rt.player.burstMove(dir.x * knock, dir.z * knock, 0.18)
-    }
+    // 戦闘の体力（シェルの hurtPlayer：無敵時間・回避・体力 0 の暗転、のけぞって軽く吹っ飛ぶ動きまでまとめて）
+    rt.combat.hurtPlayer(dmg, dir, knock)
   }
 
   private onGearStopped(rt: StageRuntime, i: number): void {
@@ -950,6 +951,7 @@ export class ChronicleEdoStage implements Stage {
       this.sky.dawn(this.dawnAnim)
     }
     rt.combat.passive = this.busy || rt.talking || rt.inCinematic
+    this.mobs?.update(dt, rt, this.step, this.busy)
     this.keepCameraInWorkshop(rt)
     // 人物の向き
     for (const who of ['genbei', 'oharu'] as const) {
@@ -988,6 +990,7 @@ export class ChronicleEdoStage implements Stage {
     this.w.update(dt, t, rt.camera)
     this.w.workshop.setNight(this.sky?.night ?? 0)
     this.folk.update(dt)
+    this.mobs?.render(dt)
     this.box.update(dt)
     this.wave?.update(dt)
     // 人形：おはるが抱えているときは胸の前
@@ -1108,7 +1111,8 @@ export class ChronicleEdoStage implements Stage {
       return true
     }
     const who = this.nearNpc(rt)
-    if (!who) return false
+    // 源兵衛・おはるがそばにいなければ、町の人と話す
+    if (!who) return this.mobs?.interact(rt) ?? false
     if (this.step === 'demo' && who === 'genbei' && dist2(rt.player.position, BENCH_FRONT) < 3) {
       void this.runDemo(rt)
       return true
@@ -1146,7 +1150,7 @@ export class ChronicleEdoStage implements Stage {
     if (this.nearDoll(rt)) return [{ key: 'F', label: '爪で胸の影を裂く' }]
     if (this.step === 'night' && this.gears.holding >= 0) return [{ key: 'J', label: 'はなす（3秒つかむと止まる）' }]
     if (this.nearNpc(rt)) return [{ key: 'F', label: '話す' }]
-    return null
+    return this.mobs?.hints(rt) ?? null
   }
 
   objective(_rt: StageRuntime): { title: string; sub: string } {
@@ -1271,6 +1275,7 @@ export class ChronicleEdoStage implements Stage {
       dawn: +this.dawnAnim.toFixed(2),
       ring: this.ringOpen,
       tea: this.tea.mode,
+      mobs: this.mobs?.debugInfo() ?? null,
     }
   }
 
@@ -1283,6 +1288,8 @@ export class ChronicleEdoStage implements Stage {
     this.curtain = null
     this.wave?.dispose()
     this.wave = null
+    this.mobs?.dispose()
+    this.mobs = null
     const rt = this.rt
     if (rt) {
       rt.combat.showBossBar(null)

@@ -5,8 +5,11 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { createPerson, type PersonCharacter } from '../../chronicle/visuals'
 import { VILLAGERS, type Spot, type VillagerSpot } from './layout'
 
-/** 本物の人の形で見せる村人（多いと重いので、目につく所だけ。ほかは出さない） */
-export const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'watch2', 'fisher2', 'monk1', 'temple1']
+/**
+ * 本物の人の形で見せる村人（多いと重いので、目につく所だけ。ほかは出さない）。みんな F で話せる（mobTalkKhmer.ts・mob_lines_v7.json）。
+ * 村の広場の子どもたち・料理の人・村のおじいさん・池のほとりの見張り・水の上の家の人・ナーガの橋の番人・象使い・お寺の人たち
+ */
+export const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'elder', 'watch2', 'fisher2', 'bridge1', 'mahout', 'monk1', 'monk2', 'temple1']
 
 export type KhmerVillager = { id: string; ch: PersonCharacter; spot: VillagerSpot }
 
@@ -19,7 +22,7 @@ export function createKhmerVillagers(): KhmerVillager[] {
     const ch = createPerson('khmerVillager', { variant: i, female: i % 2 === 0, lite: true, height: kid ? 1.1 : s.role === 'monk' ? 1.6 : 1.55 })
     ch.root.position.copy(s.pos)
     ch.root.rotation.y = s.yaw
-    ch.setPose(kid ? 'wave' : s.role === 'monk' ? 'pray' : 'idle')
+    ch.setPose(kid ? 'wave' : s.role === 'monk' ? 'pray' : s.role === 'sit' ? 'kneel' : 'idle')
     out.push({ id: s.id, ch, spot: s })
   })
   return out

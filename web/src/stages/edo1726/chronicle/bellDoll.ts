@@ -22,6 +22,7 @@ import { softGlowTexture } from './workshop'
 export const GEAR_NAMES = ['右の肩', '左のひざ', '胸'] as const
 export type GearIndex = 0 | 1 | 2
 export type DollSide = 'left' | 'right'
+/** 攻撃が地面をたたいた。pos：たたいた所（ふりおろしは木槌・鐘の頭の真下、鐘の音は人形の足もと） */
 export type DollImpact = { kind: 'swing' | 'bell'; side?: DollSide; pos: THREE.Vector3; radius: number }
 
 type DollState = 'idle' | 'chime' | 'possessing' | 'stepdown' | 'stand' | 'walk' | 'windup' | 'slam' | 'recover' | 'bellUp' | 'bellHit' | 'collapse' | 'down'
@@ -43,8 +44,21 @@ const T = { windup: 1.35, slam: 0.22, recover: 1.3, bellUp: 1.0, bellHit: 0.25, 
 /** 衝撃波：広がる速さ（m/s）・最大の半径・輪の高さ */
 // 輪がゆっくり広がるほど、ジャンプのタイミングを合わせやすい
 export const BELL_WAVE = { speed: 6.0, maxR: 19, height: 0.7, width: 0.9 }
-/** ふりおろしの予告の円の半径（のりうつったときの大きさで） */
-export const SWING_RADIUS = 2.4
+/** ふりおろしの予告の円の半径（木槌・鐘が地面をたたく所のまわり） */
+export const SWING_RADIUS = 1.7
+/** ふりおろしが当たる半径（たたいた頭の真下から、ネクマックスの足もとまで。木槌の頭の大きさ＋体の太さ） */
+export const SWING_HIT = 1.45
+/** たたきつける頭（右手＝木槌の頭の中心・左手＝鐘の口）の、手の中の位置 */
+const STRIKE_LOCAL: Record<DollSide, THREE.Vector3> = { right: new THREE.Vector3(0, -2.2, 0), left: new THREE.Vector3(0, -1.55, 0) }
+/** 頭が地面にふれたとみなす高さ（木槌は頭の半径・鐘は口のふち。のりうつったときの大きさで、地面から m） */
+const STRIKE_Y: Record<DollSide, number> = { right: 0.5, left: 0.1 }
+/** たたきつけたときの肩の横の開き・ひじ（決まった値。前へのかがみと腕の角度は、落ちる所から決める） */
+const SLAM_Z: Record<DollSide, number> = { right: 0.2, left: -0.15 }
+const SLAM_ELBOW = 0.05
+/** たたきつけで前へかがむ角度の上限（これより遠い所へは、とどかない） */
+const SLAM_LEAN_MAX = 1.25
+/** たたきつけた腕は、真下より少なくともこれだけ前へ（rad。体の前の地面をたたく） */
+const SLAM_FWD_MIN = 0.15
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 const ease = (x: number) => x * x * (3 - 2 * x)
@@ -481,6 +495,12 @@ export class TimeBellDoll {
   private faceTarget: number | null = null
   private side: DollSide = 'right'
   private readonly impact = new THREE.Vector3()
+  /** たたきつけの姿勢（前へのかがみ・腕の角度）。swing で、頭が予告の円に落ちるように決める */
+  private readonly slamAim = { lean: 0.5, arm: 1.1 }
+  /** このふりおろしで、もう地面をたたいた */
+  private struck = true
+  /** たたきつける頭のワールド位置（毎フレーム） */
+  private readonly strikeAt = new THREE.Vector3()
   private waveR = -1
   private readonly waveCenter = new THREE.Vector3()
   private struggleK = 0
@@ -945,17 +965,102 @@ export class TimeBellDoll {
     return this.state === 'stand' || this.state === 'walk'
   }
 
-  /** 腕のふりおろし（予告の円 → たたきつけ）。たたきつけまでの秒を返す（できなければ -1）。at を省くと前の地面 */
+  /**
+   * 腕のふりおろし（予告の円 → たたきつけ）。たたきつけまでの秒を返す（できなければ -1）。
+   * at（ねらう地面）を渡すと、木槌（左手なら鐘）の頭が、そこへ本当に落ちるように、体の向き・前へのかがみ・腕の角度を決める
+   * （とどかない遠さ・近さなら、とどく所まで）。予告の円は、頭が落ちる所に出す。at を省くと体の前
+   */
   swing(side: DollSide, at?: THREE.Vector3): number {
     if (!this.ready || this.state === 'collapse') return -1
     if (side === 'right' && this.gearStopped[0]) side = 'left'
     this.side = side
     this.walkTarget = null
-    if (at) this.impact.copy(at)
-    else this.impactPoint(side, this.impact)
+    const r = this.root.position
+    const dist = at ? Math.hypot(at.x - r.x, at.z - r.z) : 3.5 * (this.scale / POSSESSED_SCALE)
+    const loc = this.solveSlam(side, dist, this.tmp2)
+    // 体の向き：頭（体から見て loc）が、ねらう所の方角に来るように
+    const bearing = at && dist > 0.3 ? Math.atan2(-(at.x - r.x), -(at.z - r.z)) : this.root.rotation.y + Math.atan2(-loc.x, -loc.z)
+    const yaw = bearing - Math.atan2(-loc.x, -loc.z)
+    this.faceTarget = yaw
+    this.impact.set(r.x + loc.x * Math.cos(yaw) + loc.z * Math.sin(yaw), Math.max(0, r.y), r.z - loc.x * Math.sin(yaw) + loc.z * Math.cos(yaw))
     this.warn.show(this.impact, SWING_RADIUS)
+    this.struck = false
     this.enter('windup')
     return T.windup / this.rage
+  }
+
+  /** 木槌・鐘が、いちばん近く・遠くで地面にとどく所（体の中心から m）。いまの大きさ・ひざのつき方で */
+  swingReach(side: DollSide): [number, number] {
+    if (side === 'right' && this.gearStopped[0]) side = 'left'
+    const near = this.solveSlam(side, 0, this.tmp2)
+    const n = Math.hypot(near.x, near.z)
+    const far = this.solveSlam(side, 99, this.tmp2)
+    return [n, Math.hypot(far.x, far.z)]
+  }
+
+  /**
+   * 体（root）から見た、たたきつけたときの頭の位置（m。x＝右・y＝足もとからの高さ・z＝うしろ）。
+   * 骨組みをその姿勢にして測る（親の行列だけ更新する。呼んだあとは applyPose で戻す）
+   */
+  private strikeLocal(side: DollSide, lean: number, arm: number, out: THREE.Vector3): THREE.Vector3 {
+    const A = side === 'right' ? this.armR : this.armL
+    this.body.position.y = -1.62 * this.kneeling
+    this.body.rotation.z = 0
+    this.torso.rotation.set(-lean, 0, 0)
+    A.shoulder.rotation.set(arm, 0, SLAM_Z[side])
+    A.elbow.rotation.x = SLAM_ELBOW
+    A.hand.updateWorldMatrix(true, false)
+    A.hand.localToWorld(out.copy(STRIKE_LOCAL[side]))
+    this.root.worldToLocal(out)
+    return out.multiplyScalar(this.scale)
+  }
+
+  /**
+   * たたきつけの姿勢を決める：頭が地面にふれて、体の中心から dist m の所に落ちるような、前へのかがみと腕の角度（slamAim）。
+   * かがむほど遠くへとどく（かがみを二分法で、そのかがみで頭が地面にふれる腕の角度も二分法で）。頭の位置（体から見て）を out に
+   */
+  private solveSlam(side: DollSide, dist: number, out: THREE.Vector3): THREE.Vector3 {
+    const c = STRIKE_Y[side] * (this.scale / POSSESSED_SCALE)
+    const p = this.tmp
+    // かがみ lean で、頭が高さ c までおりる腕の角度（腕を真下より少し前へ下ろしても地面にとどかなければ -1）。
+    // 腕の角度は体に対してなので、真下から前へ φ のとき arm = lean + φ（φ が負だと、うしろの地面をたたいてしまう）
+    const armFor = (lean: number): number => {
+      let lo = lean + SLAM_FWD_MIN
+      let hi = lean + 1.6
+      if (this.strikeLocal(side, lean, lo, p).y > c) return -1
+      for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2
+        if (this.strikeLocal(side, lean, mid, p).y > c) hi = mid
+        else lo = mid
+      }
+      return lo
+    }
+    // 遠すぎれば、いちばんかがんだ姿勢に、近すぎれば、腕をまっすぐ下ろせるいちばん浅いかがみに落ち着く
+    let lo = 0
+    let hi = SLAM_LEAN_MAX
+    let lean = hi
+    const a0 = armFor(hi)
+    let arm = a0 >= 0 ? a0 : hi + 0.8
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2
+      const a = armFor(mid)
+      if (a < 0) {
+        lo = mid
+        continue
+      }
+      this.strikeLocal(side, mid, a, p)
+      if (Math.hypot(p.x, p.z) < dist) lo = mid
+      else hi = mid
+      lean = mid
+      arm = a
+    }
+    this.slamAim.lean = lean
+    this.slamAim.arm = arm
+    this.strikeLocal(side, lean, arm, out)
+    // 骨組みを今の姿勢へ戻す
+    this.applyPose(0)
+    this.root.updateMatrixWorld(true)
+    return out
   }
 
   /** ふりおろしの落ちる所（体の前、その手の側） */
@@ -1179,6 +1284,27 @@ export class TimeBellDoll {
     this.root.scale.setScalar(this.scale)
     this.root.updateMatrixWorld(true)
     this.updateTargets()
+    this.hitGround()
+  }
+
+  /** たたきつける頭（木槌・鐘の口）のワールド位置 */
+  strikeWorld(out = new THREE.Vector3()): THREE.Vector3 {
+    const A = this.side === 'right' ? this.armR : this.armL
+    return A.hand.localToWorld(out.copy(STRIKE_LOCAL[this.side]))
+  }
+
+  /** ふりおろし：見えている頭が地面にとどいた瞬間に onImpact（たたいた所＝頭の真下） */
+  private hitGround(): void {
+    if (this.struck || (this.state !== 'slam' && this.state !== 'recover')) return
+    const p = this.strikeWorld(this.strikeAt)
+    const ground = Math.max(0, this.root.position.y)
+    const c = STRIKE_Y[this.side] * (this.scale / POSSESSED_SCALE)
+    // ふつうは頭が地面にふれたとき。とどかないまま腕を下ろしきったら、そこで（保険）
+    if (p.y > ground + c + 0.3 && !(this.state === 'recover' && this.st > 0.3)) return
+    this.struck = true
+    const at = p.clone().setY(ground)
+    this.onImpact?.({ kind: 'swing', side: this.side, pos: at, radius: SWING_RADIUS })
+    this.onStep?.(at)
   }
 
   private updateTargets(): void {
@@ -1225,7 +1351,8 @@ export class TimeBellDoll {
       let d = this.faceTarget - this.root.rotation.y
       while (d > Math.PI) d -= Math.PI * 2
       while (d < -Math.PI) d += Math.PI * 2
-      const turn = Math.sign(d) * Math.min(Math.abs(d), dt * 0.9 * this.rage)
+      // ふりかぶっている間は速く向く（たたきつけるまでに、頭が予告の円の上に来るように）
+      const turn = Math.sign(d) * Math.min(Math.abs(d), dt * (this.state === 'windup' ? 2.4 : 0.9) * this.rage)
       this.root.rotation.y += turn
       if (Math.abs(d) < 0.01) this.faceTarget = null
     }
@@ -1343,11 +1470,8 @@ export class TimeBellDoll {
         this.standPose(W)
         this.armSlam(W, this.side, k)
         this.warn.set(1, 1, this.t)
-        if (k >= 1) {
-          this.onImpact?.({ kind: 'swing', side: this.side, pos: this.impact.clone(), radius: SWING_RADIUS })
-          this.onStep?.(this.impact)
-          this.enter('recover')
-        }
+        // 地面をたたくのは、見えている頭が地面にとどいたとき（update の hitGround）
+        if (k >= 1) this.enter('recover')
         break
       }
       case 'recover': {
@@ -1482,20 +1606,23 @@ export class TimeBellDoll {
     W.headX = -0.15 * k
   }
 
+  /** たたきつけ：ふりかぶった腕を、swing で決めた姿勢（slamAim）まで。頭は地面の予告の円に落ちる */
   private armSlam(W: Pose, side: DollSide, k: number): void {
     const kk = ease(k)
+    const A = this.slamAim
     if (side === 'right') {
-      W.armRX = 3.1 - 2.0 * kk
-      W.armRZ = 0.15 + 0.05 * kk
-      W.elbowR = 0.3 - 0.25 * kk
-      W.twist = -0.25 + 0.45 * kk
+      W.armRX = 3.1 + (A.arm - 3.1) * kk
+      W.armRZ = 0.15 + (SLAM_Z.right - 0.15) * kk
+      W.elbowR = 0.3 + (SLAM_ELBOW - 0.3) * kk
+      W.twist = -0.25 * (1 - kk)
     } else {
-      W.armLX = 3.1 - 2.0 * kk
-      W.armLZ = -0.1 - 0.05 * kk
-      W.elbowL = 0.2 - 0.15 * kk
-      W.twist = 0.25 - 0.45 * kk
+      W.armLX = 3.1 + (A.arm - 3.1) * kk
+      W.armLZ = -0.1 + (SLAM_Z.left + 0.1) * kk
+      W.elbowL = 0.2 + (SLAM_ELBOW - 0.2) * kk
+      W.twist = 0.25 * (1 - kk)
     }
-    W.lean = -0.18 + 0.68 * kk
+    W.lean = -0.18 + (A.lean + 0.18) * kk
+    W.roll = 0
     W.headX = 0.25 * kk
   }
 

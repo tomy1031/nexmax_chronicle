@@ -1,8 +1,11 @@
 // 7 章（1726年）の本編：フラグだけから段階が決まる・到着地点・目標・時の鐘人形の歯車の順番・台詞のキー
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { EDO_STEPS, GearOrder, edoObjective, edoSpawn, edoStep, edoTime } from '../src/stages/edo1726/chronicle/storyEdo7'
+import { EDO_STEPS, GearOrder, edoMobPhase, edoObjective, edoSpawn, edoStep, edoTime } from '../src/stages/edo1726/chronicle/storyEdo7'
 import lines from '../src/stages/edo1726/chronicle/lines_v7.json'
+import mobLines from '../src/stages/edo1726/chronicle/mob_lines_v7.json'
+import { TOWNSFOLK } from '../src/stages/edo1726/chronicle/townsfolk7'
+import { hasTalk, talkLinesFor, type MobTable } from '../src/world/mobTalkLogic'
 
 const flags = (...on: string[]) => (n: string) => on.includes(n)
 
@@ -106,5 +109,44 @@ describe('台詞（lines_v7.json）', () => {
       expect(all).toContain(w)
     }
     expect(all).not.toContain('オルム')
+  })
+})
+
+describe('町の人（townsfolk7.ts・mob_lines_v7.json）', () => {
+  const table = mobLines as unknown as MobTable
+  const ids = TOWNSFOLK.flatMap((d) => (d.id ? [d.id] : []))
+  it('場面：人形が来る前は昼、夜は町の人がいない、夜明けのあとは朝', () => {
+    expect(edoMobPhase('arrive')).toBe('day')
+    expect(edoMobPhase('workshop')).toBe('day')
+    expect(edoMobPhase('demo')).toBe('day')
+    expect(edoMobPhase('night')).toBe('night')
+    expect(edoMobPhase('dawn')).toBe('morning')
+    expect(edoMobPhase('leave')).toBe('morning')
+  })
+  it('話せる人が 8 人以上いて、昼と朝のどちらでも F で 1〜3 行の会話がある', () => {
+    expect(ids.length).toBeGreaterThanOrEqual(8)
+    for (const id of ids) {
+      expect(table.speakers[id], id).toBeDefined()
+      for (const ph of ['day', 'morning']) {
+        expect(hasTalk(table, id, ph), `${id} ${ph}`).toBe(true)
+        const t = talkLinesFor(table, id, ph, 0)
+        expect(t.length, `${id} ${ph}`).toBeGreaterThanOrEqual(1)
+        expect(t.length, `${id} ${ph}`).toBeLessThanOrEqual(3)
+        expect(table.speakers[id].bubble[ph]?.length, `${id} ${ph}`).toBeGreaterThan(0)
+      }
+      // 夜はだれもいない
+      expect(hasTalk(table, id, 'night'), id).toBe(false)
+    }
+  })
+  it('吹き出しは 40 字まで・会話の 1 行は 44 字まで・物語の先の名前は出さない', () => {
+    for (const id of ids) {
+      const sp = table.speakers[id]
+      for (const l of Object.values(sp.bubble).flatMap((x) => x ?? [])) expect([...l].length, l).toBeLessThanOrEqual(40)
+      for (const l of Object.values(sp.talk ?? {}).flatMap((x) => x ?? [])) {
+        expect([...l.text].length, l.text).toBeLessThanOrEqual(44)
+        expect([sp.name, 'ネクマックス']).toContain(l.speaker)
+        for (const w of ['オルム', 'トワ', 'カンボジア', '時を裂く爪']) expect(l.text).not.toContain(w)
+      }
+    }
   })
 })

@@ -1,7 +1,7 @@
 // ワイヤー式「つかむNMClaw」の純粋なロジック（操作マニュアル v1.1 §1.1・§2.1・§2.2・§8.3〜8.4）。
 // ・対象の種類（データ）：pull_object / pull_player / swing_anchor / hold_mechanism
 //   敵（combat/）：enemy_pull（小さい敵・盾を手元へ引き寄せる）／enemy_zip（大きい敵へ自分が飛び込む）
-// ・中央照準の自動選択（スコア）と R によるロック切り替え
+// ・ネクマックスの向きの照準の自動選択（スコア）と R によるロック切り替え
 // ・J で射出 → 接続 → もう一度 J で解除（長押し不要）。Space はぶら下がり・引き寄せ中の離脱
 // ・引き寄せは決められた曲線、振り子は許可した支点だけで軽量に（ロープの物理演算はしない）
 // 描画・物理エンジン・DOM には依存しない（THREE.Vector3 は数学のためだけに使う）。
@@ -87,7 +87,7 @@ export const CLAW_TUNING = {
 
 // ------------------------------------------------------------------ 照準（自動選択とロック）
 
-/** カメラの基底（中央照準の向き）。tanHalfX/Y は水平・垂直の半画角の tan */
+/** 照準の基底（カメラを、ネクマックスの真うしろへ回した向き。turnBasisToFacing）。tanHalfX/Y は水平・垂直の半画角の tan */
 export type ViewBasis = {
   origin: THREE.Vector3
   forward: THREE.Vector3
@@ -115,6 +115,23 @@ export type TargetView = {
 }
 
 const tmp = new THREE.Vector3()
+const Y_AXIS = new THREE.Vector3(0, 1, 0)
+
+/**
+ * 照準の基底を、ネクマックスの向き（facing）へ回す：カメラを、プレイヤーのまわりに水平に回して、
+ * ネクマックスの真うしろから見る向きにする。左右はネクマックスの向き、上下（見上げ・見下ろし）はカメラのまま。
+ * facing は PlayerController と同じ（前 = (-sin, 0, -cos)）。真上・真下を見ているときは回さない。
+ */
+export function turnBasisToFacing(b: ViewBasis, pivot: THREE.Vector3, facing: number): void {
+  if (Math.hypot(b.forward.x, b.forward.z) < 1e-3) return
+  const camYaw = Math.atan2(-b.forward.x, -b.forward.z)
+  const d = Math.atan2(Math.sin(facing - camYaw), Math.cos(facing - camYaw))
+  if (Math.abs(d) < 1e-4) return
+  b.origin.sub(pivot).applyAxisAngle(Y_AXIS, d).add(pivot)
+  b.forward.applyAxisAngle(Y_AXIS, d)
+  b.right.applyAxisAngle(Y_AXIS, d)
+  b.up.applyAxisAngle(Y_AXIS, d)
+}
 
 /** 点を画面座標へ（カメラの後ろなら null） */
 export function viewOf(basis: ViewBasis, p: THREE.Vector3): { x: number; y: number; depth: number } | null {

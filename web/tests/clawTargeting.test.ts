@@ -1,4 +1,4 @@
-// 中央照準の自動選択（スコア）と R によるロック切り替え（操作マニュアル v1.1 §2.1）
+// 照準の自動選択（スコア）と R によるロック切り替え（操作マニュアル v1.1 §2.1）。左右はネクマックスの向き（turnBasisToFacing）
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,6 +8,7 @@ import {
   evaluateTarget,
   nearestOutOfRange,
   rankTargets,
+  turnBasisToFacing,
   type ClawTargetDef,
   type ViewBasis,
 } from "../src/player/clawLogic";
@@ -142,5 +143,52 @@ describe("clawTargeting: ステージが付ける優先度", () => {
     side.priority = 0.6;
     const ranked = rankTargets([evaluateTarget(center, basis(), chest), evaluateTarget(side, basis(), chest)]);
     expect(chooseTarget(ranked, null)?.def.id).toBe("side");
+  });
+});
+
+describe("clawTargeting: ネクマックスの向きの照準", () => {
+  /** プレイヤー（原点）の左うしろ 5m から +X を見ているカメラ（ネクマックスは -Z を向いている） */
+  function sideCamera(): ViewBasis {
+    return {
+      origin: v(-5, 2, 0),
+      forward: v(1, 0, 0),
+      right: v(0, 0, 1),
+      up: v(0, 1, 0),
+      tanHalfX: Math.tan((30 * Math.PI) / 180),
+      tanHalfY: Math.tan((22.5 * Math.PI) / 180),
+    };
+  }
+  const player = v(0, 0, 0);
+
+  it("カメラが横を向いていても、ネクマックスの正面の対象を狙う（カメラの向きの対象は狙わない）", () => {
+    const b = sideCamera();
+    turnBasisToFacing(b, player, 0);
+    expect(b.forward.x).toBeCloseTo(0);
+    expect(b.forward.z).toBeCloseTo(-1);
+    expect(b.origin.x).toBeCloseTo(0);
+    expect(b.origin.z).toBeCloseTo(5);
+    expect(b.right.x).toBeCloseTo(1);
+    const front = evaluateTarget(target("front", v(0, 1, -5)), b, chest);
+    const camDir = evaluateTarget(target("camDir", v(5, 1, 0)), b, chest);
+    expect(front?.valid).toBe(true);
+    expect(camDir === null || camDir.valid === false).toBe(true);
+  });
+
+  it("上下（見上げ）はカメラのまま", () => {
+    const b = sideCamera();
+    b.forward.set(Math.cos(0.4), Math.sin(0.4), 0);
+    b.up.set(-Math.sin(0.4), Math.cos(0.4), 0);
+    turnBasisToFacing(b, player, Math.PI / 2);
+    // facing = π/2 → 前は -X
+    expect(b.forward.x).toBeCloseTo(-Math.cos(0.4));
+    expect(b.forward.y).toBeCloseTo(Math.sin(0.4));
+    expect(b.forward.z).toBeCloseTo(0);
+  });
+
+  it("カメラがネクマックスの真うしろなら、何も変わらない", () => {
+    const b = basis();
+    turnBasisToFacing(b, player, 0);
+    expect(b.origin.toArray()).toEqual([0, 1, 0]);
+    expect(b.forward.toArray()).toEqual([0, 0, -1]);
   });
 });

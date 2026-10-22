@@ -1,4 +1,4 @@
-// つかむNMClaw の実行時の処理：中央照準の対象選択 → J で射出 → 種類ごとの動き → 見た目。
+// つかむNMClaw の実行時の処理：ネクマックスの向きの照準の対象選択 → J で射出 → 種類ごとの動き → 見た目。
 // 純粋な判断は clawLogic.ts（WireClaw・Pendulum・曲線・スコア）、ここは物理・プレイヤー・描画へのつなぎ。
 // ・pull_object：物を決まった山なりで手元へ。持ったまま歩け、J でその場に置く（水に落ちたら元の場所へ戻る）
 // ・pull_player：重力と KCC を止めて、手すりを越える曲線で着地点まで運ぶ
@@ -20,6 +20,7 @@ import {
   evaluateTarget,
   nearestOutOfRange,
   rankTargets,
+  turnBasisToFacing,
   zipPosition,
   type ClawTargetDef,
   type ClawTargetType,
@@ -31,7 +32,7 @@ import {
 
 /** 足元から胸（照準・射程の基準）までの高さ */
 export const CHEST_HEIGHT = 0.72
-/** 空振りの上下の角度（ラジアン）：カメラの見下ろしに少し足して、この範囲に収める */
+/** 空振りの上下の角度（ラジアン）：カメラの見下ろしに少し足して、この範囲に収める（左右はネクマックスの向き） */
 const MISS_PITCH_LIFT = 0.12
 const MISS_PITCH_MIN = -0.08
 const MISS_PITCH_MAX = 0.45
@@ -137,7 +138,10 @@ export class ClawSystem {
 
   // ---------------------------------------------------------------- 照準
 
-  /** カメラ（＝画面中央の照準）から狙える対象を評価する。毎フレーム、入力処理の前に呼ぶ */
+  /**
+   * 狙える対象を評価する。毎フレーム、入力処理の前に呼ぶ。
+   * 左右はネクマックスの向き（カメラをネクマックスの真うしろへ回したときの画面のまん中）、上下はカメラの見上げ・見下ろし。
+   */
   aim(camera: THREE.PerspectiveCamera): void {
     camera.updateMatrixWorld()
     const b = this.basis
@@ -145,6 +149,7 @@ export class ClawSystem {
     camera.getWorldDirection(b.forward)
     b.right.set(1, 0, 0).transformDirection(camera.matrixWorld)
     b.up.set(0, 1, 0).transformDirection(camera.matrixWorld)
+    turnBasisToFacing(b, this.player.position, this.player.facing)
     b.tanHalfY = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)
     b.tanHalfX = b.tanHalfY * camera.aspect
     this.chestPos(this.chest)
@@ -471,8 +476,8 @@ export class ClawSystem {
   }
 
   /**
-   * 空振り：カメラの向いている方へ、胸の高さからまっすぐ伸ばす（当たる物があればそこまで）。
-   * 上下はカメラの見下ろしをそのまま使うと足元の地面へ刺さるので、水平に近い範囲へ抑える。
+   * 空振り：ネクマックスの向いている方へ、胸の高さからまっすぐ伸ばす（当たる物があればそこまで）。
+   * 上下はカメラの見上げ・見下ろし。そのまま使うと足元の地面へ刺さるので、水平に近い範囲へ抑える。
    */
   private computeMissEnd(camera: THREE.PerspectiveCamera): void {
     // chestPos() は tmp2 を使うので、向きは専用の missDir に作る（以前は tmp2 が上書きされ、世界の原点の方へ飛んでいた）
@@ -481,9 +486,7 @@ export class ClawSystem {
     const flat = Math.hypot(this.tmp.x, this.tmp.z)
     const pitch = THREE.MathUtils.clamp(Math.atan2(this.tmp.y, flat) + MISS_PITCH_LIFT, MISS_PITCH_MIN, MISS_PITCH_MAX)
     const dir = this.missDir
-    if (flat < 1e-3) {
-      dir.set(-Math.sin(this.player.facing), 0, -Math.cos(this.player.facing))
-    } else dir.set(this.tmp.x / flat, 0, this.tmp.z / flat)
+    dir.set(-Math.sin(this.player.facing), 0, -Math.cos(this.player.facing))
     dir.multiplyScalar(Math.cos(pitch)).setY(Math.sin(pitch))
     const len = CLAW_TUNING.range * 0.7
     const hit = this.phys.raycast(this.missEnd, dir, len, this.player.collider, true)

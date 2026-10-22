@@ -56,10 +56,12 @@ export type ClawTargetDef = {
    */
   priority?: number
   /**
-   * 照準の吸い付き範囲の倍率（1 がふつう）。小さいほど、ネクマックスの正面へきちんと向けないと選ばれない
+   * 照準の吸い付き範囲の左右の倍率（1 がふつう）。小さいほど、ネクマックスの正面へきちんと向けないと選ばれない
    * （ボスのよろいの板など、ねらう手ごたえがほしい物に 0.4〜0.6）
    */
   cone?: number
+  /** 照準の吸い付き範囲の上下の倍率（1 がふつう） */
+  coneV?: number
   /** pull_player：着地点（足元） */
   landing?: THREE.Vector3
   /** pull_player：途中で必ず通る点（手すりや屋根を越えるため） */
@@ -160,9 +162,8 @@ export function evaluateTarget(
   if (!def.enabled) return null
   const v = viewOf(basis, def.point)
   if (!v) return null
-  const cone = def.cone ?? 1
-  const ex = v.x / (tuning.coneX * cone)
-  const ey = v.y / (tuning.coneY * cone)
+  const ex = v.x / (tuning.coneX * (def.cone ?? 1))
+  const ey = v.y / (tuning.coneY * (def.coneV ?? 1))
   const ell = Math.hypot(ex, ey)
   const inCone = ell <= 1
   if (Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) return null
@@ -355,8 +356,8 @@ export class WireClaw {
         this.elapsed += dt
         if (this.elapsed >= this.duration && this.target) {
           out.push({ kind: 'object_arrived', target: this.target })
-          // 敵は持たない：手元まで引いたら爪を戻す（殴るのは K）
-          if (this.target.type === 'enemy_pull') this.startRetract(0.5)
+          // 敵は持たない：手元まで引いたら爪を戻す（殴るのは K）。とちゅうで的の種類が変わっても持たない
+          if (this.target.type === 'enemy_pull' || this.target.type === 'enemy_zip') this.startRetract(0.5)
           else this.phase = 'carrying'
         }
         break

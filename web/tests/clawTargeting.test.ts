@@ -201,3 +201,11 @@ describe("clawTargeting: 照準の吸い付きの倍率（cone）", () => {
     expect(evaluateTarget(target("plate", v(0.2, 1, -5), { cone: 0.45 }), basis(), chest)?.valid).toBe(true);
   });
 });
+
+describe("clawTargeting: cone は左右だけ、上下は coneV", () => {
+  it("cone を小さくしても、少し上の対象は選ばれる（上下はふつう）。coneV で上下もせまくできる", () => {
+    const up = v(0, 2.2, -5);
+    expect(evaluateTarget(target("plate", up, { cone: 0.45 }), basis(), chest)?.valid).toBe(true);
+    expect(evaluateTarget(target("plate", up, { cone: 0.45, coneV: 0.3 }), basis(), chest)?.valid).toBe(false);
+  });
+});

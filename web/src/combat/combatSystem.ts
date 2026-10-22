@@ -60,7 +60,7 @@ export type SpawnOptions = {
   onPlateLocked?: () => void
   /** 投げた板が、この敵に当たった */
   onPlateHit?: () => void
-  /** 照準の吸い付き範囲の倍率（ClawTargetDef.cone。小さいほど、正面へきちんと向けないと選ばれない） */
+  /** 照準の吸い付き範囲の左右の倍率（ClawTargetDef.cone。小さいほど、正面へきちんと向けないと選ばれない。上下はふつう） */
   aimCone?: number
 }
 
@@ -124,6 +124,8 @@ type Enemy = EnemyHandle & {
   throwDamage: number
   onPlateLocked: (() => void) | null
   onPlateHit: (() => void) | null
+  /** よろいがなくなった：ワイヤーが離れたら、クローの的の種類を変える */
+  retype: boolean
 }
 
 /** 手に持った・投げたよろいの板 */
@@ -370,6 +372,7 @@ export class CombatSystem {
       throwDamage: o.throwDamage ?? 2,
       onPlateLocked: o.onPlateLocked ?? null,
       onPlateHit: o.onPlateHit ?? null,
+      retype: false,
     }
     this.enemies.push(e)
     this.byDef.set(def, e)
@@ -670,8 +673,8 @@ export class CombatSystem {
       e.plates = null
       e.brain.armored = false
       e.brain.armor = false
-      e.def.type = e.brain.stats.mass === 'heavy' ? 'enemy_zip' : 'enemy_pull'
-      e.def.label = e.brain.stats.mass === 'heavy' ? `${e.brain.stats.name}（飛び込む）` : e.brain.stats.name
+      // クローの的の種類は、ワイヤーがこの敵から離れてから変える（つながったまま変えると、ワイヤーが「持っている」のまま残る）
+      e.retype = true
       this.host.hud.toast('よろいがはがれた！ 今のうちに攻撃！', 2.4)
     }
     e.onPlate?.(left)
@@ -1024,6 +1027,11 @@ export class CombatSystem {
       return
     }
     if (e.looseT > 0) e.looseT = Math.max(0, e.looseT - dt)
+    if (e.retype && this.host.claw.wire.target !== e.def) {
+      e.retype = false
+      e.def.type = e.brain.stats.mass === 'heavy' ? 'enemy_zip' : 'enemy_pull'
+      e.def.label = e.brain.stats.mass === 'heavy' ? `${e.brain.stats.name}（飛び込む）` : e.brain.stats.name
+    }
     // 装甲が戻った（よろいの板の敵は板が見た目）
     if (e.brain.armored && !e.plates && e.brain.armor !== e.model.armorShown) {
       e.model.setArmor(e.brain.armor)

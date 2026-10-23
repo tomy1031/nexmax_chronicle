@@ -3,6 +3,7 @@
 // ・SkyEvent：夜空が割れて黒い輪（オルム）が出る（emergence2086 の emergenceAt をそのまま使う。カメラは場面が決める）
 // ・地面の高さ（NPC を床に立たせる）
 import * as THREE from 'three'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type { Physics } from '../../../player/physics'
 import type { StageRuntime } from '../../../game/stage'
 import type { OrumParts } from '../orum'
@@ -114,10 +115,13 @@ export class SkyEvent {
   }
 }
 
-/** p の真下の床の高さ（見える当たり判定だけ。無ければ fallback） */
-export function groundY(phys: Physics | null, p: THREE.Vector3, fallback = 0, from = 1.2): number {
+/**
+ * p の真下の床の高さ（見える当たり判定だけ。無ければ fallback）。exclude：よける当たり判定（プレイヤーの足もとを調べるときは、
+ * プレイヤーの体を渡す。渡さないと、体のてっぺん（床から約 1m）に当たってしまう）
+ */
+export function groundY(phys: Physics | null, p: THREE.Vector3, fallback = 0, from = 1.2, exclude?: RAPIER.Collider): number {
   if (!phys) return fallback
   const o = new THREE.Vector3(p.x, p.y + from, p.z)
-  const hit = phys.raycast(o, new THREE.Vector3(0, -1, 0), from + 3, undefined, true)
+  const hit = phys.raycast(o, new THREE.Vector3(0, -1, 0), from + 3, exclude, true)
   return hit === null ? fallback : o.y - hit
 }

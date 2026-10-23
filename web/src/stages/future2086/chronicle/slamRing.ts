@@ -21,24 +21,36 @@ void main() {
   vec2 p = vUv * 2.0 - 1.0;
   float r = length(p);
   if (r > 1.0) discard;
-  float pulse = 0.75 + 0.25 * sin(uTime * 16.0);
-  // ふちの太い輪（当たる所の境め）
-  float edge = smoothstep(0.035, 0.0, abs(r - R_IN));
-  // 中：うすい赤と、満ちていく前の線（たたく瞬間に、ふちにとどく）
+  float pulse = 0.8 + 0.2 * sin(uTime * 16.0);
+  // ふちの太い輪（当たる所の境め）と、そのすぐ外の黒いふち（どの床の上でも境めが読めるように）
+  float edge = smoothstep(0.04, 0.0, abs(r - R_IN));
+  float rimDark = smoothstep(0.035, 0.0, abs(r - R_IN - 0.055));
+  // 中：赤くぬって、たたく瞬間に向かって外へ満ちていく（満ちきったら、手が落ちる）
   float inside = step(r, R_IN);
   float fillR = R_IN * uFill;
-  float filled = step(r, fillR) * (0.32 + 0.25 * uFill);
-  float front = smoothstep(0.03, 0.0, abs(r - fillR)) * inside * 0.9;
-  // 外を向いた矢印（4 方向の山形。外へ流れる）
+  float filled = step(r, fillR);
+  float front = smoothstep(0.03, 0.0, abs(r - fillR)) * inside;
+  // 外を向いた矢印（4 方向の白い山形。外へ流れる）
   float ang = atan(p.y, p.x);
   float sector = abs(mod(ang + 0.7854, 1.5708) - 0.7854);
-  float k = (r - R_IN - 0.06) / (0.97 - R_IN - 0.06);
+  float k = (r - R_IN - 0.09) / (0.97 - R_IN - 0.09);
   float m = k * 1.6 + sector * 2.4 - uTime * 1.3;
-  float arrow = smoothstep(0.13, 0.05, abs(fract(m) - 0.5)) * step(sector, 0.34) * smoothstep(0.0, 0.15, k) * smoothstep(1.0, 0.8, k);
-  float a = ((edge * pulse) * 1.4 + filled * inside + front + arrow * 0.9 * (1.0 - uHit)) * uA;
-  a += uHit * smoothstep(R_IN + 0.05, 0.0, r) * 0.9 * uA;
-  vec3 col = mix(vec3(2.6, 0.18, 0.22), vec3(3.0, 1.4, 0.4), arrow * (1.0 - inside));
-  gl_FragColor = vec4(col * a, a);
+  float arrow = smoothstep(0.14, 0.06, abs(fract(m) - 0.5)) * step(sector, 0.34) * smoothstep(0.0, 0.15, k) * smoothstep(1.0, 0.8, k) * (1.0 - uHit);
+  // ふつうの重ね（加算にしない）：赤い面（うすい → 満ちた所は濃い）・明るい赤のふち・黒いふち・白い矢印
+  vec3 col = vec3(0.85, 0.04, 0.06);
+  float a = inside * (0.22 + 0.36 * filled);
+  col = mix(col, vec3(1.0, 0.45, 0.4), front);
+  a = max(a, front * 0.9);
+  col = mix(col, vec3(1.0, 0.12, 0.12) * (0.8 + 0.4 * pulse), edge);
+  a = max(a, edge * 0.95);
+  col = mix(col, vec3(0.06, 0.0, 0.02), rimDark * (1.0 - edge));
+  a = max(a, rimDark * 0.6);
+  col = mix(col, vec3(1.0), arrow);
+  a = max(a, arrow * 0.9);
+  // たたいた瞬間：輪の中がぱっと光る
+  col = mix(col, vec3(1.0, 0.6, 0.5), uHit * inside);
+  a = max(a, uHit * inside * 0.8);
+  gl_FragColor = vec4(col, a * uA);
 }
 `
 
@@ -55,7 +67,7 @@ export class SlamRings {
   constructor(root: THREE.Object3D, n = 4) {
     for (let i = 0; i < n; i++) {
       const u = { uFill: { value: 0 }, uA: { value: 0 }, uHit: { value: 0 }, uTime }
-      const mat = new THREE.ShaderMaterial({ vertexShader: vert, fragmentShader: frag, uniforms: u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, polygonOffset: true, polygonOffsetFactor: -2 })
+      const mat = new THREE.ShaderMaterial({ vertexShader: vert, fragmentShader: frag, uniforms: u, transparent: true, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -2 })
       this.mats.push(mat)
       const mesh = new THREE.Mesh(this.geo, mat)
       mesh.rotation.x = -Math.PI / 2

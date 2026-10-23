@@ -255,7 +255,7 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
   // ---- 光る輪（電線・腕から下がる）
   const GOLD = new THREE.Color('#ffd36b')
   const CYAN = new THREE.Color(0.35, 1.6, 2.4)
-  const ringParts: Array<{ glowMat: THREE.MeshBasicMaterial; haloMat: THREE.MeshBasicMaterial; halos: THREE.Mesh[]; back: THREE.Mesh }> = []
+  const ringParts: Array<{ glowMat: THREE.MeshBasicMaterial; haloMat: THREE.MeshBasicMaterial; halos: THREE.Mesh[]; back: THREE.Sprite }> = []
   const rings: SwingRingRuntime[] = []
   for (const s of C.swings) {
     const a = s.anchor
@@ -309,13 +309,12 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
       group.add(m)
       return m
     })
-    const backMat = additive(GOLD, 0, softDotTexture())
+    // いまの輪の後光は、どの向きからも見えるように、いつもカメラを向く板（遠くからでも金色の光で「次はここ」）
+    const backMat = new THREE.SpriteMaterial({ map: softDotTexture(), color: GOLD.clone(), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: 0 })
     mats.push(backMat)
-    const backGeo = new THREE.PlaneGeometry(2.2, 2.2)
-    geos.push(backGeo)
-    const back = new THREE.Mesh(backGeo, backMat)
+    const back = new THREE.Sprite(backMat)
+    back.scale.set(2.4, 2.4, 1)
     back.position.copy(a)
-    back.rotation.y = yaw
     back.renderOrder = 3
     group.add(back)
     ringParts.push({ glowMat, haloMat, halos, back })
@@ -383,7 +382,7 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
         p.haloMat.color.copy(on ? GOLD : CYAN)
         for (const h of p.halos) h.scale.setScalar(1 + k * (on ? 1.2 : 0.7))
         p.haloMat.opacity = (on ? 0.95 : 0.5) * (1 - k) * (1 - k)
-        ;(p.back.material as THREE.MeshBasicMaterial).opacity = on && !hang ? 0.5 + 0.15 * Math.sin(t * 5) : 0
+        p.back.material.opacity = on && !hang ? 0.5 + 0.15 * Math.sin(t * 5) : 0
       })
     },
     setNight(on: boolean) {

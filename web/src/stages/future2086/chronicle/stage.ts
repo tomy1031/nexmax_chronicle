@@ -403,7 +403,7 @@ export class ChronicleFutureStage implements Stage {
         this.walker.turnToward(s, want, dt, 8)
         speed = sp
       } else this.walker.turnToward(s, p, dt, 4)
-      s.root.position.y += (groundY(rt.phys, s.root.position, p.y) - s.root.position.y) * Math.min(1, dt * 10)
+      s.root.position.y += (groundY(rt.phys, s.root.position, p.y, 1.2, rt.player.collider) - s.root.position.y) * Math.min(1, dt * 10)
     } else if (this.soraMode === 'spot') {
       // 近くに来たらこちらを向く
       const p = rt.player.position
@@ -1201,7 +1201,7 @@ export class ChronicleFutureStage implements Stage {
     let id = handId ?? this.hands.ids.find((h) => this.hands.state(h) !== 'cut' && this.hands.state(h) !== 'gone') ?? null
     if (!id) {
       id = 'touch'
-      this.hands.spawn(id, p.clone().addScaledVector(fwd, -2.4).setY(groundY(rt.phys, p, p.y)), { size: 0.9 })
+      this.hands.spawn(id, p.clone().addScaledVector(fwd, -2.4).setY(groundY(rt.phys, p, p.y, 1.2, rt.player.collider)), { size: 0.9 })
       await this.wait(0.5)
     }
     // まず背中のうしろへ、それから石へ
@@ -1353,7 +1353,8 @@ export class ChronicleFutureStage implements Stage {
       }
       // ふりおろす（少し先を読む）。予告は 1.4 秒（子どもがよけられる）
       const lead = this.tmp.set(-Math.sin(rt.player.facing), 0, -Math.cos(rt.player.facing)).multiplyScalar(rt.player.speed * 0.45)
-      const at = p.clone().add(lead).setY(groundY(rt.phys, p, p.y))
+      // 足もとの床（プレイヤーの体には当てない）
+      const at = p.clone().add(lead).setY(groundY(rt.phys, p, p.y, 1.2, rt.player.collider))
       this.slamHand(rt, id, at, this.handsMode === 'cut' ? { windup: 1.4, stuck: 2.6 } : { windup: 1.4 })
       this.handClock[id] = this.handsMode === 'escape' ? 3.6 + Math.random() * 1.2 : 4.2 + Math.random()
     }
@@ -1560,8 +1561,8 @@ export class ChronicleFutureStage implements Stage {
     this.towa.setRim('#b08cff', 1.0)
     void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(6.0, 1.6, 6.0), hold: Infinity, inSec: 1.2, fov: 18, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.6, 0)), label: 'トワ' } })
     await this.wait(2.6)
-    // のぼる道すじ：回る大歯車から、通りの両側のビルをつなぐ光る輪・時計の部分まで、通りの入口から見上げる
-    void this.cine(rt, { look: v(0.6, 9.0, -26.5), lookTo: v(1.2, 13.0, -25.5), from: v(-1.2, 3.2, -12.5), fromTo: v(-0.8, 3.8, -13.5), panSec: 3.2, hold: Infinity, inSec: 1.1, fov: 66, marker: { pos: COURSE_FIRST_GEAR.clone().add(v(0, 1.4, 0)), label: '大歯車' } })
+    // のぼる道すじ：回る大歯車から、通りの両側のビルをつなぐ光る輪・時計の部分まで、通りの上の高い所から見下ろす
+    void this.cine(rt, { look: v(0.5, 7.5, -28.5), lookTo: v(0.6, 9.0, -27.0), from: v(1.0, 25.0, -15.5), fromTo: v(0.2, 23.5, -16.8), panSec: 4.0, hold: Infinity, inSec: 1.3, fov: 62, marker: { pos: COURSE_FIRST_GEAR.clone().add(v(0, 1.4, 0)), label: '大歯車' } })
     await this.talk(rt, 'ch4_climb')
     rt.endCinematic()
     rt.camRig.yaw = camYawToward(rt.player.position, COURSE_FIRST_GEAR)
@@ -1598,8 +1599,8 @@ export class ChronicleFutureStage implements Stage {
       const sw = COURSE.swings[0]
       let ended = false
       void this.cine(rt, {
-        look: v(0.0, 10.6, -21.6),
-        from: v(0.6, 11.4, -29.2),
+        look: v(-3.0, 12.0, -21.5),
+        from: v(5.5, 13.0, -17.6),
         hold: 2.6,
         inSec: 1.0,
         outSec: 0.9,

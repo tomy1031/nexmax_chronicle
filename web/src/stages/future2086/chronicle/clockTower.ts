@@ -235,8 +235,13 @@ export function buildClockTower(c: FCtx, root: THREE.Group): ClockTowerParts {
     c.b.add(new THREE.RingGeometry(0.28, 0.34, 24), c.fm.glow, M(lx, L.y + 0.012, lz, -Math.PI / 2, 0, 0), { tint: new THREE.Color(0.25, 0.7, 1.0), cast: false, receive: false })
     // 下の支え（三角の腕）
     for (const z of [L.z0 + 0.25, L.z1 - 0.25]) c.b.add(rbox(0.1, 0.9, 0.1, 0.02), c.fm.darkMetal, M(L.x0 + lw * 0.45, L.y - 0.6, z, 0, 0, -0.75))
-    // 手すり（西の縁）。C は北の端を、大きな針が回ってくるので空けておく
-    if (L.rail) railing(L.x0 + 0.05, L.id === 'l2' ? COURSE.hand.pivot.z + COURSE.hand.width / 2 + 0.25 : L.z0 + 0.05, L.x0 + 0.05, L.z1 - 0.05, L.y, 0.85)
+    // 手すり（西の縁）。C は北の端を、大きな針が回ってくるので空けておく。
+    // そのすぐ南も、光る輪①へ飛びつく所なので空けて、ふちを黄色く光らせる（4 章のぼり）
+    if (L.rail && L.id === 'l2') {
+      const open = COURSE.swings[0].start.z
+      railing(L.x0 + 0.05, open + 0.8, L.x0 + 0.05, L.z1 - 0.05, L.y, 0.85)
+      neon(c, v(L.x0 - 0.01, L.y + 0.015, COURSE.hand.pivot.z + COURSE.hand.width / 2 + 0.2), v(L.x0 - 0.01, L.y + 0.015, open + 0.8), 0.06, NEON.warm)
+    } else if (L.rail) railing(L.x0 + 0.05, L.z0 + 0.05, L.x0 + 0.05, L.z1 - 0.05, L.y, 0.85)
   }
 
   // ---- 時計の部分（紺の箱・白い角柱・4 面の文字盤）

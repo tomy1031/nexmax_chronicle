@@ -1,6 +1,6 @@
-// タイトル画面のネクマックス（実際の 3D モデル createNexmax を、タイトル専用の小さな WebGL で全身で描く）。
-// 最初に一度手を振り、あとは待機（まばたき・首振りはモデル自身の動き）。背中の鉱石の縁の光をゆっくり脈打たせる。
-// ゲームを始めるときに dispose（WebGL のコンテキストも手放す）。アプリのアイコン作り（scripts/make-icons.mjs）にも使う。
+// 3D のネクマックスを、小さな専用の WebGL で描く（実際の 3D モデル createNexmax。全身か顔のアップ）。
+// いまはアプリのアイコン作り（pwa/iconRender.ts・scripts/make-icons.mjs）が使う（タイトル画面は一枚絵になった：titleArt.ts）。
+// 手を振る・待機（まばたき・首振りはモデル自身の動き）・背中の鉱石の縁の光をゆっくり脈打たせる。dispose で WebGL のコンテキストも手放す。
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { createNexmax, type NexmaxCharacter } from '../../world/nexmax/nexmaxModel'

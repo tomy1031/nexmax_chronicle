@@ -1,31 +1,33 @@
 /* タイトル画面（titleScreen.ts）。
-   主役は「時の輪」：4 つの時代の弧の中にネクマックスが立ち、つづきから再開する時代の弧だけが明るい。
-   ロゴはネクマックスのソフビの質感（輪郭線と同じ紺の、ずらした影）。ほかは静かに。 */
+   背景は一枚絵（titleArt.ts：IDO のわっかの向こうに 4 つの時代、手をふるネクマックスとソラ）。左に絵の主役、右の夜空にロゴとボタン。
+   絵の上の動きは少しだけ：ゆっくり寄るカメラ・時の輪をめぐる光・輪の中の明るさ・星のまたたき・舞う花びら（transform と opacity だけ）。
+   ロゴはネクマックスのソフビの質感（輪郭線と同じ紺の、ずらした影）。夜空の上でも読めるように、まわりを少し暗くする。 */
 .nt-root {
   --t-night: #0a1838;
   --t-night-2: #17306a;
   --t-holo: #5ee6ff;
   --t-gold: #ffd23f;
-  --t-khmer: #e8c25a;
-  --t-edo: #f4a54e;
-  --t-expo: #ff8a5c;
-  --t-now: #4ee6dc;
-  --t-future: #ff5fdc;
   --t-ink: #f3fbff;
   --t-ink-dim: #a9c6ea;
   --t-outline: #16223a;
+  /* 絵の右を暗くする色（rgb） */
+  --t-shade: 9, 17, 50;
   --t-pad: clamp(16px, 4vmin, 48px);
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: 'stage side' 'foot foot';
+  grid-template-areas: '. side' 'foot foot';
   pointer-events: auto;
   color: var(--t-ink);
   font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', system-ui, sans-serif;
-  background: var(--t-night);
+  /* 絵が出るまで（読めないとき）の夜空 */
+  background:
+    radial-gradient(ellipse 50% 70% at 30% 42%, rgba(255, 196, 120, 0.22), transparent 70%),
+    radial-gradient(ellipse 90% 60% at 70% 110%, rgba(255, 120, 150, 0.2), transparent 70%),
+    linear-gradient(180deg, var(--t-night) 0%, #2a2a6e 100%);
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -44,175 +46,200 @@
   pointer-events: none;
 }
 
-/* ---------------------------------------------------------------- 背景（夜の会場の空） */
-.nt-sky {
+/* ---------------------------------------------------------------- 一枚絵と、その上の動き */
+.nt-art {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 60% 70% at 27% 48%, rgba(94, 230, 255, 0.16), transparent 70%),
-    radial-gradient(ellipse 90% 60% at 50% 120%, rgba(255, 95, 220, 0.14), transparent 70%),
-    radial-gradient(1px 1px at 12% 18%, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(1px 1px at 64% 9%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(1.5px 1.5px at 83% 27%, rgba(255, 255, 255, 0.6), transparent 60%),
-    radial-gradient(1px 1px at 41% 82%, rgba(255, 255, 255, 0.4), transparent 60%),
-    radial-gradient(1px 1px at 92% 71%, rgba(255, 255, 255, 0.45), transparent 60%),
-    linear-gradient(180deg, var(--t-night) 0%, var(--t-night-2) 100%);
-}
-
-/* ---------------------------------------------------------------- 時の輪とネクマックス */
-.nt-stage {
-  grid-area: stage;
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 0;
-  padding: var(--t-pad) 0 0 var(--t-pad);
-}
-.nt-ring-box {
-  position: relative;
-  width: min(100%, 92vh, 560px);
-  aspect-ratio: 1;
-}
-.nt-ring {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.nt-ring-track {
-  fill: none;
-  stroke: rgba(94, 230, 255, 0.1);
-  stroke-width: 2;
-}
-.nt-ring-inner {
-  fill: rgba(10, 30, 70, 0.35);
-  stroke: rgba(94, 230, 255, 0.16);
-  stroke-width: 1;
-  stroke-dasharray: 2 6;
-}
-.nt-ring-ticks {
-  stroke: rgba(169, 198, 234, 0.35);
-  stroke-width: 1;
-  transform-origin: 200px 200px;
-  animation: nt-spin 140s linear infinite;
-}
-.nt-era {
-  --c: var(--t-holo);
-}
-.nt-era.khmer {
-  --c: var(--t-khmer);
-}
-.nt-era.edo {
-  --c: var(--t-edo);
-}
-.nt-era.expo {
-  --c: var(--t-expo);
-}
-.nt-era.now {
-  --c: var(--t-now);
-}
-.nt-era.future {
-  --c: var(--t-future);
-}
-.nt-arc {
-  fill: none;
-  stroke: var(--c);
-  stroke-width: 4;
-  stroke-linecap: round;
-  opacity: 0.42;
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
-}
-.nt-arc-glow {
-  fill: none;
-  stroke: var(--c);
-  stroke-width: 20;
-  stroke-linecap: round;
+  overflow: hidden;
+  pointer-events: none;
   opacity: 0;
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
+  transition: opacity 1s ease;
 }
-.nt-era.on .nt-arc {
-  stroke-width: 8;
+.nt-root.art .nt-art {
   opacity: 1;
 }
-.nt-era.on .nt-arc-glow {
-  opacity: 0.18;
-}
-.nt-arc-label {
-  fill: var(--c);
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  opacity: 0;
-}
-.nt-arc-year {
-  font-weight: 800;
-}
-.nt-era.on .nt-arc-label {
-  font-size: 14px;
-}
-.nt-nexmax {
+/* 絵の枠（titleScreen.ts が画面に合わせて置く。中の位置は絵に対する %） */
+.nt-frame {
   position: absolute;
-  left: 18%;
-  right: 18%;
-  top: 12%;
-  bottom: 9%;
-  opacity: 0;
-  transform: translateY(14px);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
 }
-.nt-nexmax canvas {
+.nt-cam {
+  position: absolute;
+  inset: 0;
+  transform-origin: 30% 42%;
+}
+.nt-root.art .nt-cam {
+  animation:
+    nt-cam-in 2.4s cubic-bezier(0.2, 0.7, 0.2, 1) both,
+    nt-cam-drift 28s ease-in-out 2.4s infinite alternate;
+}
+@keyframes nt-cam-in {
+  from {
+    transform: scale(1.07);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes nt-cam-drift {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.04) translate(-0.5%, 0.4%);
+  }
+}
+.nt-art-img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 
-/* 起動の演出（1 回だけ）：弧が順に描かれ、ネクマックスが立ち、文字が出る */
-.nt-root.in .nt-arc,
-.nt-root.in .nt-arc-glow {
-  transition: stroke-dashoffset 1.1s cubic-bezier(0.3, 0.6, 0.2, 1);
-  stroke-dashoffset: 0;
+/* 時の輪の中（4 つの時代の窓の十字のまん中）が、ゆっくり明るくなったり暗くなったりする */
+.nt-core {
+  position: absolute;
+  left: 30.1%;
+  top: 37.5%;
+  width: 34%;
+  height: 52%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 248, 222, 0.75), rgba(150, 228, 255, 0.28) 38%, rgba(150, 228, 255, 0) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.1;
 }
-.nt-root.in .nt-era:nth-of-type(2) :is(.nt-arc, .nt-arc-glow) {
-  transition-delay: 0.12s;
+.nt-root.art .nt-core {
+  animation: nt-breathe 4.8s ease-in-out 2s infinite alternate;
 }
-.nt-root.in .nt-era:nth-of-type(3) :is(.nt-arc, .nt-arc-glow) {
-  transition-delay: 0.24s;
+@keyframes nt-breathe {
+  to {
+    opacity: 0.85;
+  }
 }
-.nt-root.in .nt-era:nth-of-type(4) :is(.nt-arc, .nt-arc-glow) {
-  transition-delay: 0.36s;
+
+/* 時の輪のふちをめぐる光（ふたりの後ろを通るところは、外の窓で隠す） */
+.nt-orbit {
+  position: absolute;
+  left: 30.1%;
+  top: 38.5%;
+  width: 46.9%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) scaleY(0.89);
+  mix-blend-mode: screen;
+  -webkit-mask-image: conic-gradient(from 0deg, #000 0deg 58deg, transparent 72deg 226deg, #000 240deg 360deg);
+  mask-image: conic-gradient(from 0deg, #000 0deg 58deg, transparent 72deg 226deg, #000 240deg 360deg);
+  opacity: 0;
 }
-.nt-root.in .nt-arc-label {
-  transition: opacity 0.6s ease 0.9s;
-  opacity: 0.75;
-}
-.nt-root.in .nt-era.on .nt-arc-label {
+.nt-root.art .nt-orbit {
+  transition: opacity 1.2s ease 1.6s;
   opacity: 1;
 }
-.nt-root.in .nt-nexmax {
-  transition:
-    opacity 0.7s ease 0.35s,
-    transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s;
-  opacity: 1;
-  transform: none;
+.nt-orbit-spin {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(255, 210, 130, 0) 0deg 230deg,
+    rgba(255, 210, 130, 0.25) 295deg,
+    rgba(255, 232, 170, 0.8) 345deg,
+    #fffbea 357deg,
+    rgba(255, 255, 255, 0) 359.5deg
+  );
+  -webkit-mask-image: radial-gradient(closest-side, transparent 84%, #000 91%, #000 95%, transparent 100%);
+  mask-image: radial-gradient(closest-side, transparent 84%, #000 91%, #000 95%, transparent 100%);
+  animation: nt-orbit 7.5s linear infinite;
 }
+@keyframes nt-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 右の夜空の星 */
+.nt-stars i {
+  position: absolute;
+  width: max(2px, 0.22%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px 2px rgba(190, 232, 255, 0.75);
+  transform: translate(-50%, -50%);
+  opacity: 0.15;
+  animation: nt-twinkle 3.8s ease-in-out infinite alternate;
+}
+@keyframes nt-twinkle {
+  to {
+    opacity: 0.95;
+  }
+}
+
+/* 舞う花びら（画面の左上の桜から右下へ） */
+.nt-petals {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.nt-petals i {
+  position: absolute;
+  top: -3%;
+  width: calc(11px * var(--s, 1));
+  height: calc(7px * var(--s, 1));
+  border-radius: 85% 0 85% 0 / 100% 0 100% 0;
+  background: linear-gradient(135deg, #fff0f6, #ffa8c9);
+  opacity: 0;
+  animation: nt-petal 15s linear infinite;
+}
+@keyframes nt-petal {
+  0% {
+    transform: translate(0, 0) rotate(0deg) rotateX(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(calc(var(--drift) * 0.45), 55vh) rotate(260deg) rotateX(180deg);
+  }
+  88% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(var(--drift), 108vh) rotate(520deg) rotateX(360deg);
+    opacity: 0;
+  }
+}
+
+/* ロゴとボタンの後ろ（右）を少し暗く。下の帯（版の表示）も */
+.nt-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(var(--t-shade), 0) 50%, rgba(var(--t-shade), 0.34) 62%, rgba(var(--t-shade), 0.6) 100%),
+    radial-gradient(ellipse 40% 26% at 100% 100%, rgba(var(--t-shade), 0.55), rgba(var(--t-shade), 0) 100%);
+}
+
+/* 起動の演出（1 回だけ）：文字とボタンが出る */
 .nt-side > * {
   opacity: 0;
   transform: translateY(8px);
 }
 .nt-root.in .nt-side > * {
   transition:
-    opacity 0.5s ease 0.55s,
-    transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.55s;
+    opacity 0.5s ease 0.45s,
+    transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.45s;
   opacity: 1;
   transform: none;
 }
-
-@keyframes nt-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.nt-root.in .nt-side > .nt-menu,
+.nt-root.in .nt-side > .nt-updating {
+  transition-delay: 0.7s;
 }
 
 /* ---------------------------------------------------------------- ロゴとメニュー */
@@ -223,7 +250,7 @@
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
-  gap: clamp(10px, 3.2vmin, 32px);
+  gap: clamp(10px, 3.4vmin, 34px);
   min-height: 0;
   padding: var(--t-pad) var(--t-pad) 0 clamp(8px, 2vw, 32px);
 }
@@ -235,37 +262,43 @@
 }
 .nt-logo-main {
   font-weight: 800;
-  font-size: clamp(40px, min(10.5vw, 15vh), 112px);
+  font-size: clamp(40px, min(8.6vw, 17vh), 128px);
   letter-spacing: 0.035em;
   color: #fff;
-  background: linear-gradient(180deg, #ffffff 30%, #bfeeff 100%);
+  background: linear-gradient(180deg, #ffffff 34%, #c8f0ff 78%, #ffe9a8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  /* ソフビの厚み：輪郭線と同じ紺を少しずつずらして重ねる */
-  filter: drop-shadow(0.035em 0.045em 0 var(--t-outline)) drop-shadow(0 0 0.25em rgba(94, 230, 255, 0.35));
+  /* ソフビの厚み：輪郭線と同じ紺を少しずつずらして重ねる。夜空の上で読めるように、まわりに紺のかすみ */
+  filter: drop-shadow(0.035em 0.045em 0 var(--t-outline)) drop-shadow(0 0 0.18em rgba(9, 17, 50, 0.75)) drop-shadow(0 0 0.32em rgba(94, 230, 255, 0.4));
 }
 .nt-logo-sub {
   margin-top: 0.42em;
-  font-weight: 500;
-  font-size: clamp(13px, min(2.6vw, 3.8vh), 28px);
-  letter-spacing: 0.48em;
-  color: var(--t-holo);
-  padding-left: 0.12em;
+  font-weight: 800;
+  font-size: clamp(13px, min(2.5vw, 3.8vh), 28px);
+  letter-spacing: 0.5em;
+  color: #c4f6ff;
+  padding-left: 0.14em;
+  text-shadow:
+    0 2px 0 var(--t-outline),
+    0 0 12px rgba(94, 230, 255, 0.65);
 }
 .nt-logo-tag {
-  margin-top: 0.8em;
+  margin-top: 0.85em;
   font-weight: 800;
-  font-size: clamp(12px, min(2vw, 3.2vh), 20px);
+  font-size: clamp(12px, min(1.9vw, 3.2vh), 20px);
   letter-spacing: 0.12em;
   color: var(--t-gold);
+  text-shadow:
+    0 2px 0 var(--t-outline),
+    0 0 12px rgba(255, 170, 60, 0.5);
 }
 .nt-menu {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: clamp(8px, 1.8vmin, 16px);
-  width: min(100%, 360px);
+  width: min(100%, clamp(300px, 26vw, 420px));
 }
 .nt-menu[hidden] {
   display: none;
@@ -371,6 +404,13 @@
   cursor: pointer;
   border-radius: 8px;
 }
+/* 「ホーム画面に追加」：絵の町の明かりの上でも読めるように、紺の札にのせる */
+.nt-install {
+  padding: 0.35em 0.95em 0.35em 0.7em;
+  border-radius: 999px;
+  background: rgba(var(--t-shade), 0.62);
+  box-shadow: inset 0 0 0 1px rgba(94, 230, 255, 0.28);
+}
 .nt-install svg {
   width: 1.3em;
   height: 1.3em;
@@ -397,18 +437,20 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   min-height: 36px;
   padding: 0 var(--t-pad) clamp(6px, 2vmin, 18px);
   font-size: 12px;
-  color: rgba(169, 198, 234, 0.6);
+  color: rgba(200, 222, 248, 0.72);
+  text-shadow: 0 1px 2px rgba(var(--t-shade), 0.9);
+  pointer-events: none;
 }
 .nt-updating {
   display: flex;
   flex-direction: column;
   gap: 0.55em;
-  width: min(100%, 360px);
+  width: min(100%, clamp(300px, 26vw, 420px));
   padding: 0.9em 1.2em 1em;
   color: var(--t-ink);
   background: rgba(8, 22, 58, 0.82);
@@ -601,21 +643,18 @@
 }
 
 /* ---------------------------------------------------------------- 縦向き・低い画面 */
+/* 縦長：上に絵（titleArt.ts の PORTRAIT_H）、下にロゴとボタン。絵の下は夜の色へとけこませる */
 @media (max-aspect-ratio: 4/5) {
   .nt-root {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
-    grid-template-areas: 'stage' 'side' 'foot';
-    align-content: center;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas: '.' 'side' 'foot';
   }
-  .nt-stage {
-    padding: max(var(--t-pad), 6vh) var(--t-pad) 0;
-  }
-  .nt-ring-box {
-    width: min(100%, 46vh);
+  .nt-shade {
+    background: linear-gradient(180deg, rgba(var(--t-shade), 0) 36%, rgba(var(--t-shade), 0.8) 50%, rgb(var(--t-shade)) 58%);
   }
   .nt-foot {
-    align-items: flex-end;
+    justify-content: center;
   }
   .nt-side {
     align-items: center;
@@ -632,15 +671,12 @@
   }
 }
 @media (max-height: 440px) and (min-aspect-ratio: 4/5) {
-  .nt-stage {
-    padding-top: 6px;
-  }
   .nt-side {
-    gap: 10px;
+    gap: 12px;
     padding-top: 10px;
   }
   .nt-foot {
-    min-height: 28px;
+    min-height: 24px;
   }
   .nt-logo-sub {
     margin-top: 0.3em;
@@ -651,14 +687,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nt-ring-ticks {
+  .nt-root.art .nt-cam,
+  .nt-root.art .nt-core,
+  .nt-orbit-spin,
+  .nt-stars i {
     animation: none;
   }
-  .nt-root.in .nt-arc,
-  .nt-root.in .nt-arc-glow,
-  .nt-root.in .nt-nexmax,
-  .nt-root.in .nt-side > *,
-  .nt-root.in .nt-arc-label {
+  .nt-orbit,
+  .nt-petals {
+    display: none;
+  }
+  .nt-root.in .nt-side > * {
     transition: none;
   }
   .nt-btn,

@@ -636,6 +636,9 @@ export class Game {
         if (c <= this.chapterShown || (n === undefined && CHAPTER_ERA[c] !== a.stage.key)) return Promise.resolve()
         return this.openChapter(c, false)
       },
+      get touch() {
+        return g.touch !== null
+      },
       get playTime() {
         return g.playTime
       },

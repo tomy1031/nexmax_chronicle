@@ -38,7 +38,7 @@ import { INTRO_LAYOUT } from '../introProps2086'
 import { buildChronicleFuture, type ChronicleAdditions } from './additions'
 import { CHRONICLE_SPOTS, COURSE, SITE, TOWER, UNDER, chronicleKillY } from './layoutChronicle'
 import { QR_RECORDS, dialRecord, type QrRecord } from './qrStand'
-import { TowerClimb } from './towerClimb'
+import { SECTION, TowerClimb } from './towerClimb'
 import { SlamRings } from './slamRing'
 import { MobTalkV7, mobPhaseV7 } from './mobTalkV7'
 import type { ChronoTarget } from '../../../chronicle/chrono'
@@ -1560,8 +1560,8 @@ export class ChronicleFutureStage implements Stage {
     this.towa.setRim('#b08cff', 1.0)
     void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(6.0, 1.6, 6.0), hold: Infinity, inSec: 1.2, fov: 18, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.6, 0)), label: 'トワ' } })
     await this.wait(2.6)
-    // のぼる道すじ：回る大歯車・大きな針・時計の部分を、通りの西から見上げる
-    void this.cine(rt, { look: v(4.2, 6.5, -26.0), from: v(-4.6, 3.0, -16.5), hold: Infinity, inSec: 1.1, fov: 64, marker: { pos: COURSE_FIRST_GEAR.clone().add(v(0, 1.4, 0)), label: '大歯車' } })
+    // のぼる道すじ：回る大歯車から、通りの両側のビルをつなぐ光る輪・時計の部分まで、通りの入口から見上げる
+    void this.cine(rt, { look: v(0.6, 9.0, -26.5), lookTo: v(1.2, 13.0, -25.5), from: v(-1.2, 3.2, -12.5), fromTo: v(-0.8, 3.8, -13.5), panSec: 3.2, hold: Infinity, inSec: 1.1, fov: 66, marker: { pos: COURSE_FIRST_GEAR.clone().add(v(0, 1.4, 0)), label: '大歯車' } })
     await this.talk(rt, 'ch4_climb')
     rt.endCinematic()
     rt.camRig.yaw = camYawToward(rt.player.position, COURSE_FIRST_GEAR)
@@ -1577,17 +1577,43 @@ export class ChronicleFutureStage implements Stage {
     })
     this.climb = climb
     this.climbT0 = this.clock.time
-    await this.until(
-      () => {
-        this.phase = climb.phase
-        this.marks = climb.marks
-        return climb.done
-      },
-      () => climb.skip(rt),
-    )
+    // 1 章のアーチの光る輪は、のぼる間はつかめない（となりの光る輪①とまちがえないように）
+    const archRing = this.fs.claw.targets.find((t) => t.id === this.fs.claw.ids.swing)
+    const archWas = archRing?.enabled ?? false
+    if (archRing) archRing.enabled = false
+    // はじめて C に着いたら、光る輪①と、向こうのビルの足場を見せる（短く。F でとばせる）
+    let introShown = false
+    while (this.alive && !climb.done) {
+      await this.until(
+        () => {
+          this.phase = climb.phase
+          this.marks = climb.marks
+          return climb.done || (!introShown && climb.section === SECTION.C && rt.player.grounded && rt.claw.wire.phase === 'idle' && !rt.talking)
+        },
+        () => climb.skip(rt),
+      )
+      if (climb.done || !this.alive) break
+      introShown = true
+      this.lock(rt, true)
+      const sw = COURSE.swings[0]
+      let ended = false
+      void this.cine(rt, {
+        look: v(0.0, 10.6, -21.6),
+        from: v(0.6, 11.4, -29.2),
+        hold: 2.6,
+        inSec: 1.0,
+        outSec: 0.9,
+        fov: 62,
+        skippable: true,
+        marker: { pos: sw.anchor.clone().add(v(0, 0.9, 0)), label: '光る輪で、向こうのビルへ！', color: '#ffd447' },
+      }).then(() => (ended = true))
+      await this.until(() => ended)
+      this.lock(rt, false)
+    }
     this.climbLog = { sec: +(this.clock.time - this.climbT0).toFixed(1), falls: climb.falls, hits: climb.hits, assists: climb.assists }
     climb.end()
     this.climb = null
+    if (archRing) archRing.enabled = archWas
     rt.camRig.distance = camDist
     this.fs.setAction(false)
     if (!this.alive) return

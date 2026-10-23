@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { cellsWithHoles, rectsOverlap } from '../src/stages/future2086/groundHoles'
 import { BENCH, CHECKPOINTS, COURSE, GROUND_HOLES, KEY_STALL, SITE, TOWER, UNDER, chronicleKillY } from '../src/stages/future2086/chronicle/layoutChronicle'
 import { DEBRIS_WARN, HAND_NORTH, HAND_AWAY, gearHookAngle, gearHookInWindow, gearHookPoint, handAt, onHand, onLedge } from '../src/stages/future2086/chronicle/towerCourse'
-import { B_SOUTH_Z, E_SOUTH_Z, SECTION, SWING_ASSIST, WALL_HAND, climbPhase, sectionAt, swingAssist, swingOf, swingTarget } from '../src/stages/future2086/chronicle/towerClimb'
+import { B_SOUTH_Z, E_SOUTH_Z, SECTION, SWING_ASSIST, WALL_HAND, climbPhase, nearWall, sectionAt, swingAssist, swingOf, swingTarget } from '../src/stages/future2086/chronicle/towerClimb'
 import { swingGuidePath } from '../src/stages/future2086/chronicle/towerSwings'
 import * as THREE from 'three'
 import { YearDialLogic } from '../src/stages/future2086/chronicle/yearDialLogic'
@@ -134,8 +134,8 @@ describe('時計台のぼり（4 章のアクション）', () => {
     const E = TOWER.ledges[TOWER.ledges.length - 1]
     expect(onLedge(COURSE.hook2.landing, { ...E, x1: E.x0 + 0.9 })).toBe(true)
   })
-  it('光る輪 3 つで、通りの上をぐるりと回る（C → W1 → W2 → N1）。飛びつく所・着く所は足場の上で、だんだん高くなる', () => {
-    const from = [TOWER.ledges[0], COURSE.W1, COURSE.W2]
+  it('光る輪 3 つで、通りの上をぐるりと回る（C の西のバルコニー C2 → W1 → W2 → N1）。飛びつく所・着く所は足場の上で、だんだん高くなる', () => {
+    const from = [COURSE.C2, COURSE.W1, COURSE.W2]
     const to = [COURSE.W1, COURSE.W2, COURSE.N1]
     expect(COURSE.swings.length).toBe(3)
     COURSE.swings.forEach((s, i) => {
@@ -146,6 +146,9 @@ describe('時計台のぼり（4 章のアクション）', () => {
       expect(to[i].y - from[i].y).toBeLessThanOrEqual(2.0)
       expect(Math.abs(s.dir.length() - 1)).toBeLessThan(1e-6)
     })
+    // 飛びつく所のうしろ（わたる向きの反対）に、カメラが下がれるすき間（壁まで 2.2m 以上）
+    expect(TOWER.x0 - COURSE.swings[0].start.x).toBeGreaterThan(2.2)
+    expect(COURSE.swings[2].start.x - COURSE.W2.x0).toBeGreaterThan(2.2)
     // 東西にわたる（通りの向こうのビル）のが 2 回、壁ぞいに北へ 1 回
     expect(COURSE.swings.filter((s) => Math.abs(s.dir.x) > 0.9).length).toBe(2)
     expect(COURSE.W1.x1).toBeLessThan(-3)
@@ -203,6 +206,18 @@ describe('時計台のぼり（4 章のアクション）', () => {
       // 遠すぎる（飛びつく所のすぐそば・足場より 6m 下）なら助けない
       expect(swingAssist(s.start.clone().add(new THREE.Vector3(0, -6, 0)), s.dir.clone().multiplyScalar(1), s.dir, L)).toBeNull()
     })
+  })
+  it('こぎすぎて向こうの壁に入りそうなら、手をはなして足場へ落とす（その所は足場の上）', () => {
+    for (const s of COURSE.swings) {
+      if (s.wall === undefined) continue
+      const L = swingTarget(COURSE.swings.indexOf(s))
+      const at = (k: number) => (Math.abs(s.dir.x) > 0.5 ? { x: k, z: s.anchor.z } : { x: s.anchor.x, z: k })
+      expect(nearWall(at(s.wall - 0.2 * Math.sign(s.dir.x + s.dir.z)), s), s.id).toBe(true)
+      expect(nearWall(at(s.anchor.x + 0 * s.dir.x), s), s.id).toBe(false)
+      // 手をはなす所（壁の 0.4m 手前）は、向こうの足場の上
+      const p = at(s.wall - 0.4 * Math.sign(s.dir.x + s.dir.z))
+      expect(onLedge({ ...p, y: L.y }, L), s.id).toBe(true)
+    }
   })
   it('段の判定：やり直しの位置は、その段の上', () => {
     CHECKPOINTS.forEach((cp, i) => expect(sectionAt(cp.pos), cp.id).toBe(i))

@@ -14,7 +14,7 @@ import type { StageRuntime } from '../../../game/stage'
 import type { ObjectiveMark } from '../../../game/stage'
 import type { BlackHands } from '../../../chronicle/visuals'
 import type { ClawTargetDef, WireEvent } from '../../../player/clawLogic'
-import { CHECKPOINTS, COURSE, TOWER, type Ledge } from './layoutChronicle'
+import { CHECKPOINTS, COURSE, TOWER, type Ledge, type SwingRingSpec } from './layoutChronicle'
 import { DEBRIS_WARN, onLedge, type TowerCourseParts } from './towerCourse'
 import type { ClockTowerParts } from './clockTower'
 
@@ -38,6 +38,14 @@ export function swingOf(section: number): number {
 /** 光る輪でわたった先の足場 */
 export function swingTarget(index: number): Ledge {
   return [COURSE.W1, COURSE.W2, COURSE.N1][index]
+}
+
+/** ぶら下がっている足もと p が、向こうの壁（spec.wall）の 0.4m 手前より先にいるか */
+export function nearWall(p: { x: number; z: number }, s: Pick<SwingRingSpec, 'dir' | 'wall'>): boolean {
+  if (s.wall === undefined) return false
+  const along = Math.abs(s.dir.x) > 0.5 ? p.x : p.z
+  const sg = (Math.abs(s.dir.x) > 0.5 ? s.dir.x : s.dir.z) > 0 ? 1 : -1
+  return (along - s.wall) * sg > -0.4
 }
 
 /** B（渡り廊下）の南の端：針を待つ所 */
@@ -178,6 +186,13 @@ export class TowerClimb {
       if (this.best > 0 && p.y < cp.area.y - 1.2) this.respawn(rt, 'おっと！ さっきの足場から、もう一度')
     }
     if (rt.claw.wire.phase !== 'swinging') this.hanging = -1
+    else if (this.hanging >= 0 && nearWall(p, COURSE.swings[this.hanging])) {
+      // こぎすぎて、向こうの壁に入りそう：手をはなして、すぐ下の足場へ（壁の中へ入らないように）
+      rt.claw.reset()
+      rt.player.velocity.set(0, 0, 0)
+      this.hanging = -1
+      this.assists++
+    }
     if (p.y > TOWER.deckY - 0.5) {
       this.done = true
       this.section = SECTION.top
@@ -230,7 +245,7 @@ export class TowerClimb {
     // 光る輪：その段で飛びつく輪だけ（ぶら下がっている間は、その輪のまま）
     const want = this.hanging >= 0 ? this.hanging : swingOf(sec)
     this.course.swings.rings.forEach((r, i) => (r.def.enabled = i === want || wireT === r.def))
-    this.course.swings.setActive(want >= 0 ? want : null)
+    this.course.swings.setActive(want >= 0 ? want : null, this.hanging >= 0)
     const [top] = this.towerHooks
     if (!rt.claw.wire.isConnected()) {
       top.enabled = sec === SECTION.E

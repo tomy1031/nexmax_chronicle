@@ -64,8 +64,8 @@ export type SwingRingRuntime = {
 
 export type TowerSwingParts = {
   rings: SwingRingRuntime[]
-  /** いまわたる輪（金色に脈打って、道すじを出す）。null で全部ふつうに */
-  setActive(index: number | null): void
+  /** いまわたる輪（金色に脈打って、道すじを出す）。null で全部ふつうに。hanging：ぶら下がっている間（道すじと後光を消す） */
+  setActive(index: number | null, hanging?: boolean): void
   update(dt: number): void
   setNight(on: boolean): void
   dispose(): void
@@ -81,8 +81,10 @@ void main() {
   gl_Position = projectionMatrix * mv;
   // 先へ流れる光
   float run = 0.45 + 0.55 * smoothstep(0.16, 0.0, abs(fract(aK - uTime * 0.5) - 0.5) - 0.34);
-  gl_PointSize = (6.0 + 6.0 * run) * uPixelRatio * (20.0 / max(4.0, -mv.z));
-  vA = run;
+  // 近くの点は大きくなりすぎないように（カメラのすぐ前で、ぼやけた帯にならないように）。すぐ近くはうすく
+  float d = max(0.5, -mv.z);
+  gl_PointSize = (4.0 + 4.0 * run) * uPixelRatio * clamp(16.0 / d, 0.5, 1.8);
+  vA = run * smoothstep(2.0, 5.0, d);
 }
 `
 const guideFrag = /* glsl */ `
@@ -179,6 +181,27 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
   const W1 = C.W1
   const W2 = C.W2
   const N1 = C.N1
+  // C2：C（塔の西の足場）の西へ張り出したバルコニー。西のふち（輪①へ飛びつく所）は空けて黄色く光らせ、南（広場の側）は手すり
+  {
+    const L = C.C2
+    const cz = (L.z0 + L.z1) / 2
+    fbox(c, c.fm.panel, (L.x0 + L.x1) / 2 + 0.05, L.y - 0.15, cz, L.x1 - L.x0 + 0.1, 0.3, L.z1 - L.z0, { r: 0.07, tint: '#ffffff' })
+    c.col.box((L.x0 + L.x1) / 2, L.y - 0.15, cz, L.x1 - L.x0, 0.3, L.z1 - L.z0)
+    neon(c, v(L.x0 - 0.01, L.y - 0.2, L.z0), v(L.x0 - 0.01, L.y - 0.2, L.z1), 0.05, NEON.cyan)
+    neon(c, v(L.x0 - 0.01, L.y + 0.015, L.z0 + 0.1), v(L.x0 - 0.01, L.y + 0.015, L.z1 - 0.1), 0.06, NEON.warm)
+    neon(c, v(L.x0, L.y - 0.2, L.z0 - 0.01), v(L.x1, L.y - 0.2, L.z0 - 0.01), 0.045, NEON.cyan)
+    // 下の腕（塔の壁 → 板の西のふち、ななめ）
+    for (const z of [L.z0 + 0.3, L.z1 - 0.3]) {
+      const a = v(5.55, L.y - 2.6, z)
+      const b = v(L.x0 + 0.25, L.y - 0.3, z)
+      c.b.add(rbox(0.12, a.distanceTo(b), 0.12, 0.02), c.fm.darkMetal, M((a.x + b.x) / 2, (a.y + b.y) / 2, z, 0, 0, Math.atan2(-(b.x - a.x), b.y - a.y)))
+    }
+    // 南の手すり（C と C2 の広場の側）。当たり判定は見えない壁
+    glowRailing(c, L.x0 + 0.05, L.z1 - 0.05, 5.55, L.z1 - 0.05, L.y, { h: 0.85, collider: false })
+    c.col.wall(L.x0 + 0.05, L.z1 - 0.05, 5.55, L.z1 - 0.05, L.y, L.y + 1.2, 0.2)
+    c.b.add(new THREE.RingGeometry(0.3, 0.37, 28), c.fm.glow, M(L.x0 + 0.5, L.y + 0.012, cz, -Math.PI / 2, 0, 0), { tint: new THREE.Color(0.25, 0.7, 1.0), cast: false, receive: false })
+    c.lights.push({ pos: v(L.x0 + 0.8, L.y + 2.2, cz), color: '#ffe2b0', intensity: 2.0, dist: 6 })
+  }
   // W1：西のビルの南東の丸い角（外壁は奥へ下がっていく）。南の端に手すり
   sideLedge(W1, -7.2, 2.6, [[W1.x0 + 0.05, W1.z1 - 0.05, W1.x1 - 0.05, W1.z1 - 0.05]])
   // W2：北の端に手すり（輪②でとびすぎても落ちない）
@@ -241,11 +264,11 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
     if (h.kind === 'cable') {
       // 通りをまたぐ電線（たるみ）と、お祭りの電球・提灯
       const A = v(h.x0, top, a.z)
-      const B = v(h.x1, top, a.z)
+      const B = v(h.x1, h.y1 ?? top, a.z)
       bulbString(c, A, B, 0.35, 0.45, NEON.warm)
       for (let x = h.x0 + 1.2; x < h.x1 - 0.8; x += 2.4) if (Math.abs(x - a.x) > 0.9) chochin(c, x, top - 0.75, a.z, Math.round(x) % 2 ? 'red' : 'white', 0.75)
       // 屋上の上なら、柱を立てる
-      for (const x of [h.x0, h.x1]) if (top > 17.4) c.b.add(new THREE.CylinderGeometry(0.06, 0.08, top - 17.0 + 0.2, 10), c.fm.metal, M(x + (x < 0 ? -0.25 : 0.25), (top + 17.0) / 2, a.z))
+      for (const x of [h.x0, h.x1]) if (top > 17.4 && (h.y1 ?? top) > 17.4) c.b.add(new THREE.CylinderGeometry(0.06, 0.08, top - 17.0 + 0.2, 10), c.fm.metal, M(x + (x < 0 ? -0.25 : 0.25), (top + 17.0) / 2, a.z))
     } else {
       // 壁から出た腕と、ななめの支え
       const len = Math.abs(a.x - h.wallX)
@@ -256,9 +279,10 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
       c.b.add(rbox(0.09, b0.distanceTo(b1), 0.09, 0.02), c.fm.darkMetal, M((b0.x + b1.x) / 2, (b0.y + b1.y) / 2, a.z, 0, 0, Math.atan2(-(b1.x - b0.x), b1.y - b0.y)))
       neon(c, v(h.wallX, top + 0.09, a.z), v(a.x, top + 0.09, a.z), 0.035, NEON.cyan)
     }
-    // 吊り金具と輪（真鍮＋水色の光）。わたる向きを正面にする（飛びつく所から輪の穴が見える）
-    c.b.add(new THREE.CylinderGeometry(0.025, 0.025, top - a.y - 0.55, 8), c.fm.metal, M(a.x, (top + a.y + 0.55) / 2, a.z))
-    c.b.add(rbox(0.3, 0.2, 0.3, 0.05), c.fm.darkMetal, M(a.x, top - 0.12, a.z))
+    // 吊り金具と輪（真鍮＋水色の光）。わたる向きを正面にする（飛びつく所から輪の穴が見える）。電線が斜めなら、輪の上の高さ
+    const ht = h.kind === 'cable' && h.y1 !== undefined ? top + ((h.y1 - top) * (a.x - h.x0)) / (h.x1 - h.x0) - 0.25 : top
+    c.b.add(new THREE.CylinderGeometry(0.025, 0.025, ht - a.y - 0.55, 8), c.fm.metal, M(a.x, (ht + a.y + 0.55) / 2, a.z))
+    c.b.add(rbox(0.3, 0.2, 0.3, 0.05), c.fm.darkMetal, M(a.x, ht - 0.12, a.z))
     const yaw = Math.atan2(s.dir.x, s.dir.z)
     c.b.add(new THREE.TorusGeometry(0.5, 0.06, 12, 40), c.m.brass, M(a.x, a.y, a.z, 0, yaw, 0))
     c.b.add(new THREE.SphereGeometry(0.09, 10, 6), c.m.brass, M(a.x, a.y + 0.53, a.z))
@@ -336,15 +360,17 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
   })
 
   let active: number | null = null
+  let hang = false
   let fade = 0
   let night = false
   return {
     rings,
-    setActive(index: number | null) {
-      if (index === active) return
+    setActive(index: number | null, hanging = false) {
+      if (index === active && hanging === hang) return
+      if (index !== active) fade = 0
       active = index
-      guides.forEach((g, i) => (g.visible = i === index))
-      fade = 0
+      hang = hanging
+      guides.forEach((g, i) => (g.visible = i === index && !hanging))
     },
     update(dt: number) {
       const t = uTime.value
@@ -357,7 +383,7 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
         p.haloMat.color.copy(on ? GOLD : CYAN)
         for (const h of p.halos) h.scale.setScalar(1 + k * (on ? 1.2 : 0.7))
         p.haloMat.opacity = (on ? 0.95 : 0.5) * (1 - k) * (1 - k)
-        ;(p.back.material as THREE.MeshBasicMaterial).opacity = on ? 0.5 + 0.15 * Math.sin(t * 5) : 0
+        ;(p.back.material as THREE.MeshBasicMaterial).opacity = on && !hang ? 0.5 + 0.15 * Math.sin(t * 5) : 0
       })
     },
     setNight(on: boolean) {

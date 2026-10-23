@@ -89,13 +89,17 @@ export type SwingRingSpec = {
   /** 飛びつく所（from の足場の端）と、着く所（to の足場のまん中） */
   start: THREE.Vector3
   land: THREE.Vector3
+  /** 向こうの足場のうしろの壁（わたる向きの座標。こぎすぎて壁に入りそうになったら、手をはなして足場へ落とす） */
+  wall?: number
   /** 吊る物：通りをまたぐ電線（両はしの x）／壁から出た腕（壁の x） */
-  hang: { kind: 'cable'; x0: number; x1: number; y: number } | { kind: 'arm'; wallX: number; y: number }
+  hang: { kind: 'cable'; x0: number; x1: number; y: number; y1?: number } | { kind: 'arm'; wallX: number; y: number }
 }
 
 const COURSE_A: Ledge = { id: 'A', y: 2.75, x0: 2.4, x1: 6.2, z0: -32.4, z1: -29.7 }
 const COURSE_B: Ledge = { id: 'B', y: 7.4, x0: 4.6, x1: 6.2, z0: -33.0, z1: -28.6, rail: true }
 /** 西の段々のビルの東の面の、かんばんの足場（W1：南・低い／W2：北・高い）と、東の段々のビルの西の面の足場（N1：B の上） */
+/** C の西へ張り出したバルコニー（光る輪①へ飛びつく所。塔の壁から 2.5m はなれて、カメラがうしろに下がれるように） */
+const LEDGE_C2: Ledge = { id: 'C2', y: 7.4, x0: 2.6, x1: 4.2, z0: -22.6, z1: -20.0 }
 const LEDGE_W1: Ledge = { id: 'W1', y: 8.2, x0: -6.0, x1: -3.6, z0: -24.4, z1: -20.6 }
 const LEDGE_W2: Ledge = { id: 'W2', y: 9.8, x0: -6.0, x1: -3.4, z0: -33.4, z1: -29.6 }
 const LEDGE_N1: Ledge = { id: 'N1', y: 11.6, x0: 3.6, x1: 6.0, z0: -33.4, z1: -29.6 }
@@ -118,13 +122,14 @@ export const COURSE = {
   /** 大きな針：軸（C の北の端。上面の高さ）・長さ・幅。北で dwell 秒止まって B へかかる → 西（通りの上）へ回って away 秒 → もどる */
   hand: { pivot: v(5.0, 7.4, -23.45), len: 5.25, width: 1.1, dwell: 3.2, away: 2.0, travel: 2.4 },
   /** 通りの上の、ぶら下がりの輪（C → W1 → W2 → N1） */
+  C2: LEDGE_C2,
   W1: LEDGE_W1,
   W2: LEDGE_W2,
   N1: LEDGE_N1,
   swings: [
-    { id: 'swing_ring_1', anchor: v(-2.3, 13.6, -21.8), rope: 4.5, dir: v(-1, 0, 0), start: v(4.4, 7.4, -21.8), land: v(-4.6, LEDGE_W1.y, -21.8), hang: { kind: 'cable', x0: -6.9, x1: TX0, y: 15.2 } },
+    { id: 'swing_ring_1', anchor: v(-2.9, 14.8, -21.3), rope: 4.5, dir: v(-1, 0, 0), start: v(2.8, 7.4, -21.3), land: v(-4.6, LEDGE_W1.y, -21.3), wall: -6.0, hang: { kind: 'cable', x0: -6.9, x1: TX0, y: 16.3, y1: 15.3 } },
     { id: 'swing_ring_2', anchor: v(-4.7, 15.6, -29.0), rope: 4.5, dir: v(0, 0, -1), start: v(-4.7, LEDGE_W1.y, -24.1), land: v(-4.7, LEDGE_W2.y, -31.6), hang: { kind: 'arm', wallX: -6.0, y: 16.8 } },
-    { id: 'swing_ring_3', anchor: v(2.2, 17.0, -31.5), rope: 4.5, dir: v(1, 0, 0), start: v(-3.6, LEDGE_W2.y, -31.5), land: v(4.6, LEDGE_N1.y, -31.5), hang: { kind: 'cable', x0: -6.0, x1: 6.0, y: 18.4 } },
+    { id: 'swing_ring_3', anchor: v(2.2, 17.0, -31.5), rope: 4.5, dir: v(1, 0, 0), start: v(-3.6, LEDGE_W2.y, -31.5), land: v(4.6, LEDGE_N1.y, -31.5), wall: 6.0, hang: { kind: 'cable', x0: -6.0, x1: 6.0, y: 18.4 } },
   ] as SwingRingSpec[],
   /** 東のビルの西の壁の、回る歯車の金具（N1 の南の上）→ E（時計の下の回廊の北西のすみ） */
   hook2: { id: 'gear_hook_2', c: v(6.12, 15.0, -27.2), r: 1.25, w: -0.75, window: 0.85, landing: v(4.65, CK.y0, -24.6), via: v(3.9, 17.6, -25.9), wait: v(4.8, LEDGE_N1.y, -29.95) } as GearHookSpec,
@@ -141,7 +146,7 @@ export const CHECKPOINTS: ReadonlyArray<{ id: CheckpointId; pos: THREE.Vector3; 
   { id: 'street', pos: v(0.6, 0, -21.4), area: { id: 'street', y: 0, x0: -6, x1: 6, z0: -34, z1: -19.6 } },
   { id: 'A', pos: v(3.2, COURSE_A.y, -31.0), area: COURSE_A },
   { id: 'B', pos: v(5.4, COURSE_B.y, -32.4), area: COURSE_B },
-  { id: 'C', pos: v(4.75, 7.4, -21.8), area: LEDGES[0] },
+  { id: 'C', pos: v(3.0, 7.4, -21.3), area: { ...LEDGES[0], x0: LEDGE_C2.x0 } },
   { id: 'W1', pos: v(-4.7, LEDGE_W1.y, -23.6), area: LEDGE_W1 },
   { id: 'W2', pos: v(-4.2, LEDGE_W2.y, -31.5), area: LEDGE_W2 },
   { id: 'N1', pos: v(4.8, LEDGE_N1.y, -30.2), area: LEDGE_N1 },

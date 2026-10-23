@@ -146,9 +146,9 @@ describe('時計台のぼり（4 章のアクション）', () => {
       expect(to[i].y - from[i].y).toBeLessThanOrEqual(2.0)
       expect(Math.abs(s.dir.length() - 1)).toBeLessThan(1e-6)
     })
-    // 飛びつく所のうしろ（わたる向きの反対）に、カメラが下がれるすき間（壁まで 2.2m 以上）
-    expect(TOWER.x0 - COURSE.swings[0].start.x).toBeGreaterThan(2.2)
-    expect(COURSE.swings[2].start.x - COURSE.W2.x0).toBeGreaterThan(2.2)
+    // 飛びつく所のうしろ（わたる向きの反対）に、カメラが下がれるすき間（壁まで 2.8m 以上）
+    expect(TOWER.x0 - COURSE.swings[0].start.x).toBeGreaterThan(2.8)
+    expect(COURSE.swings[2].start.x - COURSE.W2.x0).toBeGreaterThan(2.8)
     // 東西にわたる（通りの向こうのビル）のが 2 回、壁ぞいに北へ 1 回
     expect(COURSE.swings.filter((s) => Math.abs(s.dir.x) > 0.9).length).toBe(2)
     expect(COURSE.W1.x1).toBeLessThan(-3)

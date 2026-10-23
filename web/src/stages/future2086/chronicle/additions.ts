@@ -49,7 +49,7 @@ export type ChronicleAdditions = {
   stallUnit: Units
   /** 出し入れする当たり判定（跡地の 2 つの姿・裏側の足場・歯車の歯） */
   colliders: SwitchColliders
-  /** 足したつかめる対象（時計台の金具・回る歯車の金具。fs.claw.targets にも入れてある） */
+  /** 足したつかめる対象（時計台の金具・回る歯車の金具・ぶら下がりの光る輪。fs.claw.targets にも入れてある） */
   clawTargets: ClawTargetDef[]
   spots: typeof CHRONICLE_SPOTS
   /** ステージの begin で 1 回（rt.phys） */
@@ -75,6 +75,7 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
   for (const h of tower.hooks) fs.claw.targets.push(h)
   const course = buildTowerCourse(c, root)
   for (const h of course.gearHooks) fs.claw.targets.push(h.def)
+  for (const r of course.swings.rings) fs.claw.targets.push(r.def)
   const qr = buildQrStand(root, fs.colliders)
   const underground = buildUnderground(c, root)
   const stall = buildKeychainStall(c, root)
@@ -85,7 +86,7 @@ export function buildChronicleAdditions(fs: FutureScene, quality: QualitySetting
   const stallUnit = buildUnits(root, [
     { id: 'unit_keychain', serial: 18, pos: new THREE.Vector3(KEY_STALL.x + 0.15, 0.38, KEY_STALL.z + 0.2), yaw: Math.PI / 2 - 0.15, pose: 'wave', nightPose: 'wave' },
   ])
-  const clawTargets: ClawTargetDef[] = [...tower.hooks, ...course.gearHooks.map((h) => h.def)]
+  const clawTargets: ClawTargetDef[] = [...tower.hooks, ...course.gearHooks.map((h) => h.def), ...course.swings.rings.map((r) => r.def)]
 
   let night = false
   return {

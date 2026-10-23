@@ -31,12 +31,10 @@ const DECK_Y = 22.4
 /** 足場（上面の高さ・範囲）。rail：手すり付き */
 export type Ledge = { id: string; y: number; x0: number; x1: number; z0: number; z1: number; rail?: boolean }
 
-/** 塔の西の壁の足場（下から）。l2 = 針の橋の向こう（C）、l3 = 金具の先（D）、l4 = 時計の部分の下をぐるりと回る回廊（E） */
+/** 塔の西の壁の足場（下から）。l2 = 針の橋の向こう（C。ここから通りの向こうへぶら下がってわたる）、l4 = 時計の部分の下をぐるりと回る回廊（E） */
 const LEDGES: Ledge[] = [
-  // 針の橋の向こうの、手すり付きのバルコニー（C）
+  // 針の橋の向こうの、手すり付きのバルコニー（C）。西の手すりは、まん中を空けておく（光る輪へ飛びつく所）
   { id: 'l2', y: 7.4, x0: 4.2, x1: TX0, z0: TZ0, z1: TZ1, rail: true },
-  // 金具でのぼった先の細い足場（D）。北の端で、回る歯車の金具を待つ
-  { id: 'l3', y: 11.2, x0: 4.4, x1: TX0, z0: -23.6, z1: -20.3 },
   // 時計の部分の下をぐるりと回る回廊（E。西の側を、がれきをよけて南へ）
   { id: 'l4', y: CK.y0, x0: 4.2, x1: CK.x0, z0: -25.2, z1: -18.6, rail: true },
 ]
@@ -45,18 +43,20 @@ const LEDGES: Ledge[] = [
 export type HookSpec = { id: string; point: THREE.Vector3; landing: THREE.Vector3; via?: THREE.Vector3 }
 
 const HOOKS: HookSpec[] = [
-  { id: 'clock_hook_3', point: v(TX0 - 0.17, 12.65, -22.8), landing: v(5.0, 11.2, -22.8), via: v(4.6, 12.8, -22.6) },
   { id: 'clock_hook_top', point: v(4.68, 22.85, -22.4), landing: v(6.0, DECK_Y, -22.4), via: v(4.6, 23.9, -22.4) },
 ]
 
 /**
- * 4 章の時計台のぼり（アクション）。下から：
+ * 4 章の時計台のぼり（アクション）。通りの両側のビル（西の段々のビル・東の段々のビル）とつないで、通りの上をぐるりと回りながらのぼる。下から：
  * (1) 回る大歯車（3 枚。乗ると一緒に回る）を Space でとびうつって、北の足場 A へ
  * (2) 回る歯車のふちの金具：上に回ってきて金色に光った時だけ J → 渡り廊下 B へ
- * (3) 渡り廊下 B：壁が赤く光ったら黒い手が足もとをはらう → Space でとびこえて、南の端へ
- * (4) 大きな針（長い分針。軸は C の北の端）：北で止まると B の南の端へかかる橋になる。止まったらわたって C へ（西へ回っていく間も、軸のほうへ歩けば C）
- * (5) 金具（J）→ 細い足場 D　(6) 回る歯車のふちの金具（J）→ 時計の下の回廊 E
- * (7) 回廊 E：赤い輪にがれきが落ちてくる → よけながら南へ　(8) てっぺんの金具（J）→ 屋上
+ * (3) 渡り廊下 B：壁から黒い手がふりおろす（赤い輪）→ 輪の外へよけながら、南の端へ
+ * (4) 大きな針（長い分針。軸は C の北の端）：北で止まると B の南の端へかかる橋になる。止まったらわたって C へ
+ * (5) C → 光る輪①にぶら下がって、通りの向こう（西のビルのかんばんの足場 W1）へ
+ * (6) W1 → 光る輪②にぶら下がって、西のビルの壁ぞいに北の足場 W2 へ
+ * (7) W2 → 光る輪③にぶら下がって、通りをこえて東のビルの足場 N1 へ
+ * (8) N1 → 東のビルの壁の回る歯車の金具（金色に光った時だけ J）→ 時計の下の回廊 E
+ * (9) 回廊 E：赤い輪にがれきが落ちてくる → よけながら南へ　(10) てっぺんの金具（J）→ 屋上
  * 段ごとにやり直しの位置（CHECKPOINTS）。落ちたら、着いたことのあるいちばん上の位置へ
  */
 export type GearSpec = { c: THREE.Vector3; r: number; w: number }
@@ -75,8 +75,34 @@ export type GearHookSpec = {
   wait: THREE.Vector3
 }
 
+/**
+ * ぶら下がりの輪（swing_anchor）：通りの上の電線、ビルの壁の腕から下がる。from の足場の端で J → こいで → to の足場の上で Space。
+ * 輪は、わたる先の足場の手前 0.6m より手前で、高すぎない所（見上げる角 54° まで・とどく 8.6m まで）に置く（swingsim で、Space をおしてよい時間が長い所）
+ */
+export type SwingRingSpec = {
+  id: string
+  /** 輪（ぶら下がる点） */
+  anchor: THREE.Vector3
+  rope: number
+  /** わたる向き（水平の単位） */
+  dir: THREE.Vector3
+  /** 飛びつく所（from の足場の端）と、着く所（to の足場のまん中） */
+  start: THREE.Vector3
+  land: THREE.Vector3
+  /** 向こうの足場のうしろの壁（わたる向きの座標。こぎすぎて壁に入りそうになったら、手をはなして足場へ落とす） */
+  wall?: number
+  /** 吊る物：通りをまたぐ電線（両はしの x）／壁から出た腕（壁の x） */
+  hang: { kind: 'cable'; x0: number; x1: number; y: number; y1?: number } | { kind: 'arm'; wallX: number; y: number }
+}
+
 const COURSE_A: Ledge = { id: 'A', y: 2.75, x0: 2.4, x1: 6.2, z0: -32.4, z1: -29.7 }
 const COURSE_B: Ledge = { id: 'B', y: 7.4, x0: 4.6, x1: 6.2, z0: -33.0, z1: -28.6, rail: true }
+/** 西の段々のビルの東の面の、かんばんの足場（W1：南・低い／W2：北・高い）と、東の段々のビルの西の面の足場（N1：B の上） */
+/** C の西へ張り出したバルコニー（光る輪①へ飛びつく所。塔の壁から 2.5m はなれて、カメラがうしろに下がれるように） */
+const LEDGE_C2: Ledge = { id: 'C2', y: 7.4, x0: 2.0, x1: 4.2, z0: -22.6, z1: -20.0 }
+const LEDGE_W1: Ledge = { id: 'W1', y: 8.2, x0: -6.0, x1: -3.6, z0: -24.4, z1: -20.6 }
+const LEDGE_W2: Ledge = { id: 'W2', y: 9.8, x0: -6.0, x1: -2.6, z0: -33.4, z1: -29.6 }
+const LEDGE_N1: Ledge = { id: 'N1', y: 11.6, x0: 3.6, x1: 6.0, z0: -33.4, z1: -29.6 }
 const LEDGE_E: Ledge = { id: 'E', y: CK.y0, x0: 4.2, x1: CK.x0, z0: -25.2, z1: -18.6 }
 
 export const COURSE = {
@@ -95,23 +121,35 @@ export const COURSE = {
   sweep: { x: 6.15, y: 7.4, z0: COURSE_B.z0, z1: COURSE_B.z1 },
   /** 大きな針：軸（C の北の端。上面の高さ）・長さ・幅。北で dwell 秒止まって B へかかる → 西（通りの上）へ回って away 秒 → もどる */
   hand: { pivot: v(5.0, 7.4, -23.45), len: 5.25, width: 1.1, dwell: 3.2, away: 2.0, travel: 2.4 },
-  /** 塔の西の壁の、回る歯車の金具 → E（時計の下の回廊の北西のすみ） */
-  hook2: { id: 'gear_hook_2', c: v(5.5, 13.6, -21.4), r: 1.25, w: -0.75, window: 0.85, landing: v(4.65, CK.y0, -24.6), via: v(3.9, 17.4, -23.6), wait: v(4.85, 11.2, -23.25) } as GearHookSpec,
+  /** 通りの上の、ぶら下がりの輪（C → W1 → W2 → N1） */
+  C2: LEDGE_C2,
+  W1: LEDGE_W1,
+  W2: LEDGE_W2,
+  N1: LEDGE_N1,
+  swings: [
+    { id: 'swing_ring_1', anchor: v(-2.9, 14.8, -21.3), rope: 4.5, dir: v(-1, 0, 0), start: v(2.25, 7.4, -21.3), land: v(-4.6, LEDGE_W1.y, -21.3), wall: -6.0, hang: { kind: 'cable', x0: -6.9, x1: TX0, y: 16.3, y1: 15.3 } },
+    { id: 'swing_ring_2', anchor: v(-4.7, 15.6, -29.0), rope: 4.5, dir: v(0, 0, -1), start: v(-4.7, LEDGE_W1.y, -24.1), land: v(-4.7, LEDGE_W2.y, -31.6), hang: { kind: 'arm', wallX: -6.0, y: 16.8 } },
+    { id: 'swing_ring_3', anchor: v(2.7, 17.4, -31.5), rope: 4.5, dir: v(1, 0, 0), start: v(-2.8, LEDGE_W2.y, -31.5), land: v(4.6, LEDGE_N1.y, -31.5), wall: 6.0, hang: { kind: 'cable', x0: -6.0, x1: 6.0, y: 18.8 } },
+  ] as SwingRingSpec[],
+  /** 東のビルの西の壁の、回る歯車の金具（N1 の南の上）→ E（時計の下の回廊の北西のすみ） */
+  hook2: { id: 'gear_hook_2', c: v(6.12, 15.0, -27.2), r: 1.25, w: -0.75, window: 0.85, landing: v(4.65, CK.y0, -24.6), via: v(3.9, 17.6, -25.9), wait: v(4.8, LEDGE_N1.y, -29.95) } as GearHookSpec,
   /** がれきが落ちる所（E の西の帯） */
   debris: { x0: 4.25, x1: CK.x0 - 0.05, z0: -25.0, z1: -19.0, y: CK.y0 },
   /** てっぺんの金具をねらえる所（E の西の帯の、この z より南） */
   topFromZ: -21.4,
 } as const
 
-export type CheckpointId = 'street' | 'A' | 'B' | 'C' | 'D' | 'E'
+export type CheckpointId = 'street' | 'A' | 'B' | 'C' | 'W1' | 'W2' | 'N1' | 'E'
 
-/** やり直しの位置（下から）。area：そこに立ったら、その位置まで進んだことにする */
+/** やり直しの位置（下から）。area：そこに立ったら、その位置まで進んだことにする。輪の前の段は、輪へ飛びつく所 */
 export const CHECKPOINTS: ReadonlyArray<{ id: CheckpointId; pos: THREE.Vector3; area: Ledge }> = [
-  { id: 'street', pos: v(0.6, 0, -21.4), area: { id: 'street', y: 0, x0: -3, x1: 6, z0: -34, z1: -19.6 } },
+  { id: 'street', pos: v(0.6, 0, -21.4), area: { id: 'street', y: 0, x0: -6, x1: 6, z0: -34, z1: -19.6 } },
   { id: 'A', pos: v(3.2, COURSE_A.y, -31.0), area: COURSE_A },
   { id: 'B', pos: v(5.4, COURSE_B.y, -32.4), area: COURSE_B },
-  { id: 'C', pos: v(4.9, 7.4, -20.6), area: LEDGES[0] },
-  { id: 'D', pos: v(4.9, 11.2, -22.8), area: LEDGES[1] },
+  { id: 'C', pos: v(3.0, 7.4, -21.3), area: { ...LEDGES[0], x0: LEDGE_C2.x0 } },
+  { id: 'W1', pos: v(-4.7, LEDGE_W1.y, -23.6), area: LEDGE_W1 },
+  { id: 'W2', pos: v(-4.2, LEDGE_W2.y, -31.5), area: LEDGE_W2 },
+  { id: 'N1', pos: v(4.8, LEDGE_N1.y, -30.2), area: LEDGE_N1 },
   { id: 'E', pos: v(4.65, CK.y0, -24.6), area: LEDGE_E },
 ]
 

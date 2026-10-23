@@ -1599,6 +1599,7 @@ export class ChronicleFutureStage implements Stage {
       introShown = true
       this.lock(rt, true)
       const sw = COURSE.swings[0]
+      const introT0 = this.clock.time
       let ended = false
       void this.cine(rt, {
         look: v(-3.0, 13.4, -21.5),
@@ -1610,6 +1611,12 @@ export class ChronicleFutureStage implements Stage {
         skippable: true,
         marker: { pos: sw.anchor.clone().add(v(0, 0.9, 0)), label: '光る輪で、向こうのビルへ！', color: '#ffd447' },
       }).then(() => (ended = true))
+      // カメラが輪①のほうへ行っている間に、輪①へ飛びつく所（C2 の西のふち）へ。針から来た C の北の端は、塔の壁に近くて
+      // カメラがうしろに下がれない（頭が画面いっぱいになる）うえ、ななめに C2 へ歩くと北のすみの穴から落ちやすいので
+      await this.until(() => ended || this.clock.time - introT0 > 1.1)
+      const at = sw.start.clone().setX(sw.start.x + 0.35)
+      this.teleport(rt, at, faceYaw(at, sw.anchor))
+      rt.camRig.pitch = -0.3
       await this.until(() => ended)
       this.lock(rt, false)
     }

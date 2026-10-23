@@ -358,7 +358,7 @@ export class TowerClimb {
     this.wallStruck = false
     // はじめの 2 回（ほかの敵の分とあわせて）は「赤い輪の外へ」の案内と、ゆっくりのふりおろし
     const windup = rt.combat.coach('赤い輪の外へ はなれて！（Shift でダッシュ）') ? WALL_HAND.slow : WALL_HAND.windup
-    this.hands.slam(id, this.wallAt, { windup, strike: WALL_HAND.strike, stuck: WALL_HAND.stuck, recover: WALL_HAND.recover })
+    this.hands.slam(id, this.wallAt, { windup, strike: WALL_HAND.strike, stuck: WALL_HAND.stuck, recover: WALL_HAND.recover }, { warn: false })
     this.host.warn(id, this.wallAt, WALL_HAND.hitR, windup)
   }
 

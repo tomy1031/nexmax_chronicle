@@ -82,7 +82,8 @@
 .gc-title { font-weight: 800; font-size: clamp(13px, 1.05vw, 18px); color: #d8ccff; margin-bottom: 0.8vh; }
 .gc-opt { font-weight: 800; font-size: clamp(14px, 1.15vw, 20px); padding: 0.6vh 0.8vw; border-radius: 10px; opacity: 0.78; }
 .gc-opt.on { opacity: 1; background: rgba(160, 140, 255, 0.25); color: #ffffff; }
-.gc-foot { margin-top: 0.8vh; font-size: clamp(11px, 0.85vw, 14px); opacity: 0.75; }
+.gc-foot, .gc-foot-touch { margin-top: 0.8vh; font-size: clamp(11px, 0.85vw, 14px); opacity: 0.75; }
+.gc-foot-touch { display: none; }
 
 /* ---------------------------------------------------------------- カメラの演出（cinematic.ts）：上下の黒帯・目印の札 */
 /* 黒帯は #ui のいちばん下（HUD の後ろ・3D の前）。HUD の枠や会話は黒帯の上に重なる */

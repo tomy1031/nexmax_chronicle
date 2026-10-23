@@ -1170,7 +1170,7 @@ export class ChronicleFutureStage implements Stage {
     const at = s.clone().addScaledVector(side, -2.4).setY(groundY(rt.phys, s, s.y))
     const id = this.hands.ids.find((h) => this.hands.state(h) !== 'cut') ?? 'hand0'
     if (!this.hands.has(id)) this.hands.spawn(id, at.clone().add(v(-3, 0, -2)))
-    this.hands.slam(id, at, { windup: 1.3, stuck: 1.6 })
+    this.hands.slam(id, at, { windup: 1.3, stuck: 1.6 }, { warn: false })
     this.slamRings.show(id, at, HAND_HIT_R, 1.3)
     // 横から：まん中にソラ、片側にふりおろす手、もう片側にネクマックス
     const look = s.clone().add(v(0, 0.6, 0))
@@ -1324,7 +1324,7 @@ export class ChronicleFutureStage implements Stage {
     this.slamDone[id] = false
     let windup = timing.windup ?? 1.4
     if (rt.combat.coach('赤い輪の外へ はなれて！（Shift でダッシュ）')) windup += HAND_SLOW
-    this.hands.slam(id, at, { ...timing, windup })
+    this.hands.slam(id, at, { ...timing, windup }, { warn: false })
     this.slamRings.show(id, at, HAND_HIT_R, windup)
   }
 
@@ -2593,8 +2593,8 @@ export class ChronicleFutureStage implements Stage {
     if (!hint) return
     this.misses++
     if (this.misses === 2 || (this.misses > 2 && this.misses % 4 === 2)) {
-      // スマホ：「↑ キーで見上げて」は、画面の右側を上へなぞる言い方に（ほかのキーの言い方はトーストが読みかえる）
-      rt.hud.toast(rt.touch ? hint.replace(/↑ ?キーで/g, '画面の右側を上へなぞって') : hint, 4)
+      // スマホでは、キーの言い方（「↑ キーで見上げて」など）をトーストが読みかえる
+      rt.hud.toast(hint, 4)
       // 1 章のお使い：2 回まちがえたら、つかむ物をもう一度カメラで見せる
       if (this.phase === 'antenna_hook' || this.phase === 'antenna_swing') this.focusReq = { id: this.phase === 'antenna_hook' ? 'hook' : 'ring', short: true }
     }

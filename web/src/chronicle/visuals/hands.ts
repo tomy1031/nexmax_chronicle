@@ -74,6 +74,8 @@ type Hand = {
   slamAt: THREE.Vector3
   slamHit: boolean
   timing: SlamTiming
+  /** ふりおろしの予告の輪を出すか（ステージが当たる広さの輪を自分で出すときは false） */
+  slamWarn: boolean
   curl: number
   phase: number
   pass: number
@@ -459,6 +461,7 @@ export class BlackHands {
       slamAt: base.clone(),
       slamHit: false,
       timing: { ...SLAM_TIMING },
+      slamWarn: true,
       curl: 0.4,
       phase: Math.random() * 10,
       pass: -1,
@@ -539,13 +542,14 @@ export class BlackHands {
     this.go(h, 'chase')
   }
 
-  /** at の地面へふりおろす（予告の円 → たたく → 地面で止まる → もどる） */
-  slam(id: string, at: THREE.Vector3, timing: Partial<SlamTiming> = {}): void {
+  /** at の地面へふりおろす（予告の円 → たたく → 地面で止まる → もどる）。warn: false で予告の円を出さない（ステージが自分の輪を出すとき） */
+  slam(id: string, at: THREE.Vector3, timing: Partial<SlamTiming> = {}, opts: { warn?: boolean } = {}): void {
     const h = this.hands.get(id)
     if (!h || h.state === 'cut' || h.state === 'retract') return
     h.slamAt.copy(at)
     h.from0.copy(h.tip)
     h.slamHit = false
+    h.slamWarn = opts.warn ?? true
     h.timing = { ...SLAM_TIMING, ...timing }
     h.warn.position.copy(at).addScaledVector(UP, 0.04)
     h.warn.scale.setScalar(3.0 * h.size)
@@ -731,8 +735,8 @@ export class BlackHands {
         const hover = _c.copy(h.slamAt).addScaledVector(UP, 4.2 * h.size)
         const ground = _d.copy(h.slamAt).addScaledVector(UP, 0.3 * h.size)
         const warn = slamWarning(h.st, h.timing)
-        h.warn.visible = warn.show
-        if (warn.show) {
+        h.warn.visible = warn.show && h.slamWarn
+        if (h.warn.visible) {
           const u = (h.warn.material as THREE.ShaderMaterial).uniforms
           u.uA.value = 1
           u.uFill.value = warn.fill

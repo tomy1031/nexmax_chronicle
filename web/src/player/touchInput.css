@@ -116,6 +116,8 @@ html.touch-ui body { overscroll-behavior: none; -webkit-user-select: none; user-
 @media (orientation: portrait) { .touch-rotate { display: grid; } }
 
 /* ---------------------------------------------------------------- 2086 年の選択肢：タップで選んで決める（キーの案内は出さない） */
-html.touch-ui .game-choice { pointer-events: auto; touch-action: none; z-index: 7; }
+/* 左下のスティック・右下のボタンにかからないよう、まん中の上よりに、せまく */
+html.touch-ui .game-choice { pointer-events: auto; touch-action: none; z-index: 7; top: 24vh; min-width: 0; width: min(460px, 54vw); }
 html.touch-ui .gc-opt { padding: 10px 14px; }
 html.touch-ui .gc-foot { display: none; }
+html.touch-ui .gc-foot-touch { display: block; }

@@ -3,6 +3,7 @@
 // 画面の外・カメラの後ろにあるときは、edge の目印だけ画面の縁に寄せて、向きを矢印で示す（名前の札は隠す）。
 // 会話・カメラの演出・操作を止めている間・一時停止中はシェルが隠す。DOM だけ（3D の資源は持たない）。見た目は game.css の .obj-mark。
 import * as THREE from 'three'
+import { toTouchText } from '../player/touchLogic'
 
 export type ObjectiveMark = {
   /** 目印の先端（▼の先）を置くワールド座標。頭の少し上・物の少し上 */
@@ -114,7 +115,8 @@ export class ObjectiveMarkerFx {
       const text = m.label ?? ''
       if (text !== e.text) {
         e.text = text
-        e.label.textContent = text
+        // スマホでは、キーの言い方（「J でつかむ」など）をボタンの言い方に
+        e.label.textContent = document.documentElement.classList.contains('touch-ui') ? toTouchText(text) : text
         e.label.hidden = !text
       }
       e.root.classList.toggle('edge', p.edge)

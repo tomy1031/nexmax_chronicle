@@ -149,6 +149,8 @@ describe("touchLogic: キー案内 → タッチ", () => {
   it("目的の「K でパンチ！」「K：攻撃」をタッチの言い方にする", () => {
     expect(toTouchText("よろいがなくなった！ K でパンチ！")).toBe("よろいがなくなった！ 「パンチ」をタップ！");
     expect(toTouchText("近づいて K：攻撃")).toBe("近づいて 「パンチ」で攻撃");
+    expect(toTouchText("↑ キーで見上げてから J")).toBe("画面の右側を上へなぞって見上げてから 「つかむ」");
+    expect(toTouchText("光っているときだけ J。")).toBe("光っているときだけ 「つかむ」。");
     expect(toTouchText("横へよける（Shift でダッシュ）")).toBe("横へよける（スティックを大きく倒してダッシュ）");
     expect(toTouchText("輪にぶら下がったら、WASD で前へこいで、向こう岸の上で Space！")).toBe("輪にぶら下がったら、スティックで前へこいで、向こう岸の上で 「ジャンプ」！");
     expect(toTouchText("← → でダイヤルを回して")).toBe("スティックを左右に倒してダイヤルを回して");

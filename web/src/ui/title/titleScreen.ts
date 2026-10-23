@@ -1,15 +1,16 @@
 // タイトル画面：「つづきから」「はじめから」と、ホーム画面への追加の案内・新しい版への切り替え。
+// 背景は一枚絵（titleArt.ts：IDO のわっかの向こうに 4 つの時代、手をふるネクマックスとソラ）。左に絵、右の夜空にロゴとボタン。
+// 絵の上の少しの動き：ゆっくり寄るカメラ・時の輪をめぐる光・輪の中の明るさ・星のまたたき・舞う花びら（どれも CSS。WebGL は使わない）。
 // 新しい版が見つかったら、ボタンの代わりに進み具合を出し、ダウンロードが終わったら読み込み直す（前の版で遊び始めないように）。
-// 選んだら resolve して片付ける（3D のネクマックスの WebGL も手放す）。ゲームの読み込みは main.ts がその後に始める。
+// 選んだら resolve して片付ける。ゲームの読み込みは main.ts がその後に始める。
 // 操作：タップ／クリック、または ↑↓（W・S）で選んで Enter・Space・F。Esc で確認・案内を閉じる。
 import './title.css'
 import { STAGE_INFO } from '../../game/registry'
-import type { StageKey } from '../../game/travel'
 import type { Pwa, UpdateState } from '../../pwa/pwa'
 import { formatBytes } from '../../pwa/swPlan'
 import { INSTALL_ICON, installGuideHtml, installedHtml } from './installGuide'
+import { artFrame, currentTitleArtUrl, isPortrait } from './titleArt'
 import { formatSavedAt, type InstallPlatform, type SaveSummary, type TitleChoice } from './titleLogic'
-import { TitleNexmax } from './titleNexmax'
 
 declare const __APP_VERSION__: string
 
@@ -27,60 +28,57 @@ export type TitleOptions = {
   now?: number
 }
 
-/** 時の輪の 4 つの時代（左下から時計回りに古い順）。物語 v7 の時代：1186・1726・2026・2086（1970 は本編の道から外した） */
-const ERAS: Array<{ key: StageKey; year: string; place: string; cls: string }> = [
-  { key: '1186', year: '1186', place: 'アルンの寺', cls: 'khmer' },
-  { key: '1726', year: '1726', place: '仕掛け横丁', cls: 'edo' },
-  { key: '2026', year: '2026', place: 'なんば', cls: 'now' },
-  { key: '2086', year: '2086', place: 'ナンバタウン', cls: 'future' },
+/** 夜空の星（絵の幅・高さに対する %。右の夜空だけ。ゆっくりまたたく） */
+const STARS: Array<[number, number, number]> = [
+  [63, 7, 0],
+  [71, 16, 1.7],
+  [78, 4, 3.1],
+  [85.5, 12, 0.8],
+  [93, 5, 2.4],
+  [97.5, 17, 4.2],
+  [74, 26, 2.9],
+  [89, 22, 1.2],
+  [66.5, 33, 3.7],
+  [81, 36, 0.4],
 ]
 
-/** 円弧の道。角度は度で、0° が真上・時計回り。a0 から a1 へ（a1 < a0 なら反時計回り） */
-function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
-  const p = (a: number) => {
-    const t = ((a - 90) * Math.PI) / 180
-    return `${(cx + r * Math.cos(t)).toFixed(2)} ${(cy + r * Math.sin(t)).toFixed(2)}`
-  }
-  const large = Math.abs(a1 - a0) > 180 ? 1 : 0
-  const sweep = a1 >= a0 ? 1 : 0
-  return `M ${p(a0)} A ${r} ${r} 0 ${large} ${sweep} ${p(a1)}`
-}
+/** 舞う桜の花びら（画面の左上の桜から右下へ）。[左 %, 秒, 遅れ秒, 大きさ, 横に流れる vw] */
+const PETALS: Array<[number, number, number, number, number]> = [
+  [2, 13, 0, 1, 34],
+  [9, 16, 5.5, 0.8, 42],
+  [15, 12, 9, 1.15, 26],
+  [22, 18, 2.5, 0.7, 48],
+  [4, 15, 11.5, 0.9, 38],
+  [30, 14, 7, 0.75, 30],
+  [12, 19, 14, 1.05, 52],
+  [38, 17, 3.8, 0.65, 40],
+]
 
-/** 時の輪（SVG）。active の時代の弧だけ明るく太い（つづきから再開する時代／はじめての人は 2086 年） */
-function ringSvg(active: StageKey): string {
-  const cx = 200
-  const cy = 200
-  const span = 78
-  const gap = 12
-  const start = 210 // 左下から
-  let arcs = ''
-  ERAS.forEach((e, i) => {
-    const a0 = start + i * (span + gap)
-    const a1 = a0 + span
-    const on = e.key === active
-    // 文字は弧の外側。下半分の弧は文字が逆さにならないよう、向きを逆にした道に載せる
-    const mid = ((((a0 + a1) / 2) % 360) + 360) % 360
-    const bottom = mid > 90 && mid < 270
-    const textPath = bottom ? arcPath(cx, cy, 186, a1, a0) : arcPath(cx, cy, 176, a0, a1)
-    arcs += `<g class="nt-era ${e.cls}${on ? ' on' : ''}">
-      <path class="nt-arc-glow" d="${arcPath(cx, cy, 160, a0, a1)}" pathLength="100"/>
-      <path class="nt-arc" d="${arcPath(cx, cy, 160, a0, a1)}" pathLength="100"/>
-      <path id="nt-tp-${e.key}" d="${textPath}" fill="none" stroke="none"/>
-      <text class="nt-arc-label"><textPath href="#nt-tp-${e.key}" startOffset="50%" text-anchor="middle"><tspan class="nt-arc-year">${e.year}</tspan><tspan dx="6">${e.place}</tspan></textPath></text>
-    </g>`
-  })
-  return `<svg class="nt-ring" viewBox="0 0 400 400" aria-hidden="true">
-    <circle class="nt-ring-track" cx="${cx}" cy="${cy}" r="160"/>
-    <circle class="nt-ring-inner" cx="${cx}" cy="${cy}" r="136"/>
-    <g class="nt-ring-ticks">${Array.from({ length: 60 }, (_, i) => `<line x1="200" y1="${i % 5 === 0 ? 46 : 50}" x2="200" y2="54" transform="rotate(${i * 6} 200 200)"/>`).join('')}</g>
-    ${arcs}
-  </svg>`
+/** 一枚絵と、その上の少しの動き（時の輪をめぐる光・輪の中の明るさ・星・花びら） */
+function artHtml(): string {
+  const stars = STARS.map(([x, y, d]) => `<i style="left:${x}%;top:${y}%;animation-delay:${-d}s"></i>`).join('')
+  const petals = PETALS.map(
+    ([x, sec, delay, s, drift]) => `<i style="left:${x}%;--s:${s};--drift:${drift}vw;animation-duration:${sec}s;animation-delay:${-delay}s"></i>`,
+  ).join('')
+  return `<div class="nt-art" aria-hidden="true">
+      <div class="nt-frame">
+        <div class="nt-cam">
+          <img class="nt-art-img" alt="" decoding="async" draggable="false">
+          <div class="nt-core"></div>
+          <div class="nt-orbit"><div class="nt-orbit-spin"></div></div>
+          <div class="nt-stars">${stars}</div>
+        </div>
+      </div>
+      <div class="nt-petals">${petals}</div>
+      <div class="nt-shade"></div>
+    </div>`
 }
 
 export class TitleScreen {
   private readonly root: HTMLDivElement
   private readonly opts: TitleOptions
-  private nexmax: TitleNexmax | null = null
+  private readonly frame: HTMLElement
+  private readonly img: HTMLImageElement
   private resolve: ((c: TitleChoice) => void) | null = null
   private readonly onKey = (e: KeyboardEvent) => this.key(e)
   private readonly onResize = () => this.layout()
@@ -94,17 +92,13 @@ export class TitleScreen {
   constructor(parent: HTMLElement, opts: TitleOptions) {
     this.opts = opts
     const save = opts.save
-    const active: StageKey = save?.stage ?? '2086'
     const root = document.createElement('div')
     root.className = 'nt-root'
     const saveMeta = save
       ? `<span class="nt-btn-meta"><span>${save.stage ? STAGE_INFO[save.stage].label : '異次元拠点'}</span><span>${formatSavedAt(save.savedAt, opts.now ?? Date.now())}</span></span>`
       : ''
     root.innerHTML = `
-      <div class="nt-sky" aria-hidden="true"></div>
-      <div class="nt-stage">
-        <div class="nt-ring-box">${ringSvg(active)}<div class="nt-nexmax"></div></div>
-      </div>
+      ${artHtml()}
       <main class="nt-side">
         <h1 class="nt-logo" aria-label="NEXMAX CHRONICLE ― はじまりの未来 ―">
           <span class="nt-logo-main">NEXMAX</span>
@@ -136,18 +130,20 @@ export class TitleScreen {
       </div>`
     parent.appendChild(root)
     this.root = root
+    this.frame = root.querySelector<HTMLElement>('.nt-frame')!
+    this.img = root.querySelector<HTMLImageElement>('.nt-art-img')!
 
     root.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')
       if (b) this.act(b.dataset.act ?? '')
     })
-    // 3D のネクマックス（作れなければ輪だけ）
-    try {
-      this.nexmax = new TitleNexmax('full')
-      root.querySelector('.nt-nexmax')!.appendChild(this.nexmax.canvas)
-    } catch (e) {
-      console.warn('[title] ネクマックスを描けませんでした', e)
-      this.nexmax = null
+    // 一枚絵（main.ts が先に読み込み始めている）。描けるようになってから、ふわっと出す（読めなければ紺の夜空のまま）
+    this.img.src = currentTitleArtUrl()
+    const shown = () => root.classList.add('art')
+    if (this.img.complete && this.img.naturalWidth > 0) shown()
+    else {
+      this.img.addEventListener('load', shown, { once: true })
+      this.img.addEventListener('error', () => console.warn('[title] タイトルの絵を読めませんでした'), { once: true })
     }
     this.renderInstallEntry()
     opts.pwa.onInstallAvailability = () => {
@@ -170,14 +166,12 @@ export class TitleScreen {
     window.addEventListener('resize', this.onResize)
     if (typeof ResizeObserver !== 'undefined') {
       this.ro = new ResizeObserver(() => this.layout())
-      this.ro.observe(this.root.querySelector('.nt-nexmax')!)
+      this.ro.observe(this.root)
+      this.ro.observe(this.root.querySelector('.nt-side')!)
     }
     this.layout()
     requestAnimationFrame(() => this.root.classList.add('in'))
-    if (this.nexmax) {
-      this.nexmax.start()
-      setTimeout(() => this.nexmax?.wave(), 700)
-    }
+    if (import.meta.env.DEV) (window as unknown as { __title?: TitleScreen }).__title = this
     if (this.opts.autoGuide) setTimeout(() => this.openGuide(), 900)
     else this.focusFirst()
     return new Promise((r) => (this.resolve = r))
@@ -194,8 +188,7 @@ export class TitleScreen {
     this.opts.pwa.autoApply = false
     this.root.classList.add('out')
     await new Promise((r) => setTimeout(r, 380))
-    this.nexmax?.dispose()
-    this.nexmax = null
+    if (import.meta.env.DEV) delete (window as unknown as { __title?: TitleScreen }).__title
     this.root.remove()
   }
 
@@ -355,10 +348,18 @@ export class TitleScreen {
 
   // ---------------------------------------------------------------- 大きさ
 
+  /** 絵の枠：画面をおおい、ソラより右の夜空がロゴとボタンの後ろに来るように置く（titleArt.ts） */
   private layout(): void {
-    const host = this.root.querySelector<HTMLElement>('.nt-nexmax')
-    if (!host || !this.nexmax) return
-    const r = host.getBoundingClientRect()
-    if (r.width > 0 && r.height > 0) this.nexmax.setSize(r.width, r.height)
+    const vw = this.root.clientWidth
+    const vh = this.root.clientHeight
+    if (vw <= 0 || vh <= 0) return
+    // ロゴ・ボタンの左の端（ここより右に、ソラがかからないように）
+    const left = this.root.querySelector<HTMLElement>('.nt-logo')!.getBoundingClientRect().left
+    const f = artFrame(vw, vh, left, isPortrait(vw, vh))
+    const s = this.frame.style
+    s.left = `${f.x.toFixed(1)}px`
+    s.top = `${f.y.toFixed(1)}px`
+    s.width = `${f.w.toFixed(1)}px`
+    s.height = `${f.h.toFixed(1)}px`
   }
 }

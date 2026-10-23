@@ -43,7 +43,7 @@ export type ChronicleNambaScene = {
   claw: { targets: ClawTargetDef[]; movables: MovableInput[] }
   /** もとの町のつかめる物（振り子の吊り輪・バルコニーの金具・木箱・クリスタル） */
   townClaw: NambaClaw
-  /** 石標（イドーのかんばん）A・B・C・D */
+  /** 石標（IDOのかんばん）A・B・C・D */
   idos: Record<KanbanId, IdoMarker>
   nextmake: NextmakeParts
   pedestrians: Pedestrians

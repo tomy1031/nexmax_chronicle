@@ -547,7 +547,7 @@ export class ChronicleFutureStage implements Stage {
 
   private async showRecord(rt: StageRuntime, title: string, sub: string, body: string, art: string, lines?: string): Promise<void> {
     const image = await loadArtCanvas(art)
-    rt.hud.showIdo({ title, sub, body, image, foot: 'イドーのかんばんの記録' })
+    rt.hud.showIdo({ title, sub, body, image, foot: 'IDOのかんばんの記録' })
     if (lines) await this.talk(rt, lines)
     else await this.wait(4)
     rt.hud.hideIdo()
@@ -1646,7 +1646,7 @@ export class ChronicleFutureStage implements Stage {
   private async sceneCh8Dial(rt: StageRuntime): Promise<void> {
     if (this.soraMode !== 'follow') this.placeSora('exhibit')
     const front = this.fs.markers.exhibit
-    this.setPhase('to_ring_dial', [{ pos: v(F.PORTAL.x, F.PORTAL.y + 2.6, F.PORTAL.z), label: 'イドーのわっか' }])
+    this.setPhase('to_ring_dial', [{ pos: v(F.PORTAL.x, F.PORTAL.y + 2.6, F.PORTAL.z), label: 'IDOのわっか' }])
     await this.waitNear(rt, front, 3.0)
     if (!this.alive) return
     this.lock(rt, true)
@@ -2173,7 +2173,7 @@ export class ChronicleFutureStage implements Stage {
     await this.showRecord(rt, '1186年の記録', 'カンボジアの遺跡のかんばん（NEXTMAKE）', '「1186年、空の怪物から『アルン』を守った戦いの絵」', V7_ART.relief1186, 'ch10_relief')
     this.lock(rt, false)
     const front = this.fs.markers.exhibit
-    this.setPhase('dial1186', [{ pos: v(F.PORTAL.x, F.PORTAL.y + 2.6, F.PORTAL.z), label: 'イドーのわっか' }])
+    this.setPhase('dial1186', [{ pos: v(F.PORTAL.x, F.PORTAL.y + 2.6, F.PORTAL.z), label: 'IDOのわっか' }])
     await this.waitF(front, 2.8, 'ダイヤル')
     if (!this.alive) return
     await this.runDial(rt, 1186, 'カンボジアの遺跡のかんばん', ruinsRecord)

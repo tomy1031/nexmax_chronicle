@@ -208,7 +208,7 @@ export type Objective = { title: string; sub: string }
 export const OBJECTIVES: Record<string, Objective> = {
   prologue: { title: 'はじめに', sub: '15年前の、地下の倉庫' },
   morning: { title: 'お祭りの朝', sub: '街頭ビジョンを見よう' },
-  go_sora: { title: 'ソラのブースへ行く', sub: '広場の西。イドーのわっかのところ' },
+  go_sora: { title: 'ソラのブースへ行く', sub: '広場の西。IDOのわっかのところ' },
   balloon: { title: 'ソラのブースへ行く', sub: '（風船を J で取ってあげてもいい）' },
   balloon_take: { title: '男の子の風船を取ってあげよう', sub: '電灯の風船を見上げて J で引きよせる' },
   balloon_give: { title: '風船を男の子にわたそう', sub: '男の子のそばで F' },

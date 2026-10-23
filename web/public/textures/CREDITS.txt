@@ -8,3 +8,5 @@ hdri (1k .hdr in web/public/hdri, 2k originals in assets_src/hdri):
 
 story/v7/*.webp and portraits/*.webp (物語 v7 の一枚絵・IDO の記録・会話の顔・1186 年の寺の壁の模様):
   made for this game with OpenAI image generation (via Codex CLI), 2026-10-20. Style matched to story/flashback_2071.webp.
+title/*.webp (タイトルの一枚絵「時の輪のとびら」):
+  made for this game with OpenAI image generation (via Codex CLI), 2026-10-23.

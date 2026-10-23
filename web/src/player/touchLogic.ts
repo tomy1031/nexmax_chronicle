@@ -65,7 +65,7 @@ export function stickVector(dx: number, dy: number, cfg: typeof TOUCH_TUNING = T
 
 // ------------------------------------------------------------------ キー案内 → タッチ
 
-export type TouchButtonId = 'claw' | 'jump' | 'interact' | 'lock'
+export type TouchButtonId = 'claw' | 'jump' | 'attack' | 'interact' | 'lock'
 
 export type TouchHintView = {
   /** 各ボタンの文字。null は隠す（つかむ・ジャンプは常に出す） */
@@ -82,10 +82,12 @@ export type TouchHintContext = {
   interact: string | null
   /** 狙える対象が複数あって切り替えられる */
   canSwitch: boolean
+  /** 戦いのある場面（K のパンチが使える）。「パンチ」ボタンを出す */
+  attack: boolean
 }
 
 /** ボタンに載せるキー */
-const KEY_BUTTON: Partial<Record<string, TouchButtonId>> = { J: 'claw', Space: 'jump', F: 'interact', R: 'lock' }
+const KEY_BUTTON: Partial<Record<string, TouchButtonId>> = { J: 'claw', Space: 'jump', K: 'attack', F: 'interact', R: 'lock' }
 
 /** 指の動きで置き換えるキー */
 const KEY_GESTURE: Partial<Record<string, string>> = {
@@ -117,6 +119,7 @@ export function touchHintView(hints: readonly Hint[], ctx: TouchHintContext): To
     labels: {
       claw: fromKey.claw ?? 'つかむ',
       jump: fromKey.jump ?? 'ジャンプ',
+      attack: ctx.attack ? 'パンチ' : null,
       interact: fromKey.interact ?? ctx.interact,
       lock: ctx.canSwitch ? (fromKey.lock ?? '切替') : null,
     },
@@ -135,11 +138,16 @@ const TEXT_RULES: Array<[RegExp, string]> = [
   [/A\/D：/g, 'スティックを左右に倒して'],
   [/Shift：/g, 'スティックを大きく倒して'],
   [/(^|[^A-Za-z0-9])(?:J|F|R|Space)：([^\s　]+)/g, '$1「$2」'],
+  [/(^|[^A-Za-z0-9])K：([^\s　]+)/g, '$1「パンチ」で$2'],
+  // 「K でパンチ！」「K で攻撃」
+  [/(^|[^A-Za-z0-9])K ?で(パンチ|攻撃)/g, '$1「パンチ」をタップ'],
+  [/(^|[^A-Za-z0-9])K ?で/g, '$1「パンチ」で'],
   // 「J でつかむ」「J で離す」→ ボタンを押す言い方
   [/(^|[^A-Za-z0-9])J ?で(つかむ|離す)/g, '$1「$2」をタップ'],
   // 台詞：「J で引き寄せて」「A と D で勢いをつけて」「Space で飛んで」「F を押すと」「F で QR を読んで」「近づいて F や」
   [/(^|[^A-Za-z0-9])J ?で/g, '$1「つかむ」で'],
   [/(^|[^A-Za-z0-9])Space ?で/g, '$1「ジャンプ」で'],
+  [/(^|[^A-Za-z0-9])Shift ?で/g, '$1スティックを大きく倒して'],
   [/(^|[^A-Za-z0-9])A ?と ?D ?で/g, '$1スティックを左右に倒して'],
   [/(^|[^A-Za-z0-9])F ?を押/g, '$1画面のボタンを押'],
   // 目的の補足の終わり：「ラボの作業台で F」

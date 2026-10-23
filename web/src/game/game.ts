@@ -1071,7 +1071,12 @@ export class Game {
     const hints = this.computeHints(a)
     if (this.touch) {
       // スマホ：J・Space・F・R の言葉はボタンへ、移動・カメラなどは指の動きの案内に
-      const v = this.touch.applyHints(hints, { interact: this.talk || this.cine.active ? null : this.interactLabel(a), canSwitch: !this.cine.active && claw.candidateCount > 1 && claw.wire.phase === 'idle' })
+      const v = this.touch.applyHints(hints, {
+        interact: this.talk || this.cine.active ? null : this.interactLabel(a),
+        canSwitch: !this.cine.active && claw.candidateCount > 1 && claw.wire.phase === 'idle',
+        // 戦いのある場面では、いつも「パンチ」を出す（敵が気絶して静かな間も押せるように）
+        attack: a.combat.enabled && !this.cine.active && !this.talk,
+      })
       hud.setHints(v.hud)
       this.clawLabel = v.claw
     } else hud.setHints(hints)

@@ -697,6 +697,8 @@ export class ChronicleFutureStage implements Stage {
     // とばしたときも、風船は電灯に引っかかった所へ
     this.props.balloon.update(BALLOON_FLOAT_SEC)
     this.balloon = 'caught'
+    // カメラがもどりきってから選ぶ画面を出す（もどる間の F はシェルが受け取らないので、押しても決まらない）
+    await this.until(() => !rt.inCinematic)
     if (!this.alive) return false
     this.setPhase('balloon_choice')
     const take = (await this.askChoice(rt, 'balloon', '男の子の風船が、電灯に引っかかっている……', loop ? [BALLOON_OPT.go, BALLOON_OPT.take] : [BALLOON_OPT.take, BALLOON_OPT.go])) === 'take'
@@ -1599,7 +1601,7 @@ export class ChronicleFutureStage implements Stage {
       const sw = COURSE.swings[0]
       let ended = false
       void this.cine(rt, {
-        look: v(-3.0, 12.0, -21.5),
+        look: v(-3.0, 13.4, -21.5),
         from: v(5.5, 13.0, -17.6),
         hold: 2.6,
         inSec: 1.0,

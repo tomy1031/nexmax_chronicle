@@ -196,9 +196,14 @@ export function buildTowerSwings(c: FCtx, group: THREE.Group): TowerSwingParts {
       const b = v(L.x0 + 0.25, L.y - 0.3, z)
       c.b.add(rbox(0.12, a.distanceTo(b), 0.12, 0.02), c.fm.darkMetal, M((a.x + b.x) / 2, (a.y + b.y) / 2, z, 0, 0, Math.atan2(-(b.x - a.x), b.y - a.y)))
     }
-    // 南の手すり（C と C2 の広場の側）。当たり判定は見えない壁
+    // 南の手すり（C と C2 の広場の側）と、北の手すり（針から C へ来て、ななめに C2 へ歩いても落ちないように）。当たり判定は見えない壁
     glowRailing(c, L.x0 + 0.05, L.z1 - 0.05, 5.55, L.z1 - 0.05, L.y, { h: 0.85, collider: false })
     c.col.wall(L.x0 + 0.05, L.z1 - 0.05, 5.55, L.z1 - 0.05, L.y, L.y + 1.2, 0.2)
+    glowRailing(c, L.x0 + 0.05, L.z0 + 0.05, L.x1 + 0.02, L.z0 + 0.05, L.y, { h: 0.85, collider: false })
+    c.col.wall(L.x0 + 0.05, L.z0 + 0.05, L.x1 + 0.02, L.z0 + 0.05, L.y, L.y + 1.2, 0.2)
+    // C の西のふちの、C2 のすぐ北（針の根もとの南）も少しだけ。ななめに歩いて、C2 の北のすみから落ちないように
+    glowRailing(c, L.x1 + 0.02, L.z0 + 0.05, L.x1 + 0.02, L.z0 - 0.4, L.y, { h: 0.85, collider: false })
+    c.col.wall(L.x1 + 0.02, L.z0 + 0.05, L.x1 + 0.02, L.z0 - 0.4, L.y, L.y + 1.2, 0.2)
     c.b.add(new THREE.RingGeometry(0.3, 0.37, 28), c.fm.glow, M(L.x0 + 0.5, L.y + 0.012, cz, -Math.PI / 2, 0, 0), { tint: new THREE.Color(0.25, 0.7, 1.0), cast: false, receive: false })
     c.lights.push({ pos: v(L.x0 + 0.8, L.y + 2.2, cz), color: '#ffe2b0', intensity: 2.0, dist: 6 })
   }

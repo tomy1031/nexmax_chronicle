@@ -993,6 +993,7 @@ export class HudFuture {
 
   /** 短いお知らせ（「左腕：装備なし」など） */
   toast(text: string, seconds = 2.2): void {
+    if (this.touch) text = toTouchText(text)
     this.toastText.textContent = text
     this.toastEl.hidden = false
     this.retrigger(this.toastEl, 'show')

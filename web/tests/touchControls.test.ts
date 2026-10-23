@@ -150,6 +150,9 @@ describe("touchLogic: キー案内 → タッチ", () => {
     expect(toTouchText("よろいがなくなった！ K でパンチ！")).toBe("よろいがなくなった！ 「パンチ」をタップ！");
     expect(toTouchText("近づいて K：攻撃")).toBe("近づいて 「パンチ」で攻撃");
     expect(toTouchText("横へよける（Shift でダッシュ）")).toBe("横へよける（スティックを大きく倒してダッシュ）");
+    expect(toTouchText("輪にぶら下がったら、WASD で前へこいで、向こう岸の上で Space！")).toBe("輪にぶら下がったら、スティックで前へこいで、向こう岸の上で 「ジャンプ」！");
+    expect(toTouchText("← → でダイヤルを回して")).toBe("スティックを左右に倒してダイヤルを回して");
+    expect(touchHintView([{ key: "← →", label: "回す" }], none).hud).toEqual([{ key: "スティック左右", label: "回す" }]);
   });
 
   it("話すボタンの言葉は案内（会話の「次へ」・選択肢の「決定」・ステージの言葉）に従う", () => {

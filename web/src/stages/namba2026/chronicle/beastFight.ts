@@ -472,13 +472,19 @@ export class BeastFight {
       this.stats.charges++
       softenEnemy(h, { hitRange: 0, windup: T.charge.paw[i] })
       this.mode = { k: 'paw', t: 0, dur: T.charge.paw[i], lock: T.charge.lockBefore[i], dx: -Math.sin(h.yaw), dz: -Math.cos(h.yaw) }
-      if (this.once('paw')) this.host.say('beast_paw_first')
+      if (this.once('paw')) {
+        this.host.say('beast_paw_first')
+        this.rt.combat.coach('赤い帯が来るよ！ 横へよけて！（Shift でダッシュ）', 3.2)
+      }
       return
     }
     softenEnemy(h, { hitRange: 0, windup: T.pounce.windup })
     const P = this.rt.player.position
     this.mode = { k: 'pounce', t: 0, dur: T.pounce.windup, tx: P.x, tz: P.z }
-    if (this.once('pounce')) this.host.say('beast_pounce_first')
+    if (this.once('pounce')) {
+      this.host.say('beast_pounce_first')
+      this.rt.combat.coach('ねらいの輪からはなれて、衝撃の輪はジャンプ！（Space）', 3.2)
+    }
     void dist
   }
 

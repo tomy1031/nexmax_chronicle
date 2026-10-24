@@ -1,28 +1,29 @@
 // 物語 v7 の 2026年 なんばの部品（stages/namba2026/chronicle/）：IDO 検索・路地の時間・ほこらの体力・配置
 import { describe, expect, it } from "vitest";
-import { CLOCK_CANDIDATES, IDO_RECORDS, SEARCH_WORDS, checkedCount, matchedWords, recordOfKanban, searchRecords } from "../src/stages/namba2026/chronicle/idoSearchLogic";
+import { STONE_CANDIDATES, IDO_RECORDS, SEARCH_WORDS, checkedCount, matchedWords, recordOfKanban, searchRecords } from "../src/stages/namba2026/chronicle/idoSearchLogic";
 import { ALLEY_PALETTES, ALLEY_PHASES, phaseMix, sunDirection } from "../src/stages/namba2026/chronicle/alleyTime";
 import { DEFENSE_WAVES, SHRINE_HITS, ShrineGuard, damageStage, dueSpawns, guardLevel, waveCount } from "../src/stages/namba2026/chronicle/shrineGuard";
 import { ALLEY_V7, DEFENSE, KANBAN, LOT, SHRINE, SPOTS_V7, V7_SPAWNS } from "../src/stages/namba2026/chronicle/layoutV7";
 import { N } from "../src/stages/namba2026/layout";
 
 describe("IDO 検索（6 章）", () => {
-  it("「時計」で 3 本：時計屋の看板・駅の大時計の看板・古い路地のかんばん", () => {
-    const r = searchRecords(["時計"]).map((x) => x.name);
-    expect(r).toEqual(["時計屋の看板", "駅の大時計の看板", "古い路地のかんばん"]);
-    expect(CLOCK_CANDIDATES).toEqual(["clock_shop", "station_clock", "old_alley"]);
+  it("「時計」ではなく「青い石」でさがす（物語 v7.2：君の石とおんなじもんが、昔の記録にないか）", () => {
+    expect([...SEARCH_WORDS.first]).toEqual(["青い石"]);
+    expect([...SEARCH_WORDS.second]).toEqual(["青い石", "コチコチ"]);
   });
 
-  it("「時計」と「青い」の両方では、古い路地のかんばんだけ", () => {
+  it("「青い石」で 3 本：時計屋の看板・駅の大時計の看板・古い路地のかんばん", () => {
+    const r = searchRecords(["青い石"]).map((x) => x.name);
+    expect(r).toEqual(["時計屋の看板", "駅の大時計の看板", "古い路地のかんばん"]);
+    expect(STONE_CANDIDATES).toEqual(["clock_shop", "station_clock", "old_alley"]);
+    // 3 本とも、記録の文に「青い石」か「青い」が出てくる（なぜ出たのかがわかる）
+    for (const x of searchRecords(["青い石"])) expect(x.panel.body).toMatch(/青い/);
+  });
+
+  it("「青い石」と「コチコチ」の両方では、古い路地のかんばんだけ", () => {
     const r = searchRecords(SEARCH_WORDS.second);
     expect(r.map((x) => x.id)).toEqual(["old_alley"]);
-    expect(matchedWords(r[0], ["時計", "青い"])).toEqual(["時計", "青い"]);
-  });
-
-  it("「青い」だけだと、路地のほかにも出る（言葉を合わせてしぼるのが大事）", () => {
-    const r = searchRecords(["青い"]);
-    expect(r.length).toBeGreaterThan(1);
-    expect(r.some((x) => x.id === "old_alley")).toBe(true);
+    expect(matchedWords(r[0], ["青い石", "コチコチ"])).toEqual(["青い石", "コチコチ"]);
   });
 
   it("言葉が空なら何も出さない・合わない言葉なら 0 本", () => {
@@ -35,7 +36,7 @@ describe("IDO 検索（6 章）", () => {
     expect(recordOfKanban("b")?.id).toBe("clock_shop");
     expect(recordOfKanban("d")?.id).toBe("station_clock");
     expect(recordOfKanban("c")?.id).toBe("old_alley");
-    for (const id of CLOCK_CANDIDATES) {
+    for (const id of STONE_CANDIDATES) {
       const r = IDO_RECORDS.find((x) => x.id === id);
       expect(r?.kanban).not.toBeNull();
       expect(r?.image).not.toBe("none");
@@ -53,7 +54,7 @@ describe("IDO 検索（6 章）", () => {
 
   it("調べた数は候補の中だけ数える", () => {
     expect(checkedCount(new Set(["clock_shop", "nextmake"]))).toBe(1);
-    expect(checkedCount(new Set(CLOCK_CANDIDATES))).toBe(3);
+    expect(checkedCount(new Set(STONE_CANDIDATES))).toBe(3);
   });
 
   it("記録の文に「オルム」は出ない（6 章ではまだ知らない）", () => {
@@ -101,8 +102,8 @@ describe("ほこらの体力（9 章の防衛戦）", () => {
     expect([0, 0.2, 0.5, 0.7, 0.9].map(damageStage)).toEqual([0, 1, 2, 3, 4]);
   });
 
-  it("2 波。どちらの波も 3 方向（屋根・路地の口・トンネル）から来る", () => {
-    expect(DEFENSE_WAVES.length).toBe(2);
+  it("1 波（物語 v7.2：大きな影の光の戦いを長くした）。3 方向（屋根・路地の口・トンネル）から来る", () => {
+    expect(DEFENSE_WAVES.length).toBe(1);
     for (const w of DEFENSE_WAVES) {
       const dirs = new Set(w.spawns.map((s) => s.dir));
       expect(dirs).toEqual(new Set(["north", "south", "roof"]));
@@ -117,7 +118,7 @@ describe("ほこらの体力（9 章の防衛戦）", () => {
     const w = DEFENSE_WAVES[0];
     expect(dueSpawns(w, 0, 0)).toEqual([0]);
     expect(dueSpawns(w, 6.5, 1)).toEqual([1, 2]);
-    expect(dueSpawns(w, 100, 4)).toEqual([]);
+    expect(dueSpawns(w, 100, w.spawns.length)).toEqual([]);
   });
 });
 

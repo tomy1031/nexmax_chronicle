@@ -3,11 +3,13 @@
 //   → 光がもう一度ゆがんで、よろいの影獣（看板・鉄板を体にはりつける）。NEXTMAKE の前の「水辺の広場」で戦う（beastFight.ts）：
 //   突進をよけて柱にぶつける → ゆるんだ板を J ではがす → J で投げ返す → よろいがなくなったら K でパンチ（おこると、とびかかり・佐伯さんをつかむ）
 //   → 「君、だれや？」→ 名前とうしろの板で、まだ作っていないロボットに会う社長の大さわぎ → ラボで社長の絵（すみに「NEXTMAKE 001」）
-//   → 佐伯さんが石の音 → IDO 検索「時計」→ 町のかんばん 3 本（時計屋・駅の大時計・古い路地）
-//   → 路地のかんばんで「青い刃のかけら」（「時計」と「青い」で 1 本）→ F で QR を読む（目から光・石がコチコチ・絵が本物の景色に）→ 1726年へ（ido_kanban）
+//   → 佐伯さんが石の音 → 社長「君の石とおんなじもんが、昔の記録にないか」→ IDO 検索「青い石」→ 町のかんばん 3 本（時計屋・駅の大時計・古い路地）
+//   → 路地のかんばんで「青い刃のかけら」（「青い石」と「コチコチ」で 1 本）→ 江戸へ行く理由 2 つ（とどくかもしれない・帰り方）→ F で QR を読む（目から光・石がコチコチ・絵が本物の景色に）→ 1726年へ（ido_kanban）
 // 9 章（v7_alley で着く。夕方）：社長「また来たんか？」→ 来年ビルを建てる土地 → 路地のおくのほこら・おふじさん・佐伯さん
-//   → 夜：空のひび・ほこら防衛（2 波。屋根の影は J、箱にとびかかる影は K）→ 社長の「江戸の朝」の映し出し → 小さな影がにげる
-//   → 大きな影（暗がりへかくれる → F で照らしてもらう → J・K）→ 本物の朝 → 社長の決断・ダイヤル・ノート → 光の輪から 2086年へ
+//   → 夜：空のひび・ほこら防衛（1 波。屋根の影は J、箱にとびかかる影は K）→ 社長の「江戸の朝」の映し出し → 小さな影がにげる
+//   → 大きな影が光をかき消す → 空き地の IDO のかんばん 3 本の光の輪にさそいこんで、つかまえて J で引きたおす（3 回。defenseDirector.ts）
+//   → 本物の朝 → 社長の決断・ダイヤル・ノート → 光の輪から 2086年へ
+// 戦いの間は、戦う場所の外（ビルの中・遠くの通り・路地の外）へ行けない（chronicle/kit/arena.ts の柵）
 // 段階はフラグだけから決まる（storyNamba.ts）。場面は async runX(rt)（操作を止める → カメラ → 会話 → フラグ → セーブ）。
 import * as THREE from 'three'
 import { ERA_PRESENT, eraTintHex } from '../../../core/eras'
@@ -20,6 +22,7 @@ import type { EnemyHandle } from '../../../combat/combatSystem'
 import type { MusicId } from '../../../audio/tracks'
 import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from '../../../game/stage'
 import { SceneClock } from '../../../chronicle/kit/clock'
+import { ArenaFence, rectPoints } from '../../../chronicle/kit/arena'
 import { Walker } from '../../../chronicle/kit/walker'
 import { Curtain } from '../../../chronicle/kit/curtain'
 import { KinematicBox } from '../../../chronicle/kit/kinematic'
@@ -47,12 +50,22 @@ import { KanbanQr } from './qrSign'
 import { NpcAntics } from './npcAntics'
 import { paintEdoMorning } from './recordArt'
 import { MobTalkV7 } from './mobTalkV7'
+import { smoothFaceOutline } from './faceOutline'
+import { repaintSaekiMark } from './npcBrand'
+import { drawLogo } from './brandArt'
 
 const lines = new DialogueDB(linesData)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 /** よろいの影獣（6 章）：はじめに動かない秒・体力 0 で戻るときのやり直しの位置（水辺の広場の東。看板の柱のそば） */
 const BEAST = { firstStun: 2.0, retry: v(2.6, 0, 4.4) }
+
+/** 戦う場所の柵（chronicle/kit/arena.ts）。6 章：NEXTMAKE の前の水辺の広場と遊歩道（ビルの中・橋の向こうへ行かない）。
+ *  9 章：路地のおくの空き地（路地の口・トンネル路地の外へ行かない） */
+const FENCE = {
+  beast: rectPoints(-22.6, 7.9, 1.0, 10.82),
+  lot: rectPoints(11.05, 22.35, 20.08, 27.3),
+}
 
 type Spot = { pos: THREE.Vector3; face: THREE.Vector3 }
 type Person = Character
@@ -124,6 +137,8 @@ export class ChronicleNambaStage implements Stage {
   private eyes: THREE.Object3D | null = null
   private readonly tmp = new THREE.Vector3()
   private readonly markAt = [v(0, 0, 0), v(0, 0, 0), v(0, 0, 0), v(0, 0, 0)]
+  /** 戦いの間の柵（6 章の影獣・9 章の夜） */
+  private fence: ArenaFence | null = null
   private readonly marks: ObjectiveMark[] = []
 
   // ================================================================ 読み込み・配置
@@ -144,6 +159,11 @@ export class ChronicleNambaStage implements Stage {
     this.matsui = matsui
     this.saeki = saeki
     this.ofuji = ofuji
+    // アップで顔に「ほうれい線のような線」が出ないように（輪郭線の殻が鼻・口のくぼみからはみ出す）
+    smoothFaceOutline(matsui)
+    smoothFaceOutline(saeki)
+    // 佐伯さんのジャケットの NEXTMAKE の印を、新しい印に
+    repaintSaekiMark(saeki)
     for (const ch of [matsui, saeki, ofuji]) {
       ch.root.rotation.order = 'YXZ'
       this.ns.root.add(ch.root)
@@ -227,6 +247,7 @@ export class ChronicleNambaStage implements Stage {
     // 源兵衛の書のイラスト（読めなければ recordArt.ts のキャンバスの絵のまま）
     void loadArtCanvas(V7_ART.bookPage1, 720).then((c) => setRecordArt('genbeiPage', c))
     this.ns.obstacles.push(rt.player.position)
+    this.fence = new ArenaFence(this.ns.root, rt.phys)
     // 路地の時間（空・太陽はシェルの物を動かす）
     this.time = new AlleyTime({ scene: rt.scene, sky: rt.sky, sun: rt.sun, post: rt.post }, this.ns.glowMats)
     this.ns.attachTime(this.time)
@@ -403,6 +424,8 @@ export class ChronicleNambaStage implements Stage {
     })
     this.fight.start(BEAST.firstStun)
     this.doorBlock = new KinematicBox(rt.phys, v(1.3, 1.6, 0.15), v(-10, 1.6, 11.05))
+    // 戦う場所の外（ビルの中・橋の向こうの通り）へ行けない
+    this.fence?.close(FENCE.beast, { y: 0 })
     this.busy = false
     rt.setControlLocked(false)
     this.sayLines('beast_hint')
@@ -457,11 +480,11 @@ export class ChronicleNambaStage implements Stage {
     g.strokeStyle = '#5a6470'
     g.lineWidth = 6
     g.strokeRect(3, 3, 250, 106)
+    // NEXTMAKE のロゴ（brandArt.ts）と、かすれた番号
+    drawLogo(g, 14, 22, 228, 40)
     g.fillStyle = '#26303a'
-    g.font = '900 40px "Hiragino Sans","Noto Sans JP",sans-serif'
     g.textAlign = 'center'
     g.textBaseline = 'middle'
-    g.fillText('NEXTMAKE', 128, 44)
     g.font = '700 26px "Hiragino Sans","Noto Sans JP",sans-serif'
     g.fillText('0 \u2591 1', 128, 86)
     // すりへった跡
@@ -500,6 +523,7 @@ export class ChronicleNambaStage implements Stage {
     this.sayQ.length = 0
     this.doorBlock?.remove()
     this.doorBlock = null
+    this.fence?.open()
     rt.combat.dropPlates()
     this.setPromenadeCrowd(true)
     rt.combat.showBoss(null)
@@ -651,7 +675,7 @@ export class ChronicleNambaStage implements Stage {
     rt.setControlLocked(false)
   }
 
-  /** 佐伯さんの端末：はじめは「時計」でさがす場面。そのあとは画面をひらく・とじる */
+  /** 佐伯さんの端末：はじめは「青い石」でさがす場面。そのあとは画面をひらく・とじる */
   private async runTerminal(rt: StageRuntime): Promise<void> {
     const panel = this.search as IdoSearchPanel
     if (this.searchOpen) {
@@ -737,7 +761,7 @@ export class ChronicleNambaStage implements Stage {
     return this.eye
   }
 
-  /** 路地のかんばんで「青い」も合う → 社長と佐伯さんが来る → 「時計」と「青い」で 1 本 */
+  /** 路地のかんばんで「コチコチ」も合う → 社長と佐伯さんが来る → 「青い石」と「コチコチ」で 1 本 → 江戸へ行く理由 */
   private async runAlleyFound(rt: StageRuntime): Promise<void> {
     this.busy = true
     rt.setControlLocked(true)
@@ -949,6 +973,8 @@ export class ChronicleNambaStage implements Stage {
   private async runNightFalls(rt: StageRuntime): Promise<void> {
     this.busy = true
     rt.setControlLocked(true)
+    // 空き地の外（路地の口・トンネル路地の先）へ行けない（大きな影をたおすまで）
+    this.fence?.close(FENCE.lot, { y: 0 })
     this.ns.skyCrack.setCrack(1)
     void rt.cinematic({ look: v(16.6, 9.0, 30.0), from: v(16.6, 1.6, 20.6), hold: Infinity, inSec: 1.4, fov: 60, shake: 0.06 })
     await rt.dialogue(lines.lines('night_falls'))
@@ -985,7 +1011,10 @@ export class ChronicleNambaStage implements Stage {
     this.defense?.onPlayerRespawn()
   }
 
-  /** 2 波しのいだ：社長が路地のかんばんで「江戸の朝」を映す → 小さな影がにげる → 大きな影 */
+  /**
+   * 波をしのいだ：社長が路地のかんばんで「江戸の朝」を映す → 小さな影がにげる → 大きな影がトンネル路地から出て、光をかき消す
+   * → 社長「空き地のかんばんを光らせるんや！」→ かんばんの光の輪の戦い（defenseDirector.ts）
+   */
   private async runProjection(rt: StageRuntime): Promise<void> {
     this.busy = true
     await this.clock.wait(0.6)
@@ -1006,20 +1035,33 @@ export class ChronicleNambaStage implements Stage {
     await this.clock.wait(1.4)
     this.defense?.fleeSmall()
     await rt.dialogue(lines.lines('shadows_flee'))
-    // 大きな影：トンネル路地から出て、暗がりへ
+    // 大きな影：トンネル路地から出てきて、ほえると、映し出しの光がかき消される
     const big = this.defense?.startBig()
     if (big) void rt.cinematic({ look: big.pos.clone().setY(1.6), from: v(16.2, 2.0, 23.6), hold: Infinity, inSec: 1.0, fov: 54, shake: 0.08 })
     await this.clock.wait(0.8)
-    await rt.dialogue(lines.lines('big_appear'))
+    const B = lines.lines('big_appear')
+    await rt.dialogue(B.slice(0, 1))
+    rt.shake(0.35)
+    this.ns.morningProjection(false)
+    await this.clock.wait(0.9)
+    // 社長は空き地へもどって、かんばんを指さす
+    void this.walker.walkTo(m, [v(16.7, 0, 18.4), v(17.4, 0, 20.3), SPOTS_V7.matsuiDefense.pos], 3.0, SHRINE.pos)
+    await rt.dialogue(B.slice(1, 2))
+    // 空き地のかんばん（3 本）が使えるようになる：見わたすカメラ
+    this.defense?.fight()
+    void rt.cinematic({ look: v(16.4, 0.8, 24.0), from: v(17.2, 6.2, 17.6), hold: Infinity, inSec: 1.2, fov: 60 })
+    await rt.dialogue(B.slice(2))
     rt.endCinematic()
     rt.combat.setCheckpoint(V7_SPAWNS.v7_shrine.pos, V7_SPAWNS.v7_shrine.facing)
     this.busy = false
     rt.setControlLocked(false)
+    void rt.dialogue(lines.lines('big_howto'))
   }
 
   /** 大きな影をたおした → 本物の朝 → 社長の決断・ダイヤル・ノート → 帰りの光 */
   private async runDawn(rt: StageRuntime): Promise<void> {
     this.busy = true
+    this.fence?.open()
     rt.combat.showBoss(null)
     await this.clock.wait(1.2)
     rt.setControlLocked(true)
@@ -1117,7 +1159,6 @@ export class ChronicleNambaStage implements Stage {
       if (step === 'depart' && k === 'c') return { kind: 'depart', label: 'QR を読む', kanban: k }
       if (step === 'between' && k === 'c') return { kind: 'between', label: '調べる', kanban: k }
     }
-    if (step === 'defense' && this.defense?.phase === 'big_dark') return { kind: 'aim', label: '社長に照らしてもらう' }
     if (step === 'return' && this.ringOpen && this.near(p, SPOTS_V7.returnRing, 1.8)) return { kind: 'leave', label: '光の輪に入る' }
     return null
   }
@@ -1152,9 +1193,6 @@ export class ChronicleNambaStage implements Stage {
       case 'between':
         void rt.dialogue(lines.lines('between'))
         return true
-      case 'aim':
-        if (this.defense?.aimAtBig()) void rt.dialogue(lines.lines('big_aim'))
-        return true
       case 'leave':
         void this.runLeave(rt)
         return true
@@ -1168,7 +1206,24 @@ export class ChronicleNambaStage implements Stage {
     const a = this.action(rt)
     if (a) return [{ key: 'F', label: a.label }]
     if (this.fight?.grabbing) return [{ key: 'J', label: '影の腕を引きはがす' }]
+    const dh = this.defenseHints(rt)
+    if (dh) return dh
     if (this.mob && !this.mobSuspended(rt)) return this.mob.hints(rt)
+    return null
+  }
+
+  /** 9 章の光の輪の戦い：そばのかんばん（K）・つかまえた影（J） */
+  private defenseHints(rt: StageRuntime): Hint[] | null {
+    const d = this.defense
+    if (!d || this.step !== 'defense') return null
+    if (d.phase === 'caught') return [{ key: 'J', label: '引きたおす' }]
+    if (d.phase !== 'big') return null
+    const P = this.ns.lightPosts
+    const p = rt.player.position
+    for (let i = 0; i < P.count; i++) {
+      const s = P.switchAt(i)
+      if (P.state(i) === 'ready' && Math.hypot(s.x - p.x, s.z - p.z) < 1.5) return [{ key: 'K', label: 'かんばんを光らせる' }]
+    }
     return null
   }
 
@@ -1240,7 +1295,12 @@ export class ChronicleNambaStage implements Stage {
         break
       case 'defense': {
         const d = this.defense
-        if (d && (d.phase === 'big_dark' || d.phase === 'big_lit') && d.bigHandle) out.push({ pos: at(0, d.bigHandle.pos, 4.0), label: '大きな影', edge: true })
+        if (d?.phase === 'caught' && d.bigHandle) out.push({ pos: at(0, d.bigHandle.pos, 4.0), label: '引きたおす！', edge: true })
+        else if (d?.phase === 'big') {
+          const i = d.hintPost
+          if (i >= 0) out.push({ pos: at(0, this.ns.lightPosts.top(i), 0.25), label: 'このかんばん', edge: true })
+          if (d.bigHandle) out.push({ pos: at(out.length, d.bigHandle.pos, 4.0), label: '大きな影' })
+        }
         break
       }
       case 'return':
@@ -1262,9 +1322,12 @@ export class ChronicleNambaStage implements Stage {
 
   // ================================================================ 毎フレーム
 
-  update(dt: number, _frame: ActionFrame, rt: StageRuntime): void {
+  update(dt: number, frame: ActionFrame, rt: StageRuntime): void {
     this.clock.update(dt)
     this.walker.update(dt)
+    // 9 章：かんばんのそばで K（向きに関係なく光らせる）
+    if (this.defense && frame.pressed.has('attack') && !this.busy && !rt.talking) this.defense.onAttack()
+    this.fence?.update(dt, rt.player)
     rt.combat.passive = this.busy || rt.talking || rt.inCinematic
     // 6 章の到着：光の中から出てくる
     const ar = this.arrival
@@ -1406,6 +1469,8 @@ export class ChronicleNambaStage implements Stage {
     this.walker.clear()
     this.defense?.dispose()
     this.defense = null
+    this.fence?.dispose()
+    this.fence = null
     this.search?.dispose()
     this.sketch?.dispose()
     this.curtain?.dispose()

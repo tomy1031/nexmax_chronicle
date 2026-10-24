@@ -3,6 +3,7 @@
 // NEXTMAKE / NEXMAX / IDO はこのゲームの作者のもの。現代の看板は左→右の横書き（setLettering の江戸の規則は使わない）。
 import * as THREE from 'three'
 import { makeCanvas, tex } from '../../render/textures'
+import { MARK_DARK, MARK_LIGHT, drawMark, drawMarkWhite } from './chronicle/brandArt'
 
 export type SignFont = 'gothic' | 'brush' | 'round' | 'mincho'
 
@@ -97,25 +98,13 @@ function fitVertical(g: CanvasRenderingContext2D, text: string, x: number, y: nu
   })
 }
 
-/** NEXTMAKE の三角マーク（山形に切れ込みのある三角） */
-export function drawNextmakeMark(g: CanvasRenderingContext2D, cx: number, cy: number, s: number, color: string, accent: string): void {
-  g.save()
-  g.translate(cx, cy)
-  g.fillStyle = color
-  g.beginPath()
-  g.moveTo(0, -s * 0.55)
-  g.lineTo(s * 0.55, s * 0.45)
-  g.lineTo(-s * 0.55, s * 0.45)
-  g.closePath()
-  g.fill()
-  g.fillStyle = accent
-  g.beginPath()
-  g.moveTo(-s * 0.08, -s * 0.05)
-  g.lineTo(s * 0.26, s * 0.45)
-  g.lineTo(-s * 0.42, s * 0.45)
-  g.closePath()
-  g.fill()
-  g.restore()
+/**
+ * NEXTMAKE の印（三つの青い三角で「M」。chronicle/brandArt.ts の drawMark）。s は幅のめやす。
+ * dark・light は奥の 2 枚とまん中の 1 枚の色（暗い所は白い印：dark = '#ffffff'）
+ */
+export function drawNextmakeMark(g: CanvasRenderingContext2D, cx: number, cy: number, s: number, dark: string = MARK_DARK, light: string = MARK_LIGHT): void {
+  if (dark.toLowerCase() === '#ffffff') drawMarkWhite(g, cx, cy, s * 1.1)
+  else drawMark(g, cx, cy, s * 1.1, dark, light)
 }
 
 function paintSign(g: CanvasRenderingContext2D, d: SignDef, x: number, y: number): void {
@@ -158,7 +147,7 @@ function paintSign(g: CanvasRenderingContext2D, d: SignDef, x: number, y: number
   let th = h - pad * 2 - (d.deco === 'stripe' ? h * 0.16 : 0)
   if (d.deco === 'logo') {
     const ms = h * 0.62
-    drawNextmakeMark(g, x + pad + ms * 0.55, y + h / 2, ms, d.fg, '#f2c84b')
+    drawNextmakeMark(g, x + pad + ms * 0.55, y + h / 2, ms, d.fg === '#ffffff' ? '#ffffff' : MARK_DARK)
     tx += ms * 1.15
     tw -= ms * 1.15
   }

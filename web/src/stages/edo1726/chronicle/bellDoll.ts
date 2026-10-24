@@ -69,7 +69,8 @@ const T = {
   windup: 1.4,
   slam: 0.22,
   recover: 1.3,
-  bellUp: 1.0,
+  // 鐘をかかげてから輪が出るまで（怒り 1.25 倍でも 1.1 秒。輪が足もとまで来る時間を足して 1.2 秒より長く）
+  bellUp: 1.2,
   bellHit: 0.25,
   stompUp: 1.6,
   stompHit: 0.2,
@@ -1517,9 +1518,11 @@ export class TimeBellDoll {
       const g = this.gears[i]
       const d = this.targets[i]
       g.getWorldPosition(d.point)
-      // 歯車の面の向き（-Z）
+      // 歯車の面の向き（-Z）を水平にしたもの（前の側からならつかめる）。ひざをつくと、ひざの歯車は下を向くので、そのときは人形の前
       g.getWorldQuaternion(this.q)
-      ;(d.facing as THREE.Vector3).set(0, 0, -1).applyQuaternion(this.q)
+      const f = (d.facing as THREE.Vector3).set(0, 0, -1).applyQuaternion(this.q).setY(0)
+      if (f.lengthSq() < 0.09) f.set(-Math.sin(this.root.rotation.y), 0, -Math.cos(this.root.rotation.y))
+      f.normalize()
       d.radius = 0.5 * this.scale
     }
   }

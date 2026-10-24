@@ -9,7 +9,7 @@ import { M, rbox } from '../../../render/batch'
 import { box, boxAB, cyl, decal, sag, sign, type NCtx } from '../kit'
 import type { SignAtlas } from '../signs'
 import { makeCanvas } from '../../../render/textures'
-import { drawNextmakeMark } from '../signs'
+import { drawLogo, drawMarkWhite } from './brandArt'
 import { paintV7ConceptBoard } from './recordArt'
 import { CLOCK_SHOP, KANBAN, LAB, MEASURE, STATION } from './layoutV7'
 
@@ -110,42 +110,6 @@ export function registerV7Art(signs: SignAtlas): void {
     g.fillText('NAMBA STATION  ↓ のりば', x + 112, y + h * 0.8)
   })
   // ---- 空き地：建築計画のお知らせ（来年のビル）・トンネル路地の札
-  signs.addCustom('v7_notice', 368, 276, (g, x, y, w, h) => {
-    g.fillStyle = '#f8f8f4'
-    g.fillRect(x, y, w, h)
-    g.strokeStyle = '#2a3a6a'
-    g.lineWidth = 8
-    g.strokeRect(x + 4, y + 4, w - 8, h - 8)
-    g.fillStyle = '#2a3a6a'
-    g.fillRect(x + 4, y + 4, w - 8, h * 0.2)
-    g.fillStyle = '#ffffff'
-    g.font = `900 ${h * 0.11}px ${GOTHIC}`
-    g.textAlign = 'center'
-    g.textBaseline = 'middle'
-    g.fillText('建築計画のお知らせ', x + w / 2, y + h * 0.12)
-    g.fillStyle = '#1a1a1a'
-    g.textAlign = 'left'
-    const rows: Array<[string, string]> = [
-      ['建物の名前', '（仮）NEXTMAKE 新館'],
-      ['建てる人', '株式会社 NEXTMAKE'],
-      ['工事のはじめ', '2027年 4月 の予定'],
-      ['かいだて', '地上 12 階'],
-    ]
-    rows.forEach(([a, b], i) => {
-      const yy = y + h * (0.32 + i * 0.15)
-      g.font = `700 ${h * 0.07}px ${GOTHIC}`
-      g.fillStyle = '#4a4a4a'
-      g.fillText(a, x + w * 0.07, yy)
-      g.font = `800 ${h * 0.075}px ${GOTHIC}`
-      g.fillStyle = '#1a1a1a'
-      g.fillText(b, x + w * 0.38, yy)
-      g.fillStyle = '#c8ccd2'
-      g.fillRect(x + w * 0.06, yy + h * 0.06, w * 0.88, 2)
-    })
-    g.fillStyle = '#c8281c'
-    g.font = `800 ${h * 0.06}px ${GOTHIC}`
-    g.fillText('※ この土地の古いほこらは とりこわします', x + w * 0.07, y + h * 0.93)
-  })
   signs.addCustom('v7_tunnel', 256, 80, (g, x, y, w, h) => {
     g.fillStyle = '#6a4a2c'
     g.fillRect(x, y, w, h)
@@ -162,14 +126,15 @@ export function registerV7Art(signs: SignAtlas): void {
   signs.addCustom('v7_kanban_no1', 256, 96, (g, x, y, w, h) => {
     g.fillStyle = '#16294f'
     g.fillRect(x, y, w, h)
+    drawMarkWhite(g, x + h * 0.42, y + h / 2, h * 0.5)
     g.fillStyle = '#ffd56a'
-    g.font = `900 ${h * 0.34}px ${GOTHIC}`
+    g.font = `900 ${h * 0.3}px ${GOTHIC}`
     g.textAlign = 'center'
     g.textBaseline = 'middle'
-    g.fillText('IDO かんばん 第1号', x + w / 2, y + h * 0.38)
+    g.fillText('IDO かんばん 第1号', x + w * 0.58, y + h * 0.38)
     g.fillStyle = '#ffffff'
-    g.font = `700 ${h * 0.2}px ${GOTHIC}`
-    g.fillText('2026.10  試験運用中', x + w / 2, y + h * 0.76)
+    g.font = `700 ${h * 0.19}px ${GOTHIC}`
+    g.fillText('2026.10  試験運用中', x + w * 0.58, y + h * 0.76)
   })
   // ---- 佐伯さんのタブレット（三脚の上：かんばんの映りぐあい）
   signs.addCustom('v7_tablet', 192, 128, (g, x, y, w, h) => {
@@ -193,6 +158,46 @@ export function registerV7Art(signs: SignAtlas): void {
     g.textBaseline = 'middle'
     g.fillText('映りぐあい 98%', x + 10, y + h - 14)
   })
+}
+
+/** 建築計画のお知らせ（来年のビル）：白い板に、NEXTMAKE のロゴ */
+function paintNotice(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  g.fillStyle = '#f8f8f4'
+  g.fillRect(x, y, w, h)
+  g.strokeStyle = '#2a3a6a'
+  g.lineWidth = 8
+  g.strokeRect(x + 4, y + 4, w - 8, h - 8)
+  g.fillStyle = '#2a3a6a'
+  g.fillRect(x + 4, y + 4, w - 8, h * 0.2)
+  g.fillStyle = '#ffffff'
+  g.font = `900 ${h * 0.11}px ${GOTHIC}`
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillText('建築計画のお知らせ', x + w / 2, y + h * 0.12)
+  g.fillStyle = '#1a1a1a'
+  g.textAlign = 'left'
+  const rows: Array<[string, string]> = [
+    ['建物の名前', '（仮）NEXTMAKE 新館'],
+    ['建てる人', '株式会社'],
+    ['工事のはじめ', '2027年 4月 の予定'],
+    ['かいだて', '地上 12 階'],
+  ]
+  rows.forEach(([a, b], i) => {
+    const yy = y + h * (0.32 + i * 0.15)
+    g.font = `700 ${h * 0.07}px ${GOTHIC}`
+    g.fillStyle = '#4a4a4a'
+    g.fillText(a, x + w * 0.07, yy)
+    g.font = `800 ${h * 0.075}px ${GOTHIC}`
+    g.fillStyle = '#1a1a1a'
+    g.fillText(b, x + w * 0.38, yy)
+    g.fillStyle = '#c8ccd2'
+    g.fillRect(x + w * 0.06, yy + h * 0.06, w * 0.88, 2)
+  })
+  g.fillStyle = '#c8281c'
+  g.font = `800 ${h * 0.06}px ${GOTHIC}`
+  g.fillText('※ この土地の古いほこらは とりこわします', x + w * 0.07, y + h * 0.93)
+  // 建てる会社：「株式会社」のあとに NEXTMAKE のロゴ
+  drawLogo(g, x + w * 0.55, y + h * (0.47 - 0.04), w * 0.4, h * 0.08)
 }
 
 /** 佐伯さんの端末の画面（IDO の記録さがし） */
@@ -234,8 +239,20 @@ function paintTerminal(g: CanvasRenderingContext2D, x: number, y: number, w: num
       g.arc(x + w * px, y + h * py, 6, 0, Math.PI * 2)
       g.fill()
     }
-    drawNextmakeMark(g, x + w - 40, y + h * 0.88, 14, '#4ee6dc', '#ffffff')
+    drawMarkWhite(g, x + w - 40, y + h * 0.88, 28)
   }
+
+/** 空き地の「建築計画のお知らせ」の板（物置の西の面。自分のキャンバス：看板のアトラスはいっぱい） */
+export function buildNotice(c: NCtx, x: number, y: number, z: number, rotY: number, w: number, h: number): void {
+  const [cv, g] = makeCanvas(368, 276)
+  paintNotice(g, 0, 0, 368, 276)
+  const m = canvasPlane(c, cv, w, h, false, 'v7_notice')
+  m.position.set(x, y, z)
+  m.rotation.y = rotY
+  box(c, x + Math.sin(rotY) * -0.025, y, z + Math.cos(rotY) * -0.025, w + 0.06, h + 0.06, 0.04, c.m.metal, { tint: '#8a8e94', rotY, cast: false })
+  m.position.x += Math.sin(rotY) * 0.002
+  m.position.z += Math.cos(rotY) * 0.002
+}
 
 /** 自分のキャンバスの板（アトラスに入れない大きな絵。1 回の描画） */
 function canvasPlane(c: NCtx, cv: HTMLCanvasElement, w: number, h: number, glow: boolean, name: string): THREE.Mesh {

@@ -23,6 +23,33 @@ pwa.listen()
 let gameModule: Promise<typeof import('./game/game')> | null = null
 const loadGame = () => (gameModule ??= import('./game/game'))
 
+/**
+ * スマホのダブルタップ・ピンチでの拡大を止める（拡大すると HUD がずれて、画面が乱れる）。
+ * CSS の touch-action: manipulation（style.css）が効かない古い Safari のために、すばやい 2 回目のタップと、
+ * 2 本指の動き・Safari の gesture を止める。スクロールする所（会話のきろくなど）の 1 本指の動きは止めない
+ */
+function guardZoom(): void {
+  let lastEnd = 0
+  document.addEventListener(
+    'touchend',
+    (e) => {
+      const now = e.timeStamp
+      if (now - lastEnd < 320 && e.cancelable) e.preventDefault()
+      lastEnd = now
+    },
+    { passive: false },
+  )
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      if (e.touches.length > 1 && e.cancelable) e.preventDefault()
+    },
+    { passive: false },
+  )
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend', 'dblclick']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false })
+}
+guardZoom()
+
 /** 起動直後の表示（index.html の #boot）を消す */
 function hideBoot(): void {
   const b = document.getElementById('boot')

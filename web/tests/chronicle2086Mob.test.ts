@@ -1,4 +1,4 @@
-// 物語 v7 の 2086 年：町の人と量産型ネクマックスの台詞（chronicle/mob_lines_v7.json・mobTalkV7.ts）
+// 物語 v7 の 2086 年：町の人と量産型NEXMAXの台詞（chronicle/mob_lines_v7.json・mobTalkV7.ts）
 import { describe, expect, it } from "vitest";
 import type { Flags } from "../src/chronicle/progress";
 import { bubbleLinesFor, talkLinesFor, type MobTable } from "../src/world/mobTalkLogic";

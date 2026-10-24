@@ -8,6 +8,7 @@
 // ・NEXTMAKE の前の、立てたばかりの石標 A のまわり：工事の看板・鉄板・コーン・佐伯さんの測定の道具（影の獣のよろいの元）
 import * as THREE from 'three'
 import { N } from '../layout'
+import { rectPoints } from '../../../chronicle/kit/arenaLogic'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -187,4 +188,25 @@ export const V7_SPAWNS: Record<string, V7Spawn> = {
   v7_lab: { pos: v(-7.0, 0, 18.5), facing: Math.PI / 2 + 0.35, camYaw: Math.PI / 2 + 0.55, camPitch: 0.28 },
   // 9 章：ほこらの前（空き地）
   v7_shrine: { pos: v(15.6, 0, 22.9), facing: 1.8, camYaw: 2.2, camPitch: 0.24 },
+}
+
+/** 戦う場所の柵（chronicle/kit/arena.ts）。6 章：NEXTMAKE の前の水辺の広場と遊歩道（ビルの中・橋の向こうへ行かない）。
+ *  9 章：路地のおくの空き地と、影が来る路地・トンネル路地（表の通り・トンネルの先へ行かない。影の出口は柵の中） */
+export const FENCE_V7 = {
+  beast: rectPoints(-22.6, 7.9, 1.0, 10.82),
+  // 路地とトンネルの所は、柵の壁（厚さ 0.4 m）がもとの壁の外にくるように、0.25 m 外へ（影が細い道で引っかからない）
+  lot: [
+    { x: 11.05, z: 20.08 },
+    { x: ALLEY_V7.x0 - 0.25, z: 20.08 },
+    { x: ALLEY_V7.x0 - 0.25, z: 12.0 },
+    { x: ALLEY_V7.x1 + 0.25, z: 12.0 },
+    { x: ALLEY_V7.x1 + 0.25, z: 20.08 },
+    { x: 22.35, z: 20.08 },
+    { x: 22.35, z: 27.3 },
+    { x: LOT.tunnel.x1 + 0.25, z: 27.3 },
+    { x: LOT.tunnel.x1 + 0.25, z: 30.25 },
+    { x: LOT.tunnel.x0 - 0.25, z: 30.25 },
+    { x: LOT.tunnel.x0 - 0.25, z: 27.3 },
+    { x: 11.05, z: 27.3 },
+  ],
 }

@@ -35,6 +35,8 @@ import { SkyCrack, ShadowMouths } from './defenseFx'
 import type { AlleyTime } from './alleyTime'
 import { ALLEY_V7, ARMOR_SOURCES, DECK, KANBAN, LOT, SHRINE, type KanbanId } from './layoutV7'
 import { buildRiverDeck } from './riverDeck'
+import { loadBrandArt } from './brandArt'
+import { LightPosts, lightPostSpots } from './lightPosts'
 
 export type ChronicleNambaScene = {
   root: THREE.Group
@@ -58,6 +60,8 @@ export type ChronicleNambaScene = {
   /** 9 章：空のひびと、影の出口 */
   skyCrack: SkyCrack
   mouths: ShadowMouths
+  /** 9 章：空き地の IDO のかんばん 3 本（「江戸の朝」の光の輪で、大きな影をつかまえる） */
+  lightPosts: LightPosts
   /** 夜ほど明るくする発光のマテリアル（AlleyTime に渡す） */
   glowMats: Array<{ mat: THREE.MeshStandardMaterial; weight: number }>
   materials: NambaMaterials
@@ -83,7 +87,8 @@ async function waitFonts(): Promise<void> {
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 export async function buildChronicleNamba(q: QualitySettings, aniso: number, progress: (p: number, msg: string) => void, yieldFrame: () => Promise<void>): Promise<ChronicleNambaScene> {
-  const [m] = await Promise.all([createNambaMaterials(aniso), waitFonts()])
+  // NEXTMAKE のロゴ・ネクマックスの公式の絵（看板のアトラスと社長の絵に使うので、描く前に読む）
+  const [m] = await Promise.all([createNambaMaterials(aniso), waitFonts(), loadBrandArt()])
   progress(0.3, '看板を描いています…')
   await yieldFrame()
   const signs = new SignAtlas(2048)
@@ -129,6 +134,7 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
   await yieldFrame()
   buildAlley(c, { open: true, z1: ALLEY_V7.z1 })
   const lot = buildBackLot(c)
+  const lightPosts = new LightPosts(c, lightPostSpots())
   const townClaw = buildNambaClaw(c)
   progress(0.6, '遠くの町並みを組み立て中…')
   await yieldFrame()
@@ -179,6 +185,7 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
   root.add(skyCrack.mesh)
   const mouths = new ShadowMouths()
   root.add(mouths.mesh)
+  root.add(lightPosts.group)
   // 映し出しの光（点光源の候補。消えているときは 0）
   const projLight: LightSpot = { pos: v(16.4, 2.6, 21.8), color: '#ffd8a0', intensity: 0, dist: 12 }
   c.lights.push(projLight)
@@ -208,6 +215,7 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
     projection,
     skyCrack,
     mouths,
+    lightPosts,
     glowMats,
     materials: m,
     obstacles,

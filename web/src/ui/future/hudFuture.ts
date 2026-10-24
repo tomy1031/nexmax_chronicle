@@ -35,6 +35,7 @@ import {
 import { MiniRenderer } from './miniRenderer'
 import { LivePortrait } from './portrait'
 import { SpeakerIconCache, speakerStyle } from './speakerIcons'
+import { TalkLogPanel } from './talkLog'
 import { PAUSE_DEFAULT_TAB, SETTING_ROWS, filterHintsForArms, nextPauseTab, settingsKey, type PauseTab, type SettingRow } from './hudLogic'
 import { FPS_CAPS, MUSIC_LEVELS, QUALITY_LABELS, QUALITY_LEVELS, type FpsCap, type GraphicsPrefs, type MusicLevel, type QualityLevel } from '../../render/quality'
 import { DEFAULT_THEME, HUD_THEMES, normalizeTheme, patternDataUri, themeClass, themeFromText, type HudTheme, type PatternName } from './themes'
@@ -259,6 +260,8 @@ export class HudFuture {
   private readonly frames = new FrameManager()
   private readonly compass: CompassBar
   private readonly board = new DialogueBoard()
+  /** 会話のきろく（ログ）と AUTO のボタン（上中央、コンパスの下） */
+  talk!: TalkLogPanel
   private readonly icons: SpeakerIconCache
   private readonly opts: Required<HudFutureOptions>
   private mini: MiniRenderer | null = null
@@ -555,6 +558,7 @@ export class HudFuture {
     this.compass = new CompassBar()
     this.compass.el.hidden = true
     r.insertBefore(this.compass.el, el(r, '.nx-objective'))
+    this.talk = new TalkLogPanel(r, (s) => speakerStyle(s).color)
     // 左上
     this.pfBox = el(r, '.nx-portrait')
     this.pfCanvas = el(r, '.nx-pf-canvas')
@@ -1005,6 +1009,7 @@ export class HudFuture {
   /** 台詞（話者名＋一言）。新しい台詞をウィンドウに出す */
   say(speaker: string, text: string, seconds = 3.8): void {
     if (this.touch) text = toTouchText(text)
+    this.talk.push(speaker, text)
     const now = performance.now() / 1000
     const r = this.board.say(speaker, text, seconds, now)
     if (r === 'new') this.renderDialog()

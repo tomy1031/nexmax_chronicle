@@ -89,6 +89,25 @@ const START_HINT_TIME = 14
 /** 会話の 1 行をウィンドウに出しておく最長の秒（実時間。ふつうは次の行・会話の終わりで消える） */
 const DIALOGUE_HOLD_SEC = 600
 
+const TALK_AUTO_KEY = 'nx-talk-auto'
+/** セリフの AUTO（端末に覚える。はじめは OFF：子どもが自分の速さで読めるように）。?talkauto=1 で ON */
+function loadTalkAuto(): boolean {
+  try {
+    const q = new URLSearchParams(location.search).get('talkauto')
+    if (q !== null) return q !== '0'
+    return localStorage.getItem(TALK_AUTO_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function saveTalkAuto(on: boolean): void {
+  try {
+    localStorage.setItem(TALK_AUTO_KEY, on ? '1' : '0')
+  } catch {
+    // 保存できない端末（プライベートモードなど）は、その回だけ
+  }
+}
+
 /** 読み込んでいるステージと、そのステージ用に作った物理・プレイヤー・クロー */
 type Active = {
   stage: Stage
@@ -167,6 +186,10 @@ export class Game {
   private shotIndex = -1
   private paused = false
   private menuOpen = false
+  /** 会話のきろく（ログ）を開いている間（ゲームは止まる） */
+  private logOpen = false
+  /** セリフの AUTO：会話の場面のセリフを時間で進めるか（OFF なら F・タップを待つ）。端末に覚える */
+  private talkAuto = loadTalkAuto()
   private playTime = 0
   private airTime = 0
   private landTimer = 0
@@ -221,6 +244,15 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 2500)
     this.post = createPost(this.renderer, this.scene, this.camera, this.q)
     this.hud = new Hud(ui)
+    this.hud.talk.setAuto(this.talkAuto)
+    this.hud.talk.onAuto = () => {
+      this.talkAuto = !this.talkAuto
+      this.hud.talk.setAuto(this.talkAuto)
+      saveTalkAuto(this.talkAuto)
+      this.hud.toast(this.talkAuto ? 'セリフを自動で進めます' : 'セリフは F（タップ）で進めます', 2)
+    }
+    this.hud.talk.onLog = () => this.setLogOpen(!this.logOpen)
+    this.hud.talk.onClose = () => this.setLogOpen(false)
     this.hud.setPortraitFps(this.q.portraitFps)
     this.hud.setGraphicsPrefs(this.prefs)
     this.hud.onGraphicsChange = (p) => this.setGraphics(p)
@@ -449,6 +481,7 @@ export class Game {
     this.shotIndex = -1
     this.paused = false
     this.menuOpen = false
+    this.setLogOpen(false)
     this.airTime = 0
     this.landTimer = 0
     this.fireTimer = 0
@@ -703,6 +736,14 @@ export class Game {
     this.hud.say(l.speaker, l.text, DIALOGUE_HOLD_SEC)
   }
 
+  /** 会話のきろく（ログ）を開く・とじる。開いている間はゲームが止まる */
+  private setLogOpen(on: boolean): void {
+    if (on === this.logOpen) return
+    this.logOpen = on
+    if (on) this.hud.talk.open(this.touch !== null)
+    else this.hud.talk.close()
+  }
+
   private endDialogue(): void {
     const t = this.talk
     this.talk = null
@@ -713,6 +754,9 @@ export class Game {
   private tickDialogue(dt: number, advance: boolean): void {
     const t = this.talk
     if (!t) return
+    // AUTO が OFF：会話の場面（操作が止まっている・カメラの演出中）は、F・タップまで次へ進まない。
+    // 動いている間の声（戦いの最中の呼びかけなど）は、止めると遊べないので時間で進める
+    if (!advance && !this.talkAuto && (this.controlLocked || this.cine.active)) return
     const l = advance ? t.queue.advance() : t.queue.tick(dt)
     if (l) this.showLine(l)
     if (t.queue.done) this.endDialogue()
@@ -829,23 +873,31 @@ export class Game {
       if (frame.pressed.has('pause')) this.setMode(a, -1)
       this.focus.copy(shots.focus(this.shotIndex))
     } else {
-      if (!this.travel.busy) {
+      if (this.logOpen) {
+        // ログ：L・Esc でとじる、↑↓で見る
+        if (frame.pressed.has('pause') || input.pressed.has('KeyL')) this.setLogOpen(false)
+        else if (input.down.has('ArrowUp') || input.down.has('KeyW')) this.hud.talk.scroll(-0.4)
+        else if (input.down.has('ArrowDown') || input.down.has('KeyS')) this.hud.talk.scroll(0.4)
+      } else if (!this.travel.busy) {
         if (frame.pressed.has('pause')) {
           if (this.menuOpen) this.menuOpen = false
           else this.paused = !this.paused
         } else if (frame.pressed.has('menu') && !this.paused) this.menuOpen = !this.menuOpen
+        else if (input.pressed.has('KeyL') && !this.paused && !this.menuOpen) this.setLogOpen(true)
       }
       this.hud.setPaused(this.paused)
       this.hud.setMenu(this.menuOpen)
       if (this.travel.inputLocked) this.departure(a, dt)
-      else if (!this.paused && !this.menuOpen) {
+      else if (!this.paused && !this.menuOpen && !this.logOpen) {
         // 当たった瞬間の一瞬の止まり（戦闘の手応え）：実時間で数えて、ゲームの時間だけ縮める
         a.combat.tickReal(dt)
         this.gameplay(a, frame, dt * a.combat.timeScale)
       }
       this.focus.copy(player.position)
     }
-    const frozen = this.shotIndex === -1 && (this.paused || this.menuOpen)
+    const frozen = this.shotIndex === -1 && (this.paused || this.menuOpen || this.logOpen)
+    // ログ・AUTO のボタンは、カメラの演出中（会話の場面）も出す。撮影用・移動中・一時停止の間は隠す
+    this.hud.talk.setBarVisible(this.shotIndex === -1 && !this.travel.busy && !this.paused && !this.menuOpen)
     this.touch?.setPlaying(this.shotIndex === -1 && !frozen && !this.travel.busy)
     this.touch?.setLocked(this.controlLocked || this.cine.active)
     this.touch?.setOverlay(this.shotIndex === -1 && !this.travel.busy ? (this.paused ? 'pause' : this.menuOpen ? 'menu' : null) : null)

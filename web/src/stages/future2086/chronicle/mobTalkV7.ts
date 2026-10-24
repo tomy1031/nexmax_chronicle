@@ -1,4 +1,4 @@
-// 物語 v7 の 2086 年：町の人（祭りの人出）と量産型ネクマックスのおしゃべり（吹き出し・F の会話）。台詞は mob_lines_v7.json。
+// 物語 v7 の 2086 年：町の人（祭りの人出）と量産型NEXMAXのおしゃべり（吹き出し・F の会話）。台詞は mob_lines_v7.json。
 // 前の版（mobTalk2086.ts）と同じく、共有の world/mobTalk.ts を使う。話す人の選び方（MOB_SLOTS_2086・pickCrowdSpeakers）もそのまま。
 // ・場面（mobPhaseV7）は時間帯とフラグだけで決める：
 //   day1（1 度目の 10月18日）／loop（くり返しの朝。書かなければ day1 を一字一句そのまま＝同じ人が同じことを言う）／
@@ -53,7 +53,7 @@ export class MobTalkV7 {
         talkReach: 2.1,
       })
     }
-    // 会場で働く量産型ネクマックス（店番は台の向こうなので少し遠くまで）
+    // 会場で働く量産型NEXMAX（店番は台の向こうなので少し遠くまで）
     for (const u of [...fs.units.list, ...extraUnits.flatMap((x) => x.list)]) {
       const root = u.ch.root
       const stall = /^unit_(takoyaki|soba|ame|kingyo|keychain)$/.test(u.spec.id)

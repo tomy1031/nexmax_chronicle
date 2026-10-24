@@ -1,4 +1,4 @@
-// 会場で働く量産型ネクマックス（2086年の最新型・アンテナ付き）。屋台の店番、展示の組み立て、案内、見回り。
+// 会場で働く量産型NEXMAX（2086年の最新型・アンテナ付き）。屋台の店番、展示の組み立て、案内、見回り。
 // 簡単なループの動き（ポーズ＋歩く道すじ）だけ。主人公と同じ部品のリグの量産型（createNexmax の variant: 'production'）。
 import * as THREE from 'three'
 import { createNexmax, type NexmaxCharacter, type NexmaxPose } from '../../world/nexmax/nexmaxModel'

@@ -1,5 +1,5 @@
 // 2086年 ナンバタウン「時代博覧祭」の単体プレビュー（future-preview.html）。シェル（game/）に依存せず、
-// 共有のレンダラ・後処理・HUD・主人公のリグ・ソラ・量産型ネクマックスだけで組み立てて撮影・確認する。
+// 共有のレンダラ・後処理・HUD・主人公のリグ・ソラ・量産型NEXMAXだけで組み立てて撮影・確認する。
 // クエリ：
 //   time=morning|night         時間帯
 //   cam=overview|street|booth|stalls|orum|portal|walkway|swing|units|night_street  固定カメラ

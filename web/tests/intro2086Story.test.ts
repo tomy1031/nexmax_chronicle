@@ -418,7 +418,7 @@ describe("4章 あらがう（順番は自由）", () => {
     s.send({ kind: "interact", target: "hq" });
     let e = s.drain();
     expect(lastDlg(e)!.lines.some((l) => l.speaker === "実行委員" && l.text.includes("予定どおり開催します"))).toBe(true);
-    expect(lastDlg(e)!.lines.some((l) => l.speaker === "量産型ネクマックス")).toBe(true);
+    expect(lastDlg(e)!.lines.some((l) => l.speaker === "量産型NEXMAX")).toBe(true);
     s.send({ kind: "dialogue_done", key: "try_cancel_hq" });
     expect(s.objective().title).toBe("ソラにも中止を頼もう");
     s.send({ kind: "interact", target: "sora" });

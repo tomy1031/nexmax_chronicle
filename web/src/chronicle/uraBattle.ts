@@ -1187,7 +1187,7 @@ export class UraBattle {
     if (this.timerEl) return
     const el = document.createElement('div')
     el.style.cssText =
-      'position:fixed;left:50%;top:64px;transform:translateX(-50%);padding:6px 16px;border-radius:14px;background:rgba(40,24,8,0.72);color:#ffe2a0;font:800 18px "M PLUS Rounded 1c",system-ui,sans-serif;border:1px solid rgba(255,210,122,0.7);box-shadow:0 0 18px rgba(255,190,80,0.45);pointer-events:none;z-index:5;text-align:center;min-width:220px'
+      'position:fixed;left:50%;top:104px;transform:translateX(-50%);padding:6px 16px;border-radius:14px;background:rgba(40,24,8,0.72);color:#ffe2a0;font:800 18px "M PLUS Rounded 1c",system-ui,sans-serif;border:1px solid rgba(255,210,122,0.7);box-shadow:0 0 18px rgba(255,190,80,0.45);pointer-events:none;z-index:5;text-align:center;min-width:220px'
     el.innerHTML = '<div class="ut-label">扉が閉じるまで</div><div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.18);margin-top:4px;overflow:hidden"><div class="ut-fill" style="height:100%;width:100%;background:linear-gradient(90deg,#ffb84a,#fff2b0)"></div></div>'
     ;(document.getElementById('ui') ?? document.body).appendChild(el)
     this.timerEl = el

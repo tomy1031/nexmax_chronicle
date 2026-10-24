@@ -45,7 +45,7 @@ export type ChronicleAdditions = {
   stall: KeychainStall
   bench: BenchParts
   dial: YearDial3D
-  /** 屋台の店番（量産型ネクマックス） */
+  /** 屋台の店番（量産型NEXMAX） */
   stallUnit: Units
   /** 出し入れする当たり判定（跡地の 2 つの姿・裏側の足場・歯車の歯） */
   colliders: SwitchColliders

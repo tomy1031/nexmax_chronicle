@@ -103,7 +103,11 @@ describe('khmerObjective（左上の目標）', () => {
     const f = flagsOf('v7_khmer_arrived', 'v7_met_chanda')
     expect(khmerObjective('mirrors', f, { near: 's', climbed: false }).sub).toContain('石')
     expect(khmerObjective('mirrors', f, { near: 's', climbed: true }).sub).toContain('F')
-    expect(khmerObjective('mirrors', f, { near: 'n', climbed: false }).sub).toContain('飛びうつる')
+    // 北の塔：象のりば → 象の上 → 池の家から家へ、と、いる所ごとに次のことを出す
+    expect(khmerObjective('mirrors', f, { near: 'n', climbed: false }).sub).toContain('象に乗って')
+    expect(khmerObjective('mirrors', f, { near: 'n', climbed: false, northRide: 'riding' }).sub).toContain('つれていって')
+    expect(khmerObjective('mirrors', f, { near: 'n', climbed: false, northRide: 'arrived' }).sub).toContain('飛びうつって')
+    expect(khmerObjective('mirrors', f, { near: 'n', climbed: false, northRide: 'houses' }).sub).toContain('J')
   })
 
   it('夜の中の段階ごとに目標がかわる', () => {

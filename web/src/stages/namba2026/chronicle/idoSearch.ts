@@ -3,13 +3,13 @@
 // （この画面はクリックを受けない）。アニメーションは update(dt) で進める（一時停止中は dt = 0 で止まる）。
 // 使い方：
 //   const p = new IdoSearchPanel(ui)            // ui は #ui（中の .nx-hud を探して入る）
-//   p.open(); await p.search(['時計'])          // 文字を打つ → さがす → 3 本が並ぶ（地図のピンも）
+//   p.open(); await p.search(['青い石'])        // 文字を打つ → さがす → 3 本が並ぶ（地図のピンも）
 //   p.setChecked(['clock_shop']); p.focus('old_alley')
-//   await p.search(['時計', '青い'])            // 「青い」を足す → 1 本にしぼられる
+//   await p.search(['青い石', 'コチコチ'])      // 「コチコチ」を足す → 1 本にしぼられる
 //   p.close()
 import './chronicle2026.css'
 import { FrameManager } from '../../../ui/future/frame'
-import { IDO_RECORDS, CLOCK_CANDIDATES, matchedWords, searchRecords, type IdoRecord, type RecordImage } from './idoSearchLogic'
+import { IDO_RECORDS, STONE_CANDIDATES, matchedWords, searchRecords, type IdoRecord, type RecordImage } from './idoSearchLogic'
 import { paintClockShopRecord, paintGenbeiPage, paintPresidentSketch, paintStationClockRecord, paintTownMap, SKETCH_CORNER, type MapPin } from './recordArt'
 
 const GLASS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="M15 15l6 6"/></svg>'
@@ -153,7 +153,7 @@ export class IdoSearchPanel {
         this.at(t + 0.12, () => {
           this.typing.textContent = ''
           const chip = document.createElement('span')
-          chip.className = 'nx-idos-word pop' + (w === '青い' ? ' blue' : '')
+          chip.className = 'nx-idos-word pop' + (w === '青い石' ? ' blue' : '')
           chip.textContent = w
           this.words.appendChild(chip)
         })
@@ -201,7 +201,7 @@ export class IdoSearchPanel {
     li.dataset.id = r.id
     li.style.animationDelay = `${i * 0.12}s`
     const hits = matchedWords(r, words)
-      .map((w) => `<span class="${w === '青い' ? 'blue' : ''}">${esc(w)}</span>`)
+      .map((w) => `<span class="${w === '青い石' ? 'blue' : ''}">${esc(w)}</span>`)
       .join('')
     li.innerHTML = `<span class="nx-idos-num">${i + 1}</span><span class="nx-idos-thumb"></span><div class="nx-idos-text"><div class="nx-idos-name">${esc(r.name)}</div><div class="nx-idos-place">${esc(r.place)}</div><div class="nx-idos-hit">${hits}</div></div><span class="nx-idos-state">${this.checked.has(r.id) ? 'しらべた' : 'まだ'}</span>`
     const th = li.querySelector('.nx-idos-thumb') as HTMLElement
@@ -299,9 +299,9 @@ export class IdoSearchPanel {
   }
 }
 
-/** 「時計」で出た候補のうち、まだ調べていない物（目標の表示用） */
+/** 「青い石」で出た候補のうち、まだ調べていない物（目標の表示用） */
 export function candidatesLeft(checked: ReadonlySet<string>): string[] {
-  return CLOCK_CANDIDATES.filter((id) => !checked.has(id))
+  return STONE_CANDIDATES.filter((id) => !checked.has(id))
 }
 
 // ------------------------------------------------------------------ 社長の絵のアップ

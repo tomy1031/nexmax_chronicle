@@ -3,13 +3,13 @@
 import { mulberry32, range } from '../../render/noise'
 import { makeCanvas } from '../../render/textures'
 import { SignAtlas, drawNextmakeMark, type SignDef } from './signs'
+import { drawLogo, drawMark } from './chronicle/brandArt'
 
 const HAND = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",sans-serif'
 const GOTHIC = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif'
 
 /** 外の看板（id → 定義） */
 export const STREET_SIGNS: SignDef[] = [
-  { id: 'nm_logo', text: 'NEXTMAKE', w: 1024, h: 168, bg: '#0f1d3a', bg2: '#16294f', fg: '#ffffff', deco: 'logo', font: 'gothic' },
   { id: 'lab_sign', text: 'LAB  ラボ', w: 384, h: 96, bg: '#14223f', fg: '#ffd56a', font: 'gothic' },
   { id: 'tako_main', text: 'たこ焼', w: 640, h: 224, bg: '#d22a1e', bg2: '#b01c14', fg: '#ffe14a', outline: '#5a0a06', border: '#ffe14a', font: 'brush' },
   { id: 'tako_v', text: 'たこ焼', vertical: true, w: 160, h: 512, bg: '#e8321f', fg: '#ffffff', border: '#ffd84a', deco: 'dots', font: 'gothic' },
@@ -39,6 +39,19 @@ export const STREET_SIGNS: SignDef[] = [
   { id: 'takoyaki_red_v', text: '名物たこ焼', vertical: true, w: 176, h: 640, bg: '#d81e1e', fg: '#ffffff', border: '#ffffff', font: 'brush' },
   { id: 'osaka_wide', text: 'ようこそ大阪', w: 896, h: 192, bg: '#ffffff', fg: '#d01c1c', border: '#d01c1c', font: 'round' },
 ]
+
+/** NEXTMAKE のビルの看板：白い光る看板に、青いロゴ（オーナーの参考の印。chronicle/brandArt.ts） */
+function paintNmLogo(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  const gr = g.createLinearGradient(x, y, x, y + h)
+  gr.addColorStop(0, '#fbfdff')
+  gr.addColorStop(1, '#e9eff6')
+  g.fillStyle = gr
+  g.fillRect(x, y, w, h)
+  drawLogo(g, x + w * 0.06, y + h * 0.2, w * 0.88, h * 0.6)
+  g.strokeStyle = '#16294f'
+  g.lineWidth = h * 0.05
+  g.strokeRect(x + h * 0.025, y + h * 0.025, w - h * 0.05, h - h * 0.05)
+}
 
 /** IDO の広告（北岸のビル） */
 function paintIdoAd(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
@@ -190,6 +203,7 @@ export function registerStreetArt(a: SignAtlas): void {
   const list = [...STREET_SIGNS].map((d) => ({ ...d, w: Math.round(d.w * 0.82), h: Math.round(d.h * 0.82) })).sort((p, q) => q.h - p.h)
   a.addCustom('ido_plate', 384, 512, paintIdoPlate)
   a.addCustom('ido_ad', 640, 320, paintIdoAd)
+  a.addCustom('nm_logo', 840, 138, paintNmLogo)
   for (const d of list) a.add(d)
   // 店の中（ガラス越しに見える暖かい店内：奥の壁の棚と品物・カウンター・品書き・吊り下げの照明・人影）
   a.addCustom('shop_inside', 384, 192, (g, x, y, w, h) => {
@@ -577,16 +591,14 @@ function paintScreen(kind: number) {
   }
 }
 
-/** ロゴの壁（受付の後ろ） */
+/** ロゴの壁（受付の後ろ）：大きな印と、NEXTMAKE のロゴ（chronicle/brandArt.ts。画像が読めていればそれを使う） */
 function paintLogoWall(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   g.fillStyle = '#f4f2ee'
   g.fillRect(x, y, w, h)
-  drawNextmakeMark(g, x + w * 0.5, y + h * 0.32, h * 0.32, '#16294f', '#f2c84b')
-  g.fillStyle = '#16294f'
-  g.font = `900 ${h * 0.16}px ${GOTHIC}`
+  drawMark(g, x + w * 0.5, y + h * 0.3, h * 0.42)
+  drawLogo(g, x + w * 0.08, y + h * 0.52, w * 0.84, h * 0.16)
   g.textAlign = 'center'
   g.textBaseline = 'middle'
-  g.fillText('NEXTMAKE', x + w / 2, y + h * 0.62)
   g.font = `700 ${h * 0.07}px ${HAND}`
   g.fillStyle = '#3a4a6a'
   g.fillText('つくることで、まだ見ぬ未来へ。', x + w / 2, y + h * 0.8)
@@ -619,7 +631,7 @@ function paintPoster(kind: number) {
       g.textAlign = 'center'
       g.fillText('はじまりは、', x + w / 2, y + h * 0.4)
       g.fillText('つくることから', x + w / 2, y + h * 0.55)
-      drawNextmakeMark(g, x + w / 2, y + h * 0.78, w * 0.22, '#16294f', '#ffffff')
+      drawNextmakeMark(g, x + w / 2, y + h * 0.78, w * 0.22)
     }
   }
 }

@@ -11,6 +11,7 @@ import { mulberry32, range } from '../../../render/noise'
 import type { ClawTargetDef } from '../../../player/clawLogic'
 import { box, boxAB, cyl, sag, sign, tree, type NCtx } from '../kit'
 import { buildShrine, shrineColliders, type Shrine } from './shrine'
+import { buildNotice } from './townProps'
 import { DEFENSE, LOT, SHRINE } from './layoutV7'
 
 export type BackLot = {
@@ -208,7 +209,7 @@ function eastSide(c: NCtx, targets: ClawTargetDef[]): void {
   for (let z = K.z1 + 0.15; z < LOT.z1; z += 0.4) box(c, LOT.x1 - 0.14, 1.2, z, 0.04, 2.4, 0.06, c.m.woodPlain, { tint: '#2c221a', cast: false })
   c.col.box(LOT.x1 - 0.06, 1.2, (K.z1 + LOT.z1) / 2, 0.2, 2.4, LOT.z1 - K.z1)
   // 建築計画のお知らせ（物置の西の面。西を向く）
-  sign(c, 'v7_notice', K.x0 - 0.06, 1.45, 23.75, -Math.PI / 2, 1.15, 0.86, { depth: 0.04 })
+  buildNotice(c, K.x0 - 0.06, 1.45, 23.75, -Math.PI / 2, 1.15, 0.86)
   // 木箱の段（屋根へ上がる）
   for (const cr of DEFENSE.crates) {
     const p = cr.pos
@@ -274,7 +275,7 @@ function shrineSide(c: NCtx, glow: THREE.MeshStandardMaterial): void {
   c.b.add(new THREE.ConeGeometry(0.12, 0.35, 8), c.m.fabric, M(bx - 1.02, 0.12, bz - 0.4, 0.25, 0, 0.12), { tint: '#c8b070' })
 }
 
-/** 空き地を組み立てる（看板の絵 'v7_notice'・'v7_tunnel' は先にアトラスへ入れておくこと：registerV7Art） */
+/** 空き地を組み立てる（看板の絵 'v7_tunnel' は先にアトラスへ入れておくこと：registerV7Art） */
 export function buildBackLot(c: NCtx): BackLot {
   const targets: ClawTargetDef[] = []
   const nightGlow = new THREE.MeshStandardMaterial({ color: '#fff4e0', emissive: new THREE.Color('#ffb860'), emissiveIntensity: 1.4, roughness: 0.4, name: 'v7_lot_glow' })

@@ -1,8 +1,8 @@
 // 2026年 なんば（物語 v7 の 6・9 章）の進み方。フラグだけから段階が決まる純粋なロジック（tests/namba2026Story.test.ts）。
 // 6 章：かんばんから出る → よろいの影獣（目標の欄は beastLogic.ts の ①〜④）→ 社長の大さわぎ → 社長の絵（ラボ）
 //        → IDO 検索（町のかんばん 3 本） → 路地のかんばんの QR を読む（→1726）
-// 9 章：路地のかんばんへ着く（夕方） → 社長・ほこら・おふじさん・佐伯さん → 夜のほこら防衛 → 江戸の朝の映し出し → 大きな影
-//        → 本物の朝・社長の決断・ノート → 帰りの光（→2086）
+// 9 章：路地のかんばんへ着く（夕方） → 社長・ほこら・おふじさん・佐伯さん → 夜のほこら防衛 → 江戸の朝の映し出し
+//        → 大きな影（空き地のかんばんの光の輪でつかまえて、クローで引きたおす） → 本物の朝・社長の決断・ノート → 帰りの光（→2086）
 import type { Flags } from '../../../chronicle/progress'
 import type { AlleyPhase } from './alleyTime'
 
@@ -85,8 +85,8 @@ export type NambaV7Ctx = {
   checked?: number
   /** 9 章：社長とほこらへ向かっている */
   toShrine?: boolean
-  /** 9 章：防衛戦の段階 */
-  defense?: 'wait' | 'wave1' | 'wave2' | 'projection' | 'big_dark' | 'big_lit' | 'won' | null
+  /** 9 章：防衛戦の段階（big：大きな影が追いかけてくる・caught：光の輪でつかまえた） */
+  defense?: 'wait' | 'wave1' | 'projection' | 'big' | 'caught' | 'won' | null
   /** 9 章：帰りの光がひらいている */
   ringOpen?: boolean
 }
@@ -108,7 +108,7 @@ export function nambaV7Objective(step: NambaV7Step, c: NambaV7Ctx = {}): Objecti
       return { title: '社長の絵を見よう', sub: 'ラボの構想ボードの前で F' }
     case 'search':
       if (!c.searchOpen) return { title: '佐伯さんの端末で、記録をさがそう', sub: 'ラボの佐伯さんの作業台の画面で F' }
-      return { title: `「時計」のかんばんを調べよう（${c.checked ?? 0}/3）`, sub: '時計屋の看板・駅の大時計・古い路地のかんばん（前で F）' }
+      return { title: `「青い石」のかんばんを調べよう（${c.checked ?? 0}/3）`, sub: '時計屋の看板・駅の大時計・古い路地のかんばん（前で F）' }
     case 'depart':
       return { title: '路地のかんばんの QR を読もう', sub: '古い路地のかんばんの前で F。青い刃のかけらを、たしかめに行く' }
     case 'between':
@@ -119,14 +119,13 @@ export function nambaV7Objective(step: NambaV7Step, c: NambaV7Ctx = {}): Objecti
     case 'defense':
       switch (c.defense) {
         case 'wave1':
-        case 'wave2':
           return { title: 'ほこらを守ろう', sub: '屋根の影は J で引きずり下ろす・箱にとびかかる影は K で' }
         case 'projection':
           return { title: '江戸の朝の光！', sub: '社長が、路地のかんばんで朝を映している' }
-        case 'big_dark':
-          return { title: '大きな影を照らそう', sub: 'F で社長に光の向きを変えてもらう（暗がりでは効かない）' }
-        case 'big_lit':
-          return { title: '照らされた大きな影をたおせ', sub: 'J で飛びついて引きたおす・K で攻撃' }
+        case 'big':
+          return { title: '光の輪に、大きな影をさそいこもう', sub: '影がかんばんの前に来たら、かんばんのそばで K（レバーは J）。光る！' }
+        case 'caught':
+          return { title: 'つかまえた！ 引きたおせ', sub: '光の中で弱った大きな影を、J で引きたおす（K もきく）' }
         case 'won':
           return { title: '本物の朝', sub: 'ほこらは、ぶじだった' }
         default:
@@ -180,9 +179,15 @@ export const NAMBA_V7_LINE_KEYS = [
   'projection',
   'shadows_flee',
   'big_appear',
+  'big_howto',
+  'big_here',
+  'big_now',
+  'big_miss',
+  'big_caught_first',
+  'big_caught',
+  'big_pulled',
+  'big_escape',
   'big_dark_hit',
-  'big_aim',
-  'big_flee',
   'big_down',
   'dawn',
   'decision',

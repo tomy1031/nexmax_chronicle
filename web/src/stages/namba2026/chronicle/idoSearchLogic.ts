@@ -1,6 +1,7 @@
-// IDO 検索（物語 v7 の 6 章）：佐伯さんの端末で、町じゅうのかんばんの記録を言葉でさがす。純粋なロジック（テストする）。
-// 「時計」でさがすと 3 本（時計屋の看板・駅の大時計の看板・古い路地のかんばん）。町でそれぞれの前に行って F で記録を見る。
-// 古い路地のかんばんだけ「青い」も合う（源兵衛の書の「青い刃のかけら」）。「時計」と「青い」の両方でさがすと 1 本になる。
+// IDO 検索（物語 v7.2 の 6 章）：佐伯さんの端末で、町じゅうのかんばんの記録を言葉でさがす。純粋なロジック（テストする）。
+// 社長「君の石とおんなじもんが、昔の記録にないか、さがしてみよ」→「青い石」でさがすと 3 本（時計屋の看板・駅の大時計の看板・
+// 古い路地のかんばん）。町でそれぞれの前に行って F で記録を見る。時計屋と駅の青い石は、ただの飾り・しき石。
+// 古い路地のかんばんだけ「コチコチ」も合う（源兵衛の書の「青い刃のかけら」。時計のようにコチ、コチと鳴った）。両方でさがすと 1 本になる。
 
 /** 記録の絵の種類（recordArt.ts の絵を選ぶ） */
 export type RecordImage = 'clockShop' | 'stationClock' | 'genbeiPage' | 'none'
@@ -29,12 +30,12 @@ export const IDO_RECORDS: readonly IdoRecord[] = [
     kanban: 'b',
     name: '時計屋の看板',
     place: '橋のたもと（南の遊歩道）',
-    words: ['時計', '昭和', '店', '橋'],
+    words: ['青い石', '時計', '昭和', '店', '橋'],
     at: [9.0, 5.85],
     panel: {
       title: 'かんばんの記録 ― 橋のたもとの時計屋',
       sub: '昭和のはじめ ・ 「ときわ堂」の大きな丸時計',
-      body: 'このあたりには、むかし小さな時計屋があった。店の前の大きな丸い時計は、橋をわたる人たちの目じるしだったという。',
+      body: 'このあたりには、むかし小さな時計屋があった。店の前の大きな丸い時計は、まん中に青い石（ガラスの飾り）がはめてあって、橋をわたる人たちの目じるしだったという。',
       foot: '※ 写真をもとにした記録です',
     },
     image: 'clockShop',
@@ -44,12 +45,12 @@ export const IDO_RECORDS: readonly IdoRecord[] = [
     kanban: 'd',
     name: '駅の大時計の看板',
     place: '川の向こう（北の遊歩道）・駅の入口',
-    words: ['時計', '駅', '待ち合わせ', '100年前'],
+    words: ['青い石', '時計', '駅', '待ち合わせ', '100年前'],
     at: [0.1, -5.85],
     panel: {
       title: 'かんばんの記録 ― 駅の大時計',
       sub: '100年前 ・ 駅の前の待ち合わせの場所',
-      body: '駅の前には大きな時計があって、町の人たちの待ち合わせの場所だった。「大時計の下で会おう」が合言葉だったという。',
+      body: '駅の前には大きな時計と、青い石をしきつめた小さな広場があって、町の人たちの待ち合わせの場所だった。「青い石の上で会おう」が合言葉だったという。',
       foot: '※ 写真をもとにした記録です',
     },
     image: 'stationClock',
@@ -59,7 +60,7 @@ export const IDO_RECORDS: readonly IdoRecord[] = [
     kanban: 'c',
     name: '古い路地のかんばん',
     place: '串カツの店のとなりの細い路地',
-    words: ['時計', '青い', '江戸', 'からくり', '源兵衛', 'かけら'],
+    words: ['青い石', 'コチコチ', '時計', '江戸', 'からくり', '源兵衛', 'かけら'],
     at: [15.68, 16.6],
     panel: {
       title: 'かんばんの記録 ― 古い路地',
@@ -89,7 +90,7 @@ export const IDO_RECORDS: readonly IdoRecord[] = [
     kanban: null,
     name: '青い屋根の喫茶店のかんばん',
     place: '町の北のはずれ',
-    words: ['青い', '喫茶店', '昭和'],
+    words: ['青い屋根', '喫茶店', '昭和'],
     at: [0, 0],
     panel: { title: 'かんばんの記録 ― 青い屋根の喫茶店', sub: '昭和 ・ 町の北のはずれ', body: '青い屋根の喫茶店は、町の人の休み場所だった。', foot: '' },
     image: 'none',
@@ -118,11 +119,11 @@ export function matchedWords(r: IdoRecord, words: readonly string[]): string[] {
   return words.filter((w) => r.words.includes(w))
 }
 
-/** 6 章の検索の言葉（佐伯さんの「時計」と、ネクマックスの石の色「青い」） */
-export const SEARCH_WORDS = { first: ['時計'] as const, second: ['時計', '青い'] as const }
+/** 6 章の検索の言葉（ネクマックスの石の「青い石」と、佐伯さんが聞いた石の音「コチコチ」） */
+export const SEARCH_WORDS = { first: ['青い石'] as const, second: ['青い石', 'コチコチ'] as const }
 
-/** 「時計」の候補（町で回る 3 本）の id。順番は近い順（ラボ → 橋 → 路地 → 駅） */
-export const CLOCK_CANDIDATES = searchRecords(SEARCH_WORDS.first).map((r) => r.id)
+/** 「青い石」の候補（町で回る 3 本）の id。順番は近い順（ラボ → 橋 → 路地 → 駅） */
+export const STONE_CANDIDATES = searchRecords(SEARCH_WORDS.first).map((r) => r.id)
 
 /** かんばんの id から、そのかんばんの記録 */
 export function recordOfKanban(k: 'a' | 'b' | 'c' | 'd'): IdoRecord | null {
@@ -130,6 +131,6 @@ export function recordOfKanban(k: 'a' | 'b' | 'c' | 'd'): IdoRecord | null {
 }
 
 /** 町で調べた候補の数（検索の画面の「◯／3」） */
-export function checkedCount(checked: ReadonlySet<string>, candidates: readonly string[] = CLOCK_CANDIDATES): number {
+export function checkedCount(checked: ReadonlySet<string>, candidates: readonly string[] = STONE_CANDIDATES): number {
   return candidates.filter((id) => checked.has(id)).length
 }

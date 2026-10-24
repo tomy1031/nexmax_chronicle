@@ -1,6 +1,7 @@
 // ほこらの防衛戦（物語 v7 の 9 章の夜）の考え方。純粋なロジック（テストする）。見た目は shrine.ts の setDamage(k)。
 // ・ほこらの体力（HUD の上の横長のゲージ）。影が箱にとびかかる・屋根で暴れると減る。0 になったら失敗（ボスの前からやり直し）
-// ・影は 3 方向（屋根・路地の口・トンネル路地）から、2 波。2 波しのぐと社長が「江戸の朝」を映す → 小さな影はにげる → 大きな影
+// ・影は 3 方向（屋根・路地の口・トンネル路地）から、1 波（物語 v7.2：ボスの光の戦いを長くしたぶん、波は 1 つに）。
+//   しのぐと社長が「江戸の朝」を映す → 小さな影はにげる → 大きな影（かんばんの光の輪でつかまえる。lightLogic.ts）
 // ・体力は欠けた見た目（k = 1 - 体力/最大）に直して setDamage へ。夜明けまで守れば勝ち（大きな影を引きたおす）
 
 export type DefenseDir = 'north' | 'south' | 'roof'
@@ -20,7 +21,7 @@ export const SHRINE_HP = 20
 export type WaveSpawn = { dir: DefenseDir; kind: 'mite' | 'shield'; count: number; delay: number }
 export type DefenseWave = { id: string; spawns: readonly WaveSpawn[] }
 
-/** 2 波の中身（delay は波が始まってからの秒） */
+/** 波の中身（delay は波が始まってからの秒） */
 export const DEFENSE_WAVES: readonly DefenseWave[] = [
   {
     id: 'wave1',
@@ -29,16 +30,7 @@ export const DEFENSE_WAVES: readonly DefenseWave[] = [
       { dir: 'roof', kind: 'mite', count: 1, delay: 3 },
       { dir: 'south', kind: 'mite', count: 2, delay: 6 },
       { dir: 'roof', kind: 'mite', count: 1, delay: 10 },
-    ],
-  },
-  {
-    id: 'wave2',
-    spawns: [
-      { dir: 'south', kind: 'mite', count: 2, delay: 0 },
-      { dir: 'north', kind: 'shield', count: 1, delay: 2 },
-      { dir: 'roof', kind: 'mite', count: 2, delay: 5 },
-      { dir: 'north', kind: 'mite', count: 2, delay: 8 },
-      { dir: 'roof', kind: 'mite', count: 1, delay: 12 },
+      { dir: 'north', kind: 'mite', count: 1, delay: 13 },
     ],
   },
 ]
@@ -59,7 +51,7 @@ export function dueSpawns(w: DefenseWave, t: number, done: number): number[] {
 }
 
 /** 防衛戦の段階 */
-export type DefenseStage = 'idle' | 'wave1' | 'wave2' | 'projection' | 'bigShadow' | 'won' | 'lost'
+export type DefenseStage = 'idle' | 'wave1' | 'projection' | 'bigShadow' | 'won' | 'lost'
 
 /** ほこらの体力 */
 export class ShrineGuard {

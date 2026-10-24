@@ -99,8 +99,10 @@ describe("段階ごとの決まり", () => {
     expect(nambaV7Objective("arrive", { fight: { plates: 1, grabbed: true } }).title).toContain("佐伯さん");
     expect(nambaV7Objective("arrive", { fight: { plates: 0, grabbed: false } }).title).toContain("K");
     expect(nambaV7Objective("search", { searchOpen: true, checked: 2 }).title).toContain("2/3");
-    expect(nambaV7Objective("defense", { defense: "big_dark" }).sub).toContain("F");
-    expect(nambaV7Objective("defense", { defense: "big_lit" }).sub).toContain("J");
+    // 9 章の光の輪の戦い：さそいこむ（かんばんのそばで K・レバーは J）→ つかまえたら J で引きたおす
+    expect(nambaV7Objective("defense", { defense: "big" }).sub).toContain("K");
+    expect(nambaV7Objective("defense", { defense: "big" }).sub).toContain("かんばん");
+    expect(nambaV7Objective("defense", { defense: "caught" }).sub).toContain("J");
     expect(nambaV7Objective("return", { ringOpen: true }).sub).toContain("2086");
   });
 
@@ -109,6 +111,38 @@ describe("段階ごとの決まり", () => {
       expect(IDO_RECORDS.some((r) => r.id === id)).toBe(true);
       expect(recordOfKanban(k as "b" | "c" | "d")?.id).toBe(id);
     }
+  });
+});
+
+describe("物語 v7.2 の決めごと（台詞）", () => {
+  const all = (k: string) => (book[k] ?? []).map((l) => l.text).join("／");
+
+  it("社長：今と未来は、ほんまにつながっとるんやな。……そして、過去も（昔と今は、ではない）", () => {
+    expect(all("saeki_stone")).toContain("今と未来は、ほんまにつながっとるんやな。……そして、過去も");
+    expect(all("saeki_stone")).not.toContain("昔と今は");
+  });
+
+  it("記録は「時計」ではなく「青い石」でさがす（君の石とおんなじもんが、昔の記録にないか）", () => {
+    expect(all("saeki_stone")).toContain("君の石とおんなじもんが、昔の記録にないか、さがしてみよ");
+    expect(all("saeki_stone")).toContain("青い石");
+    expect(all("search_start")).toContain("青い石");
+    for (const k of ["saeki_stone", "search_start", "alley_found"]) expect(all(k)).not.toContain("『時計』");
+  });
+
+  it("江戸へ行く理由は 2 つ（すりぬけた黒い手にとどくかもしれない・帰り方もわかるかもしれない）", () => {
+    const a = all("alley_found");
+    expect(a).toContain("空の怪物を、裂く");
+    expect(a).toContain("このかけらなら、とどくかもしれない");
+    expect(a).toContain("帰り方もわかるかもしれない");
+  });
+
+  it("社長の絵の場面に「背中の板」の絵は出てこない（公式の絵にする）", () => {
+    expect(all("sketch_show")).not.toContain("背中には、板");
+    expect(all("sketch_corner")).toContain("NEXTMAKE 001");
+  });
+
+  it("IDO は VR：「わっか」「昔の町が広がる」の言い方はしない", () => {
+    for (const [k, list] of Object.entries(book)) for (const l of list) expect(l.text, k).not.toMatch(/わっか|町が広が/);
   });
 });
 

@@ -5,7 +5,7 @@
 //   time=day|dusk|night|dawn（または 0〜3 の数）   proj=1（江戸の朝の映し出し）   aim=1（暗がりへ光を向ける）
 //   damage=0..1（ほこらの欠け）  doors=0..1  glow=0..1（錠前の光）  sun=0..1（朝日が窓から）
 //   surge=0..1（石標 A の光のゆがみ）  dark=1（影の獣のゆがみ）  strip=0,1（はがした板）  crack=0..1  mouths=1
-//   record=clock|station|alley（IDO の記録のパネル）  words=時計 / 時計,青い（検索の画面）  closeup=1|2（社長の絵のアップ）
+//   record=clock|station|alley（IDO の記録のパネル）  words=青い石 / 青い石,コチコチ（検索の画面）  closeup=1|2（社長の絵のアップ）
 //   campos=x,y,z&look=x,y,z&fov=  nohud  t=秒  quality=low|medium|high
 // window.__namba.measure() で、後処理なしのシーンだけの描画呼び出しと三角形を数える。
 import * as THREE from 'three'
@@ -219,7 +219,7 @@ async function main(): Promise<void> {
     }
   }
   const search = new IdoSearchPanel(ui)
-  const words = urlp.get('words') ?? (camName === 'search' ? '時計' : null)
+  const words = urlp.get('words') ?? (camName === 'search' ? '青い石' : null)
   if (words) {
     search.open()
     const w = words.split(',')

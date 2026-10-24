@@ -1,5 +1,5 @@
 // 物語 v7 の 2026年の絵（キャンバス）。
-// ・社長の絵（6 章）：小さな青いロボットの前の姿と、背中の板を見せる後ろ姿。すみに小さく「NEXTMAKE 001」。青い石はかいていない
+// ・社長の絵（6 章）：小さな青いロボット（ネクマックスの公式の絵）と社長の書き込み。すみに手書きで小さく「NEXTMAKE 001」。青い石はかいていない
 // ・かんばんの記録の絵（IDO 検索の 3 本）：時計屋の看板（昭和のはじめの写真）・駅の大時計（100年前の写真）・
 //   古い路地（源兵衛の書の一ページ：青い刃のかけら。claw=true で 8 章の「時を裂く爪」のページも足せる）
 // ・IDO 検索の画面の小さな町の地図
@@ -8,6 +8,7 @@
 import { mulberry32, range } from '../../../render/noise'
 import { makeCanvas } from '../../../render/textures'
 import { drawNexmaxSketch } from '../artwork'
+import { brandImages } from './brandArt'
 
 const HAND = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",sans-serif'
 const GOTHIC = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif'
@@ -25,85 +26,10 @@ function hand(g: CanvasRenderingContext2D, text: string, x: number, y: number, p
 
 // ------------------------------------------------------------------ 社長の絵
 
-/** 後ろ姿のスケッチ：丸い頭・胴の背中に長方形の板（「NEXTMAKE」と数字の欄）。石はかかない */
-function drawNexmaxBack(g: CanvasRenderingContext2D, cx: number, cy: number, s: number): void {
-  g.save()
-  g.translate(cx, cy)
-  g.lineCap = 'round'
-  g.lineJoin = 'round'
-  const blue = 'rgba(140,200,245,0.8)'
-  // 頭（後ろ）
-  g.fillStyle = blue
-  g.beginPath()
-  g.ellipse(0, -s * 0.36, s * 0.42, s * 0.32, 0, 0, Math.PI * 2)
-  g.fill()
-  g.strokeStyle = INK
-  g.lineWidth = s * 0.016
-  g.stroke()
-  for (const e of [-1, 1]) {
-    g.beginPath()
-    g.ellipse(e * s * 0.42, -s * 0.36, s * 0.06, s * 0.09, 0, 0, Math.PI * 2)
-    g.fillStyle = 'rgba(120,185,240,0.9)'
-    g.fill()
-    g.lineWidth = s * 0.012
-    g.stroke()
-  }
-  // 胴
-  g.beginPath()
-  g.moveTo(-s * 0.12, -s * 0.02)
-  g.quadraticCurveTo(-s * 0.17, s * 0.16, -s * 0.1, s * 0.22)
-  g.lineTo(s * 0.1, s * 0.22)
-  g.quadraticCurveTo(s * 0.17, s * 0.16, s * 0.12, -s * 0.02)
-  g.closePath()
-  g.fillStyle = blue
-  g.fill()
-  g.lineWidth = s * 0.014
-  g.stroke()
-  // 背中の板（灰色の金属の板。ネジ 4 つ）
-  g.fillStyle = '#d8dce2'
-  g.fillRect(-s * 0.085, s * 0.02, s * 0.17, s * 0.13)
-  g.lineWidth = s * 0.01
-  g.strokeRect(-s * 0.085, s * 0.02, s * 0.17, s * 0.13)
-  g.fillStyle = INK
-  for (const [px, py] of [
-    [-0.07, 0.035],
-    [0.07, 0.035],
-    [-0.07, 0.135],
-    [0.07, 0.135],
-  ])
-    g.fillRect(px * s - 1.5, py * s - 1.5, 3, 3)
-  g.font = `900 ${s * 0.032}px ${GOTHIC}`
-  g.textAlign = 'center'
-  g.textBaseline = 'middle'
-  g.fillText('NEXTMAKE', 0, s * 0.07)
-  // 番号の欄（数字はまだ書いていない）
-  g.fillRect(-s * 0.05, s * 0.112, s * 0.1, s * 0.006)
-  // 腕と脚（玉つなぎ）
-  const bead = (x: number, y: number, r: number) => {
-    g.beginPath()
-    g.arc(x * s, y * s, r * s, 0, Math.PI * 2)
-    g.fillStyle = 'rgba(140,200,245,0.85)'
-    g.fill()
-    g.lineWidth = s * 0.01
-    g.stroke()
-  }
-  for (const e of [-1, 1]) {
-    bead(e * 0.15, 0.0, 0.03)
-    bead(e * 0.19, 0.06, 0.028)
-    bead(e * 0.22, 0.13, 0.032)
-    bead(e * 0.06, 0.25, 0.025)
-    bead(e * 0.06, 0.3, 0.022)
-    g.beginPath()
-    g.ellipse(e * s * 0.065, s * 0.36, s * 0.06, s * 0.035, 0, Math.PI, 0)
-    g.closePath()
-    g.fillStyle = 'rgba(140,200,245,0.9)'
-    g.fill()
-    g.stroke()
-  }
-  g.restore()
-}
-
-/** 社長の絵（画用紙）を (x,y,w,h) に描く。corner=true なら右下の「NEXTMAKE 001」をくっきり */
+/**
+ * 社長の絵（画用紙）を (x,y,w,h) に描く。ロボットは、ネクマックスの公式の絵（brandArt.ts。読めなければ手描きのスケッチ）。
+ * 右下のすみに、社長の手書きで小さく「NEXTMAKE 001」
+ */
 export function drawPresidentSketch(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   g.save()
   g.beginPath()
@@ -131,42 +57,50 @@ export function drawPresidentSketch(g: CanvasRenderingContext2D, x: number, y: n
   g.moveTo(x + w * 0.05, y + h * 0.145)
   g.quadraticCurveTo(x + w * 0.35, y + h * 0.16, x + w * 0.66, y + h * 0.14)
   g.stroke()
-  // 前の姿（大きく）と、後ろ姿（小さく）
-  drawNexmaxSketch(g, x + w * 0.3, y + h * 0.58, h * 0.66)
-  drawNexmaxBack(g, x + w * 0.71, y + h * 0.52, h * 0.42)
-  hand(g, 'まえ', x + w * 0.3, y + h * 0.95, h * 0.04, '#7a8090', 'center', 700)
-  hand(g, 'うしろ', x + w * 0.71, y + h * 0.77, h * 0.04, '#7a8090', 'center', 700)
-  // 書き込み
-  hand(g, 'せなかに 名前の板', x + w * 0.62, y + h * 0.22, h * 0.042, '#2a6fd0')
-  g.strokeStyle = '#2a6fd0'
-  g.lineWidth = Math.max(2, h * 0.005)
-  g.beginPath()
-  g.moveTo(x + w * 0.88, y + h * 0.25)
-  g.quadraticCurveTo(x + w * 0.96, y + h * 0.48, x + w * 0.76, y + h * 0.56)
-  g.stroke()
-  // 矢じり
-  g.beginPath()
-  g.moveTo(x + w * 0.76, y + h * 0.56)
-  g.lineTo(x + w * 0.785, y + h * 0.535)
-  g.moveTo(x + w * 0.76, y + h * 0.56)
-  g.lineTo(x + w * 0.79, y + h * 0.57)
-  g.stroke()
-  hand(g, '人と いっしょに', x + w * 0.52, y + h * 0.84, h * 0.04, '#c0392b')
-  hand(g, 'つくる・あそぶ', x + w * 0.52, y + h * 0.9, h * 0.04, '#c0392b')
+  // ロボット（公式の絵。紙になじむよう、少しだけ紙の色をかぶせる）
+  const img = brandImages().sketch
+  if (img) {
+    const ih = h * 0.78
+    const iw = ih * (img.naturalWidth / Math.max(1, img.naturalHeight))
+    const ix = x + w * 0.3 - iw / 2
+    const iy = y + h * 0.18
+    g.drawImage(img, ix, iy, iw, ih)
+    g.fillStyle = 'rgba(251,246,234,0.08)'
+    g.fillRect(ix, iy, iw, ih)
+  } else drawNexmaxSketch(g, x + w * 0.3, y + h * 0.58, h * 0.66)
+  // 書き込み（矢じるしでロボットを指す）
+  const arrow = (tx: number, ty: number, hx: number, hy: number, col: string) => {
+    g.strokeStyle = col
+    g.lineWidth = Math.max(2, h * 0.005)
+    g.beginPath()
+    g.moveTo(x + w * tx, y + h * ty)
+    g.quadraticCurveTo(x + w * ((tx + hx) / 2), y + h * (Math.min(ty, hy) - 0.04), x + w * hx, y + h * hy)
+    g.stroke()
+    g.beginPath()
+    g.arc(x + w * hx, y + h * hy, Math.max(2.5, h * 0.007), 0, Math.PI * 2)
+    g.fillStyle = col
+    g.fill()
+  }
+  hand(g, 'まるい あたま', x + w * 0.6, y + h * 0.27, h * 0.042, '#2a6fd0')
+  arrow(0.59, 0.27, 0.45, 0.32, '#2a6fd0')
+  hand(g, 'やさしい 手', x + w * 0.62, y + h * 0.5, h * 0.042, '#2a6fd0')
+  arrow(0.61, 0.5, 0.465, 0.77, '#2a6fd0')
+  hand(g, '人と いっしょに', x + w * 0.6, y + h * 0.7, h * 0.042, '#c0392b')
+  hand(g, 'つくる・あそぶ', x + w * 0.6, y + h * 0.77, h * 0.042, '#c0392b')
   hand(g, '2026.10  マツイ', x + w * 0.05, y + h * 0.95, h * 0.032, '#7a8090', 'left', 700)
-  // 右下のすみに小さく「NEXTMAKE 001」（型番の欄）
-  const bx = x + w * 0.79
-  const by = y + h * 0.885
-  const bw = w * 0.18
-  const bh = h * 0.075
-  g.strokeStyle = INK
-  g.lineWidth = Math.max(1.5, h * 0.004)
-  g.strokeRect(bx, by, bw, bh)
-  g.fillStyle = INK
-  g.font = `900 ${h * 0.034}px ${GOTHIC}`
-  g.textAlign = 'center'
-  g.textBaseline = 'middle'
-  g.fillText('NEXTMAKE 001', bx + bw / 2, by + bh / 2 + 1)
+  // 右下のすみに、社長の手書きで小さく「NEXTMAKE 001」（えんぴつの字。少しかたむける）
+  const k = SKETCH_CORNER
+  g.save()
+  g.translate(x + w * (k.x + k.w / 2), y + h * (k.y + k.h / 2))
+  g.rotate(-0.04)
+  hand(g, 'NEXTMAKE 001', 0, 0, h * 0.036, '#3a4250', 'center', 800)
+  g.strokeStyle = 'rgba(58,66,80,0.75)'
+  g.lineWidth = Math.max(1.2, h * 0.0028)
+  g.beginPath()
+  g.moveTo(-w * k.w * 0.46, h * k.h * 0.36)
+  g.quadraticCurveTo(0, h * k.h * 0.5, w * k.w * 0.47, h * k.h * 0.3)
+  g.stroke()
+  g.restore()
   g.restore()
 }
 
@@ -407,6 +341,15 @@ export function paintClockShopRecord(): HTMLCanvasElement {
   g.stroke()
   void rng
   photoFinish(g, W, H, 1931)
+  // 大きな丸時計のまん中の、青い石の飾り（写真に色をつけた記録。ガラスの石）
+  const gem = g.createRadialGradient(px - 2, H * 0.2 - 2, 1, px, H * 0.2, 9)
+  gem.addColorStop(0, '#d8f0ff')
+  gem.addColorStop(0.4, '#4a90e0')
+  gem.addColorStop(1, '#1d4a8a')
+  g.fillStyle = gem
+  g.beginPath()
+  g.arc(px, H * 0.2, 8, 0, Math.PI * 2)
+  g.fill()
   return c
 }
 
@@ -473,6 +416,19 @@ export function paintStationClockRecord(): HTMLCanvasElement {
   g.lineTo(660, H * 0.66)
   g.stroke()
   photoFinish(g, W, H, 1926)
+  // 大時計の前の、青い石をしきつめた広場（写真に色をつけた記録。人のかげは暗いまま）
+  g.save()
+  g.globalCompositeOperation = 'multiply'
+  g.beginPath()
+  g.ellipse(tx, H * 0.88, 210, H * 0.12, 0, 0, Math.PI * 2)
+  g.clip()
+  for (let i = 0; i < 70; i++) {
+    const sx = tx - 220 + (i % 14) * 32 + ((Math.floor(i / 14) % 2) * 16)
+    const sy = H * 0.76 + Math.floor(i / 14) * H * 0.05
+    g.fillStyle = i % 3 === 0 ? '#7fa6e0' : '#9cbcea'
+    g.fillRect(sx, sy, 28, H * 0.042)
+  }
+  g.restore()
   return c
 }
 

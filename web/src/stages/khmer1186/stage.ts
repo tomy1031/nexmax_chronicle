@@ -477,7 +477,8 @@ export class KhmerStage implements Stage {
   /** 北の塔への道を、カメラで見せる（象 → 池のまん中の家 → 北の塔）。チャンダの短い一言 */
   private async showNorthRoute(rt: StageRuntime): Promise<void> {
     const el = this.sc.elephant.baray
-    const from = v(17.6, 14.2, -9.0)
+    // 池の上の少し高い所から（寺の北の大きな木に象がかくれない所）
+    const from = v(8, 7, -46)
     const house = WATER_HOUSES.find((h) => h.id === 'h3') as (typeof WATER_HOUSES)[number]
     const houseAt = v(house.x, house.floorY + 1.2, house.z)
     void rt.cinematic({ look: el.deckTop.clone().setY(el.deckTop.y + 0.5), from, inSec: 1.2, hold: Infinity, fov: 40, marker: { pos: el.deckTop.clone().setY(el.deckTop.y + 1.2), label: '池の象', color: '#ffd76a' } })
@@ -839,7 +840,11 @@ export class KhmerStage implements Stage {
     this.mobs?.update(dt, rt, khmerMobPhase(step, this.ballGiven), this.busy || this.ura.active)
     // チャンダについて行く（ついてこなければ、止まって待って呼ぶ）→ 上の台でおばあさん
     this.leadWait(dt, rt, step === 'meet' && this.meet === 'follow' && !this.busy)
-    if (step === 'meet' && this.meet === 'follow' && !this.busy && this.onTop(rt) && this.chanda.root.position.distanceTo(NPC.chanda.altar.pos) < 3) void this.runAltar(rt)
+    if (step === 'meet' && this.meet === 'follow' && !this.busy && this.chanda.root.position.distanceTo(NPC.chanda.altar.pos) < 3) {
+      // 上の台に上がった（大階段のいちばん上の段からでも、チャンダのそばなら）
+      const p = rt.player.position
+      if (this.onTop(rt) || (p.y > K.TOP_Y - 1.5 && p.distanceTo(this.chanda.root.position) < 5)) void this.runAltar(rt)
+    }
     // 鏡：塔に近づいたら一言（チャンダが話す塔は、チャンダがそばへ来て、止まってから）
     if (step === 'mirrors' && !this.busy) {
       this.nearTower = this.towerNear(rt.player.position)
@@ -1217,7 +1222,12 @@ export class KhmerStage implements Stage {
       case 'dock':
         return { pos: DOCK_TOP.clone().setY(DOCK_TOP.y + 1.2), label: '象のりば' }
       case 'riding':
-        return this.ferry.state === 'far' ? hook('h3s', '家の軒の金具') : { pos: this.sc.elephant.baray.deckTop.clone().setY(this.sc.elephant.baray.deckTop.y + 2.2), label: '池の象' }
+        // 象の上：行く先の池のまん中の家 → 着いたら、その家の軒の金具
+        if (this.ferry.state === 'far') return hook('h3s', '家の軒の金具')
+        {
+          const h = WATER_HOUSES.find((x) => x.id === 'h3') as (typeof WATER_HOUSES)[number]
+          return { pos: v(h.x, h.floorY + 3.6, h.z), label: '池のまん中の家' }
+        }
       case 'h2':
         return hook('h3w', '家の軒の金具')
       case 'h3':

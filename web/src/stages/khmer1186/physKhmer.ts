@@ -193,10 +193,11 @@ export class PlatformRider {
       this.lockOn = null
       return null
     }
-    // 接地していなくても、跳ねた直後のわずかな浮きは乗っているとみなす
+    // 接地していなくても、跳ねた直後のわずかな浮きは乗っているとみなす。
+    // ふちに体（カプセル）の丸みでのっているとき（足もとは板の外でも、体の半径 0.27 m の中）も乗っているとみなす
     for (const p of platforms) {
       if (!p.enabled) continue
-      if (!p.supports(player.position, 0.12, player.grounded ? 0.3 : 0.12)) continue
+      if (!p.supports(player.position, 0.3, player.grounded ? 0.3 : 0.12)) continue
       this.riding = p
       const body = player.collider.parent()
       // 体（カプセル）の中心と足もとの高さの差

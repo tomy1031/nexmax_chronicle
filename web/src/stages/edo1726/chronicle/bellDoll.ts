@@ -612,6 +612,8 @@ export class TimeBellDoll {
       enabled: false,
       noLineOfSight: true,
       range: 18,
+      // 上下は広めに（見上げなくても、すきの歯車に照準が合うように。つかめるのは、すきの 1 個だけ）
+      coneV: 1.8,
       facing: new THREE.Vector3(0, 0, -1),
     }))
     // 大技のためで光る鐘（左手の鐘の口のあたり）

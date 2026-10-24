@@ -128,6 +128,8 @@ export class ChronicleEdoStage implements Stage {
   private attackN = 0
   /** 近づこうとしている秒（長いと別の攻撃に） */
   private chaseT = 0
+  /** 木槌がとどかなくて鐘にした回数（2 回までは、次も木槌をねらう） */
+  private swingRetry = 0
   /** いま見えている（つかめる）次の歯車（null は無し） */
   private openGear: number | null = null
   private waveHit = false
@@ -689,11 +691,15 @@ export class ChronicleEdoStage implements Stage {
         }
       } else if (dd > rMax + 1.2 && approach()) return
       else if (d.bellWave() > 0) {
-        // 足もとに近すぎる・近づけない：鐘の音。次も、ふりおろしをねらう（すきを作る攻撃を飛ばさない）
+        // 足もとに近すぎる・近づけない：鐘の音。木槌（右の肩のすき）のときは、次もふりおろしをねらう（すきを作る攻撃を飛ばさない）
         this.warn(rt, 'warn_bell', '輪がくる！ Space でとんで！', 14)
-        this.chaseT = 0
-        this.bossCd = 0
-        return
+        if (plan === 'swing' && this.swingRetry < 2) {
+          this.swingRetry++
+          this.chaseT = 0
+          this.bossCd = 0
+          return
+        }
+        done = true
       }
     } else if (plan === 'stomp') {
       // 足ぶみの赤い輪がとどく所まで近づく（あきらめたら、その場で）
@@ -714,6 +720,7 @@ export class ChronicleEdoStage implements Stage {
     if (done) {
       this.attackN++
       this.chaseT = 0
+      this.swingRetry = 0
       this.bossCd = 0
     }
   }
@@ -731,6 +738,11 @@ export class ChronicleEdoStage implements Stage {
     if (open !== null) {
       rt.say('おはる', lines.lines(`open_${open}`)[0].text, 2.6)
       rt.oreGlow(0.8)
+      // カメラを、光った歯車が入る高さへ少し見上げる（左右はそのまま。方向キーでいつでも取り消せる）
+      const g = d.targets[open].point
+      const p = rt.player.position
+      const pitch = Math.max(-0.6, Math.min(0.25, -Math.atan2(g.y - (p.y + 1.2), Math.max(1.5, dist2(g, p))) * 0.9 + 0.12))
+      if (pitch < rt.camRig.pitch - 0.05) rt.camRig.turnTo(rt.camRig.yaw, pitch)
     } else if (was !== null && this.gears.holding < 0 && rt.playTime - this.missedSaid > 14) {
       // つかめずに、すきが終わった
       this.missedSaid = rt.playTime
@@ -787,12 +799,19 @@ export class ChronicleEdoStage implements Stage {
     d.targets[i].enabled = false
     rt.combat.setBossBar(this.gears.life)
     rt.hud.banner(`${GEAR_NAMES[i]}の歯車が、ガコッ！ あと ${this.gears.left} 回`, 'success', 1.6)
+    this.lookDown(rt)
     rt.say('おはる', lines.lines('pulled')[0].text, 2.4)
     this.bossCd = Math.max(this.bossCd, 1.6)
   }
 
+  /** 見上げていたカメラを、足もとの赤い予告が見える高さへもどす */
+  private lookDown(rt: StageRuntime): void {
+    if (rt.camRig.pitch < 0.2) rt.camRig.turnTo(rt.camRig.yaw, 0.3)
+  }
+
   private onGearStopped(rt: StageRuntime, i: number): void {
     const d = this.w.doll
+    this.lookDown(rt)
     d.setGearStopped(i)
     d.setGearHits(i, 0)
     d.setGearStrain(i, 0)

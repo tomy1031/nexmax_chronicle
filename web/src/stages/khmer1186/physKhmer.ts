@@ -172,22 +172,36 @@ export class KhmerBodies {
 
 /**
  * 動く足場にプレイヤーを乗せて運ぶ（KCC は足場の動きを拾わないので、ステージが毎フレーム運ぶ）。
- * ステージの update（プレイヤーの更新の後）で、足場を動かしてから carry() を呼ぶ
+ * ステージの update（プレイヤーの更新の後）で、足場を動かしてから carry() を呼ぶ。
+ * ずれ止め：足場の動き・回転の分だけ運んだうえで、足場から見た足もとの位置を覚えておき、歩いていない（入力が無い）間は、
+ * いつもそこへ置き直す（足場の当たり判定は物理の 1 歩おくれて動くので、坂や向きを変える所で KCC が少しずつ押し出してしまう）。
+ * 歩いている間も、足場のふちからは出さない（降りるときは、ジャンプかクロー）
  */
 export class PlatformRider {
   /** 今乗っている足場 */
   riding: KinematicBox | null = null
   private readonly tmp = new THREE.Vector3()
+  /** ずれ止め：足場から見た足もと（x・z は足場の向きにそろえた座標） */
+  private lockOn: KinematicBox | null = null
+  private lockX = 0
+  private lockZ = 0
 
-  carry(player: PlayerController, platforms: readonly KinematicBox[]): KinematicBox | null {
+  /** moving：プレイヤーが歩く入力をしている */
+  carry(player: PlayerController, platforms: readonly KinematicBox[], moving = false): KinematicBox | null {
     this.riding = null
-    if (player.isExternal) return null
-    // 接地していなくても、跳ねた直後のわずかな浮きは乗っているとみなす
+    if (player.isExternal) {
+      this.lockOn = null
+      return null
+    }
+    // 接地していなくても、跳ねた直後のわずかな浮きは乗っているとみなす。
+    // ふちに体（カプセル）の丸みでのっているとき（足もとは板の外でも、体の半径 0.27 m の中）も乗っているとみなす
     for (const p of platforms) {
       if (!p.enabled) continue
-      if (!p.supports(player.position, 0.12, player.grounded ? 0.3 : 0.12)) continue
+      if (!p.supports(player.position, 0.3, player.grounded ? 0.3 : 0.12)) continue
       this.riding = p
-      if (p.delta.lengthSq() < 1e-10 && Math.abs(p.deltaYaw) < 1e-6) break
+      const body = player.collider.parent()
+      // 体（カプセル）の中心と足もとの高さの差
+      const foot = body ? body.translation().y - player.position.y : 0
       // 向きの変化：足場の中心のまわりに回す
       const t = this.tmp.subVectors(player.position, p.pos)
       if (Math.abs(p.deltaYaw) > 1e-6) {
@@ -198,15 +212,39 @@ export class PlatformRider {
         t.set(x - t.x, 0, z - t.z)
       } else t.set(0, 0, 0)
       t.add(p.delta)
-      const body = player.collider.parent()
-      if (body) {
-        const tr = body.translation()
-        body.setTranslation({ x: tr.x + t.x, y: tr.y + t.y, z: tr.z + t.z }, true)
-      }
       player.position.add(t)
       player.facing += p.deltaYaw
+      // 足場から見た位置（下の「ワールドへ」の逆。three の Y 回転と同じ向き）
+      const c = Math.cos(p.rotY)
+      const s = Math.sin(p.rotY)
+      const dx = player.position.x - p.pos.x
+      const dz = player.position.z - p.pos.z
+      let lx = dx * c - dz * s
+      let lz = dx * s + dz * c
+      const jumping = player.velocity.y > 0.5
+      if (!jumping) {
+        if (this.lockOn === p && !moving) {
+          // 歩いていない：覚えた所へ置き直す
+          lx = this.lockX
+          lz = this.lockZ
+        } else {
+          // 歩いている：ふちから出さない
+          lx = Math.max(-p.half.x - 0.05, Math.min(p.half.x + 0.05, lx))
+          lz = Math.max(-p.half.z - 0.05, Math.min(p.half.z + 0.05, lz))
+        }
+        this.lockOn = p
+        this.lockX = lx
+        this.lockZ = lz
+        // 足場の向きでワールドへ（上面のすぐ上）
+        const cw = Math.cos(p.rotY)
+        const sw = Math.sin(p.rotY)
+        player.position.set(p.pos.x + lx * cw + lz * sw, Math.max(player.position.y, p.top + 0.02), p.pos.z - lx * sw + lz * cw)
+        if (player.velocity.y < -0.5) player.velocity.y = -0.5
+      } else this.lockOn = null
+      if (body) body.setTranslation({ x: player.position.x, y: player.position.y + foot, z: player.position.z }, true)
       break
     }
+    if (!this.riding) this.lockOn = null
     return this.riding
   }
 }

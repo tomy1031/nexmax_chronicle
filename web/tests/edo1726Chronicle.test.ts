@@ -1,7 +1,7 @@
 // 7 章（1726年）の本編：フラグだけから段階が決まる・到着地点・目標・時の鐘人形の歯車の順番・台詞のキー
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { EDO_STEPS, GearOrder, edoMobPhase, edoObjective, edoSpawn, edoStep, edoTime } from '../src/stages/edo1726/chronicle/storyEdo7'
+import { BOSS_RAGE, EDO_STEPS, GearPulls, PULLS_PER_GEAR, dollAttack, edoMobPhase, edoObjective, edoSpawn, edoStep, edoTime, opensGear } from '../src/stages/edo1726/chronicle/storyEdo7'
 import lines from '../src/stages/edo1726/chronicle/lines_v7.json'
 import mobLines from '../src/stages/edo1726/chronicle/mob_lines_v7.json'
 import { TOWNSFOLK } from '../src/stages/edo1726/chronicle/townsfolk7'
@@ -47,38 +47,72 @@ describe('到着地点と目標', () => {
   })
 })
 
-describe('GearOrder（右の肩・左のひざ・胸の順に 3 秒つかむ）', () => {
-  it('正しい順に 3 秒つかむと止まる', () => {
-    const g = new GearOrder(3)
-    expect(g.grab(0)).toBe('hold')
-    expect(g.tick(1)).toBe(-1)
-    expect(g.progress).toBeCloseTo(1 / 3)
-    expect(g.tick(2.1)).toBe(0)
-    expect(g.next).toBe(1)
+describe('GearPulls（右の肩・左のひざ・胸の順に、すきの間につかんで引っぱる）', () => {
+  it('すき（open）のときだけつかめる。つかんで holdSec で 1 回、PULLS_PER_GEAR 回で止まる', () => {
+    const g = new GearPulls()
+    expect(g.grab(0, null)).toBe('closed')
+    expect(g.grab(1, 1)).toBe('later')
+    expect(g.grab(0, 0)).toBe('hold')
+    expect(g.tick(g.holdSec * 0.5)).toBe('none')
+    expect(g.progress).toBeCloseTo(0.5)
+    expect(g.tick(g.holdSec)).toBe(PULLS_PER_GEAR > 1 ? 'pulled' : 'stopped')
     expect(g.holding).toBe(-1)
+    for (let k = 1; k < PULLS_PER_GEAR; k++) {
+      g.grab(0, 0)
+      expect(g.tick(g.holdSec)).toBe(k === PULLS_PER_GEAR - 1 ? 'stopped' : 'pulled')
+    }
+    expect(g.next).toBe(1)
+    expect(g.grab(0, 0)).toBe('already')
   })
-  it('とちゅうではなすとやり直し・まちがえると怒る', () => {
-    const g = new GearOrder(3)
-    g.grab(0)
-    g.tick(2)
+  it('とちゅうではなすと、その 1 回はやり直し。体力は止めるほどへる', () => {
+    const g = new GearPulls()
+    expect(g.life).toBe(1)
+    g.grab(0, 0)
+    g.tick(g.holdSec * 0.6)
     g.release()
     expect(g.progress).toBe(0)
-    expect(g.grab(2)).toBe('wrong')
-    expect(g.mistakes).toBe(1)
-    expect(g.rage).toBeGreaterThan(1)
-    g.grab(0)
-    g.tick(3)
-    expect(g.grab(0)).toBe('already')
-    for (const i of [1, 2]) {
-      g.grab(i)
-      g.tick(3)
+    expect(g.pulls).toBe(0)
+    for (const i of [0, 1, 2]) {
+      for (let k = 0; k < PULLS_PER_GEAR; k++) {
+        g.grab(i, i)
+        g.tick(g.holdSec)
+      }
+      expect(g.life).toBeCloseTo(1 - (i + 1) / 3)
     }
     expect(g.done).toBe(true)
   })
-  it('怒りは 1.6 まで', () => {
-    const g = new GearOrder()
-    for (let i = 0; i < 10; i++) g.grab(2)
-    expect(g.rage).toBeLessThanOrEqual(1.6)
+  it('止めるたびに速くなるが、怒りは 1.25 まで（腕の予告から当たりまで 1.2 秒より長く）', () => {
+    const g = new GearPulls()
+    let last = 0
+    for (let i = 0; i < 3; i++) {
+      g.next = i
+      expect(g.rage).toBeGreaterThan(last)
+      last = g.rage
+    }
+    expect(Math.max(...BOSS_RAGE)).toBeLessThanOrEqual(1.25)
+    // bellDoll の T：ふりおろしの予告（windup 1.4）＋たたきつけ（0.22）、足ぶみの予告（1.6）を、いちばん速い怒りで割っても 1.2 秒以上
+    expect((1.4 + 0.22) / 1.25).toBeGreaterThanOrEqual(1.2)
+    expect(1.6 / 1.25).toBeGreaterThanOrEqual(1.2)
+  })
+  it('攻撃の順：どの段階にも、その歯車のすきを作る攻撃が入っていて、止めるたびに種類がふえる', () => {
+    for (let phase = 0; phase < 3; phase++) {
+      const seen = new Set(Array.from({ length: 12 }, (_, n) => dollAttack(phase, n)))
+      const opens = [...seen].map(opensGear)
+      expect(opens).toContain(phase)
+      // ほかの歯車のすきは作らない
+      for (const o of opens) if (o !== null) expect(o).toBe(phase)
+      expect(seen.size).toBeGreaterThanOrEqual(phase === 0 ? 2 : 3)
+    }
+    // 右の肩が止まったら、木槌（右うで）のふりおろしは出さない
+    for (let n = 0; n < 12; n++) for (const phase of [1, 2]) expect(dollAttack(phase, n)).not.toBe('swing')
+    // ひざが止まったら、足ぶみは出さない
+    for (let n = 0; n < 12; n++) expect(dollAttack(2, n)).not.toBe('stomp')
+  })
+  it('目標：すきのときは「今！」、そうでなければ、すきの作り方', () => {
+    expect(edoObjective('night', { boss: 'fight', nextGear: 0, open: true }).title).toContain('今！')
+    expect(edoObjective('night', { boss: 'fight', nextGear: 1 }).sub).toContain('赤い輪')
+    expect(edoObjective('night', { boss: 'fight', nextGear: 2 }).sub).toContain('胸の戸')
+    expect(edoObjective('night', { boss: 'fight', nextGear: 0, left: 2 }).sub).toContain('あと 2 回')
   })
 })
 

@@ -76,13 +76,23 @@ export type ObjectiveCtx = {
   near?: TowerId | null
   /** 近い塔の仕掛けをこえた（北：島に着いた・南：上の台に上がった）。まだなら仕掛けの手がかりを出す */
   climbed?: boolean
+  /** 北の塔への道のどこか（dock：象のりばへ／riding：象の上／arrived：象が池の家のそばで止まった／houses：池の家の上） */
+  northRide?: 'dock' | 'riding' | 'arrived' | 'houses'
 }
 
 const TOWER_SUB: Record<TowerId, string> = {
-  n: '北の塔：池の上の家から家へ、J で飛びうつる',
+  n: '北の塔：象のりばから象に乗って、池のまん中の家へ',
   e: '東の塔：回る鏡の台を J で止めて、光を塔の上へ',
   s: '南の塔：落ちてくる石を J で止めて、足場にする',
 }
+
+/** 北の塔への道の、いまの所ごとの手がかり */
+const NORTH_SUB = {
+  dock: TOWER_SUB.n,
+  riding: '象が池のまん中の家まで、つれていってくれる',
+  arrived: '光る金具へ J で飛びうつって、家から家へ島まで',
+  houses: '光る金具へ J で飛びうつって、家から家へ島まで',
+} as const
 
 /** 左上の目標（子どもにわかる一言） */
 export function khmerObjective(step: KhmerStep, f: Flags, o: ObjectiveCtx = {}): { title: string; sub: string } {
@@ -98,6 +108,7 @@ export function khmerObjective(step: KhmerStep, f: Flags, o: ObjectiveCtx = {}):
       const title = `夜明けの鏡を塔に立てる（のこり ${left.length}）`
       if (o.near && left.includes(o.near)) {
         if (o.near === 'e' && !o.turntableSolved) return { title, sub: TOWER_SUB.e }
+        if (o.near === 'n' && o.climbed === false) return { title, sub: NORTH_SUB[o.northRide ?? 'dock'] }
         if (o.near !== 'e' && o.climbed === false) return { title, sub: TOWER_SUB[o.near] }
         return { title, sub: o.near === 'e' ? '東の塔の上の、光っている台で F' : `${o.near === 'n' ? '北' : '南'}の塔の上の台で F：鏡を立てる` }
       }

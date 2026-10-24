@@ -11,10 +11,10 @@ export type Step2086 =
   | 'ch1_qr' // 1章：ブースへもどる → 展示の台の QR を読む（300 年前の路地）
   | 'ch1_keychain' // 1章：光のつぶの話 → 夕方 → 屋台で星のキーホルダー
   | 'ch1_promise' // 1章：夜のお祭りへ（約束）
-  | 'ch2_night' // 2章：時計台のトワ → 空のひび → 黒い手から逃げきる → 朝へ
+  | 'ch2_night' // 2章：時計台の仮面の男 → 空のひび → 黒い手から逃げきる → 朝へ
   | 'ch3_morning' // 3章：二度目の朝（同じ風船・同じあいさつ・ポケットのキーホルダー・石の音）
   | 'ch4_hide' // 4章：二度目の夜は地下にかくれる → ソラがつかまる → すりぬける
-  | 'ch4_tower' // 4章：三度目の夜、時計台をのぼってトワと話す → ベンチ
+  | 'ch4_tower' // 4章：三度目の夜、時計台をのぼって仮面の男（トワと名のる）と話す → ランプにクロー → ベンチ
   | 'ch5_confide' // 5章：四度目の朝、ソラに全部話す（キーホルダー）
   | 'ch5_door' // 5章：わっかで 60 年前の記録 → 扉 → 2026 へ
   | 'ch8_back' // 8章：江戸から帰る → 路地のあとへ（ビル・記録・書の絵）
@@ -220,6 +220,8 @@ export const OBJECTIVES: Record<string, Objective> = {
   antenna_fix: { title: '中継アンテナの線をつなぐ', sub: 'アンテナの前で F' },
   back_booth: { title: 'ソラのブースへもどる', sub: '広場の西' },
   qr_demo: { title: '展示の台の QR を読む', sub: '台の前で F' },
+  vr_look: { title: '昔の町を見回す', sub: '↑↓←→：見回す　F：おわる' },
+  vr_dive: { title: 'IDO の記録', sub: '背中の石が……？' },
   keychain: { title: '屋台で星のキーホルダーを買う', sub: '東の屋台の列のいちばん南。F で買う' },
   night_walk: { title: 'ソラとお祭りを回る', sub: '夜の広場を歩こう' },
   protect: { title: '黒い手から、ソラを守ろう', sub: '黒い手に J' },
@@ -241,7 +243,8 @@ export const OBJECTIVES: Record<string, Objective> = {
   tower_gearhook2: { title: '時計台の回廊へ', sub: '回る歯車の金具が上に来て、金色に光ったら J' },
   tower_debris: { title: '時計台にのぼる', sub: '赤い輪に、がれきが落ちてくる。止まらずに、回廊の南の端へ' },
   tower_top: { title: '時計台のてっぺんへ', sub: 'てっぺんの金色の金具に J' },
-  tower_ring: { title: '黒い輪に J を撃つ', sub: '空の黒い輪をねらう' },
+  tower_deck: { title: '時計台のてっぺん', sub: '仮面の男' },
+  tower_lamp: { title: 'トワのランプを取る', sub: '影が出てくるランプに J' },
   confide: { title: 'ソラに全部話す', sub: 'ソラのブースへ' },
   show_keychain: { title: 'キーホルダーを見せる', sub: 'F' },
   qr_door: { title: '展示の台の QR を読む', sub: '60年前の記録。台の前で F' },

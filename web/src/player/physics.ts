@@ -23,6 +23,8 @@ export type Physics = {
    * visibleOnly=true なら見えない壁（水への落下防止など）を無視する。'camera' なら手すり（camPass）も無視する（カメラ用）。
    */
   raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, exclude?: RAPIER.Collider, visibleOnly?: boolean | 'camera'): number | null
+  /** 箱をあとから足す（ボス戦の柵など）。remove() で取り除く */
+  add(item: BoxCollider): void
   /** 登録した箱を取り除く（壊れた壁など）。もう無ければ何もしない */
   remove(item: BoxCollider): void
 }
@@ -34,7 +36,8 @@ export async function createPhysics(list: ColliderList): Promise<Physics> {
   const byItem = new Map<BoxCollider, RAPIER.Collider>()
   const q = new THREE.Quaternion()
   const e = new THREE.Euler()
-  for (const c of list.items) {
+  const add = (c: BoxCollider): void => {
+    if (byItem.has(c)) return
     e.set(c.rotX ?? 0, c.rotY, c.rotZ ?? 0, 'YXZ')
     q.setFromEuler(e)
     const d = RAPIER.ColliderDesc.cuboid(c.half.x, c.half.y, c.half.z)
@@ -45,6 +48,7 @@ export async function createPhysics(list: ColliderList): Promise<Physics> {
     else if (c.camPass) d.setCollisionGroups(CAMPASS_GROUPS)
     byItem.set(c, world.createCollider(d, body))
   }
+  for (const c of list.items) add(c)
   const ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 })
   return {
     R: RAPIER,
@@ -56,6 +60,7 @@ export async function createPhysics(list: ColliderList): Promise<Physics> {
       const hit = world.castRay(ray, maxDist, true, undefined, groups, exclude)
       return hit ? hit.timeOfImpact : null
     },
+    add,
     remove(item) {
       const c = byItem.get(item)
       if (!c) return

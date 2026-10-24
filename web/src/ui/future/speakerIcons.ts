@@ -1,51 +1,99 @@
-// 会話ウィンドウの話者アイコン。GLB の登場人物（public/models/*.glb）を loadCharacter で読み、
-// 頭を正面やや斜めから柔らかい光で 1 回だけ描いて data URL の画像にし、覚えておく（1 人 1 回）。
-// ネクマックスはポートレートの静止画、システムは鉱石のしるし、知らない話者は色付きの人影。
+// 会話ウィンドウの話者アイコン。
+// ・おもな登場人物は、イラストの顔（chronicle/art.ts の V7_PORTRAITS。シェルが起動時に setSpeakerIcon で渡す）。
+//   source が 'art:…' の人は、GLB を読まない（絵が来るのを待つだけ）。
+// ・それ以外で GLB のある人物（public/models/*.glb）は、loadCharacter で読み、頭を正面やや斜めから
+//   柔らかい光で 1 回だけ描いて data URL の画像にし、覚えておく（1 人 1 回）。
+// ・システムは鉱石のしるし、知らない話者は色付きの人影。
 import * as THREE from 'three'
 import { loadCharacter, type CharacterName } from '../../world/characters'
 import type { MiniRenderer } from './miniRenderer'
 
 export type SpeakerModel = Exclude<CharacterName, 'nexmax'>
 
+/** イラストの顔（外から set() で渡される絵。作らない） */
+export type ArtSource = `art:${string}`
+
 export type SpeakerStyle = {
   /** CSS 用の短い名前 */
   key: string
   /** 名札・顔の枠の色 */
   color: string
-  /** 顔を作るもと：GLB の人物、ネクマックス、システム、なし（人影） */
-  source: SpeakerModel | 'nexmax' | 'system' | null
+  /** 顔を作るもと：イラスト、GLB の人物、ネクマックス（3D の顔）、システム、なし（人影） */
+  source: ArtSource | SpeakerModel | 'nexmax' | 'system' | null
 }
 
+/** ネクマックスの会話の顔の表情（絵は chronicle/art.ts の V7_PORTRAITS の「ネクマックス#…」） */
+export const NEXMAX_FACE_MOODS = ['normal', 'happy', 'surprised', 'worried'] as const
+export type NexmaxFaceMood = (typeof NEXMAX_FACE_MOODS)[number]
+
+const NEXMAX_STYLE: SpeakerStyle = { key: 'nexmax', color: '#62d4ff', source: 'art:nexmax' }
+
 const KNOWN: Array<[RegExp, SpeakerStyle]> = [
-  [/^源兵衛/, { key: 'genbei', color: '#ffc94d', source: 'genbei' }],
-  [/^おはる/, { key: 'oharu', color: '#ff8fb6', source: 'oharu' }],
-  [/^マツイ/, { key: 'matsui', color: '#ffb057', source: 'matsui' }],
+  [/^源兵衛/, { key: 'genbei', color: '#ffc94d', source: 'art:genbei' }],
+  [/^おはる/, { key: 'oharu', color: '#ff8fb6', source: 'art:oharu' }],
+  [/^マツイ/, { key: 'matsui', color: '#ffb057', source: 'art:matsui' }],
   // 1970年の佐伯ミチ（玲奈とは別人。顔は人影のまま）
   [/^ミチ|^佐伯ミチ/, { key: 'michi', color: '#ffb066', source: null }],
-  // 物語 v7：年をとった佐伯さんの声（顔はイラスト。chronicle/art.ts）
-  [/^佐伯（2068年）/, { key: 'saeki_old', color: '#9fe8ff', source: null }],
-  [/^佐伯/, { key: 'saeki', color: '#7fe6ff', source: 'saeki' }],
-  [/^ソラ/, { key: 'sora', color: '#c8a6ff', source: 'sora' }],
-  // 物語 v7 の人物（顔は chronicle/visuals/person.ts の手続きの人物から）
-  [/^トワ（小さいころ）/, { key: 'towa_child', color: '#9fd8ff', source: null }],
-  [/^トワのお母さん/, { key: 'towa_mother', color: '#ffd6a8', source: null }],
-  // 名のる前のトワ（物語 v7.2：2・4 章は「仮面の男」）
-  [/^仮面の男/, { key: 'towa', color: '#b99cff', source: null }],
-  [/^トワ/, { key: 'towa', color: '#b99cff', source: 'towa' }],
-  [/^チャンダのおばあさん|^守り手/, { key: 'elder', color: '#f2d27a', source: 'khmerElder' }],
-  [/^チャンダ/, { key: 'chanda', color: '#ffb36b', source: 'chanda' }],
-  [/^おふじ/, { key: 'ofuji', color: '#ffc6a8', source: 'ofuji' }],
-  [/^ネクマックス|^NEXMAX/i, { key: 'nexmax', color: '#62d4ff', source: 'nexmax' }],
+  // 物語 v7：年をとった佐伯さんの声
+  [/^佐伯（2068年）/, { key: 'saeki_old', color: '#9fe8ff', source: 'art:saeki_old' }],
+  [/^佐伯/, { key: 'saeki', color: '#7fe6ff', source: 'art:saeki' }],
+  // 8 さいのソラ（はじめに・2071 年）
+  [/^ソラ（8歳）/, { key: 'sora', color: '#c8a6ff', source: 'art:sora_child' }],
+  [/^ソラ/, { key: 'sora', color: '#c8a6ff', source: 'art:sora' }],
+  [/^トワ（小さいころ）/, { key: 'towa_child', color: '#9fd8ff', source: 'art:towa_child' }],
+  [/^トワのお母さん/, { key: 'towa_mother', color: '#ffd6a8', source: 'art:towa_mother' }],
+  // 名のる前のトワ（物語 v7.2：2・4 章は「仮面の男」）。名のったあとの「トワ」は、結末で素顔に差しかわる
+  [/^仮面の男/, { key: 'towa', color: '#b99cff', source: 'art:towa_mask' }],
+  [/^トワ/, { key: 'towa', color: '#b99cff', source: 'art:towa' }],
+  [/^チャンダのおばあさん|^守り手/, { key: 'elder', color: '#f2d27a', source: 'art:elder' }],
+  [/^チャンダ/, { key: 'chanda', color: '#ffb36b', source: 'art:chanda' }],
+  [/^おふじ/, { key: 'ofuji', color: '#ffc6a8', source: 'art:ofuji' }],
+  // 2086 年の最新型（「量産型NEXMAX No.33」のような番号つきも同じ顔）
+  [/^量産型/, { key: 'unit', color: '#8fb4ff', source: 'art:unit' }],
+  // はじめに（2071 年）の、名前を思い出す前のネクマックス
+  [/^ネクマックス|^NEXMAX|^小さなロボット/i, NEXMAX_STYLE],
   [/^システム/, { key: 'system', color: '#9fe8ff', source: 'system' }],
 ]
 
-/** 話者の見た目。知らない名前は名前から決まる色の人影 */
+/** 話者の見た目。知らない名前は名前から決まる色の人影。「ネクマックス#happy」のように # のあとに表情を付けると、その表情の絵 */
 export function speakerStyle(name: string): SpeakerStyle {
+  const sharp = name.indexOf('#')
+  if (sharp > 0) {
+    const st = speakerStyle(name.slice(0, sharp))
+    const mood = name.slice(sharp + 1) as NexmaxFaceMood
+    if (st === NEXMAX_STYLE && NEXMAX_FACE_MOODS.includes(mood) && mood !== 'normal') return { ...st, source: `art:nexmax_${mood}` }
+    return st
+  }
   for (const [re, st] of KNOWN) if (re.test(name)) return st
   let h = 0
   for (const ch of name) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
   const hue = h % 360
   return { key: 'other', color: `hsl(${hue} 80% 72%)`, source: null }
+}
+
+/** イラストの顔か */
+export function isArtSource(s: SpeakerStyle['source']): s is ArtSource {
+  return typeof s === 'string' && s.startsWith('art:')
+}
+
+/**
+ * ネクマックスの台詞の表情（会話の顔の絵を選ぶ）。台詞に表情の情報が無いので、文から控えめに決める。
+ * 迷ったら「ふつう」。心の声（ ）もそのまま見る。
+ */
+export function nexmaxMood(text: string): NexmaxFaceMood {
+  const t = text.replace(/^[（(]|[）)]$/g, '')
+  // 「えっと……」「あった！」は、おどろきではない
+  if (/^(え(?!っと)[っ…？！。、]|ええ[っ…？！]|わっ|うわ|あっ(?!た)|ああっ|な、|な…|ま、まさか)|！？|!\?/.test(t)) return 'surprised'
+  if (/(ごめん|どうしよう|こわい|こわかった|さびし|かなし|いたい|もどせなかった|まにあわ|だめだ|ダメだ|うそ……)/.test(t)) return 'worried'
+  if (/(ありがとう|やった|よかった|うれしい|たのしい|楽しい|すごい|まかせて|がんばろう|わーい)/.test(t)) return 'happy'
+  return 'normal'
+}
+
+/** 会話の顔に使う名前（ネクマックスは表情つき「ネクマックス#happy」。ほかの人は話者名のまま） */
+export function dialogFaceName(speaker: string, text: string): string {
+  if (speakerStyle(speaker) !== NEXMAX_STYLE) return speaker
+  const m = nexmaxMood(text)
+  return m === 'normal' ? speaker : `${speaker}#${m}`
 }
 
 /**
@@ -117,6 +165,8 @@ export class SpeakerIconCache {
 
   request(source: SpeakerStyle['source']): void {
     if (!source || source === 'system' || source === 'nexmax') return
+    // イラストの顔は外から set() で来る（GLB は読まない）
+    if (isArtSource(source)) return
     if (this.urls.has(source) || this.pending.has(source) || this.failed.has(source)) return
     if (!this.mini) {
       this.wanted.add(source)

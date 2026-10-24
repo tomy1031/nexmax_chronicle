@@ -44,7 +44,8 @@ import { MobTalkV7, mobPhaseV7 } from './mobTalkV7'
 import type { ChronoTarget } from '../../../chronicle/chrono'
 import { YearDialLogic, yearToAngle } from './yearDialLogic'
 import { YearDialPanel, type DialMark } from './yearDialPanel'
-import { ArenaFence, circlePoints, rectPoints } from '../../../chronicle/kit/arena'
+import { ArenaFence } from '../../../chronicle/kit/arena'
+import { ARENAS_2086, type Arena2086 } from './arenas2086'
 import { createStarKeychain } from './plazaProps'
 import { UraBattle } from '../../../chronicle/uraBattle'
 import { SkyEvent, TimeBadge, groundY } from './stageKit'
@@ -162,7 +163,7 @@ export class ChronicleFutureStage implements Stage {
   private dial: { logic: YearDialLogic; resolve: (go: boolean) => void; goal: number | null; closing: boolean; qrYear: number; qrT: number } | null = null
   // ---- 戦いの柵（ボスや戦いのある間、戦う場所の外へ行けない）
   private fence: ArenaFence | null = null
-  private fenceKind: 'courtyard' | 'plaza' | null = null
+  private fenceKind: Arena2086 | null = null
   // ---- 決闘
   private duel: { thread: number; window: number; shots: Array<{ mesh: THREE.Mesh; vel: THREE.Vector3; frozen: boolean; id: string; life: number }>; fireT: number; wave: number } | null = null
   private tmp = new THREE.Vector3()
@@ -1261,9 +1262,9 @@ export class ChronicleFutureStage implements Stage {
   // ================================================================== 戦いの柵
 
   /** 戦う場所の外へ行けないようにする（同じ形がもう閉じていれば、そのまま） */
-  private closeArena(kind: 'courtyard' | 'plaza'): void {
+  private closeArena(kind: Arena2086): void {
     if (!this.fence || (this.fence.closed && this.fenceKind === kind)) return
-    this.fence.close(ARENAS[kind], { y: 0 })
+    this.fence.close(ARENAS_2086[kind], { y: 0 })
     this.fenceKind = kind
   }
 
@@ -3041,15 +3042,6 @@ const DIAL_MARKS: ReadonlyArray<Omit<DialMark, 'open'>> = [
   { year: 1726, sub: '360年前' },
   { year: 1186, sub: '900年前' },
 ]
-
-/**
- * 戦いの柵の形（ArenaFence）。courtyard：10 章の中庭の決闘（門・縁側・北の棟の手前まで）。
- * plaza：12 章の最後の夜（広場のまん中。ブースの展示・屋台・ステージ・南のゲートの手前まで）
- */
-const ARENAS = {
-  courtyard: rectPoints(7.5, 19.0, -48.5, -37.3),
-  plaza: circlePoints(1.0, 3.5, 11.0, 32),
-} as const
 
 /** J を 2 回空振りしたときのヒント（段階 phase ごと） */
 const MISS_HINTS: Record<string, string> = {

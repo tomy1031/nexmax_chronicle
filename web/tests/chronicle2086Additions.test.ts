@@ -8,6 +8,8 @@ import { swingGuidePath } from '../src/stages/future2086/chronicle/towerSwings'
 import * as THREE from 'three'
 import { DIAL_ANCHORS, DIAL_SNAP_DEG, YearDialLogic, angleToYear, yearToAngle } from '../src/stages/future2086/chronicle/yearDialLogic'
 import { F } from '../src/stages/future2086/layout'
+import { ARENAS_2086 } from '../src/stages/future2086/chronicle/arenas2086'
+import { insidePoly } from '../src/chronicle/kit/arenaLogic'
 
 /** プレイヤーの跳べる高さ（player/controller.ts の jump 5.6・gravity 17 → 約 0.92m） */
 const JUMP_H = (5.6 * 5.6) / (2 * 17)
@@ -408,5 +410,45 @@ describe('年代ダイヤル', () => {
     // 行ける年どうしは、ダイヤルの上で 40° 以上はなれている（指で押しやすい）
     const ys = [1186, 1726, 2026, 2086]
     for (let i = 1; i < ys.length; i++) expect(yearToAngle(ys[i]) - yearToAngle(ys[i - 1])).toBeGreaterThanOrEqual(40)
+  })
+})
+
+describe('戦いの柵の形（arenas2086）', () => {
+  const inC = (x: number, z: number) => insidePoly(ARENAS_2086.courtyard, x, z)
+  const inP = (x: number, z: number) => insidePoly(ARENAS_2086.plaza, x, z)
+  it('中庭の決闘：はじまりの位置・影の出る所・トワの下・ほこらの前は中。門・通り・縁側・北の棟は外', () => {
+    for (const [x, z] of [
+      [13.4, -40.8],
+      [13.4, -42.4],
+      [13.4, -46.4],
+      [15.6, -38.4],
+      [SITE.shrine.pos.x + 1.6, SITE.shrine.pos.z],
+    ])
+      expect(inC(x, z), `${x},${z}`).toBe(true)
+    // 影の出る輪（中心 13.4,-42.4・横 3.2・たて 2.6）
+    for (let a = 0; a < Math.PI * 2; a += 0.3) expect(inC(13.4 + Math.cos(a) * 3.2, -42.4 + Math.sin(a) * 2.6)).toBe(true)
+    expect(inC((SITE.gate.x0 + SITE.gate.x1) / 2, (SITE.gate.z0 + SITE.gate.z1) / 2)).toBe(false)
+    expect(inC(3.0, -39.0)).toBe(false)
+    expect(inC(SITE.toolbox.deck.x0 + 0.4, -42)).toBe(false)
+    expect(inC(14, SITE.yard.z0 - 0.3)).toBe(false)
+  })
+  it('最後の夜の広場：はじまりの位置・ソラの立つ所は中。ブースのわっか・屋台・ステージ・南のゲートは外', () => {
+    for (const [x, z] of [
+      [0.9, 6.4],
+      [-1.0, 8.2],
+      [2.4, 7.0],
+    ])
+      expect(inP(x, z), `${x},${z}`).toBe(true)
+    expect(inP(F.PORTAL.x, F.PORTAL.z)).toBe(false)
+    for (const z of F.STALLS.zs) expect(inP(F.STALLS.x - F.STALLS.d / 2, z)).toBe(false)
+    expect(inP((F.STAGE.x0 + F.STAGE.x1) / 2, (F.STAGE.z0 + F.STAGE.z1) / 2)).toBe(false)
+    expect(inP(0, F.SOUTH_GATE.z0)).toBe(false)
+    // 黒い手がのびてくる 3 か所（はじまりの位置からの足し算。stage.ts の startHands）
+    for (const [dx, dz] of [
+      [4, -3],
+      [-4.5, -1],
+      [0.5, 4.5],
+    ])
+      expect(inP(0.9 + dx, 6.4 + dz)).toBe(true)
   })
 })

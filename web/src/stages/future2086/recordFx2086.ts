@@ -377,11 +377,11 @@ export class RingRecord {
     )
   }
 
-  /** 体験中の客が見ている昔の町（うっすら） */
+  /** 体験中の客（VR のゴーグル）が見ている昔の町が、まわりにもうっすら見える（物語 v7.2：わっかは目立たせない） */
   showVisitor(): void {
     this.setKind('dotonbori')
     this.reveal = this.revealTarget = 1
-    this.alphaTarget = 0.62
+    this.alphaTarget = 0.45
   }
 
   /** 記録を組み上げる（seconds で 0 → 1） */

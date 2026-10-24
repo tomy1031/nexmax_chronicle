@@ -112,8 +112,10 @@ export class IdoVr {
     if (this.watchAt && this.watchK > 0.001) this.look.lerp(this.watchAt, this.watchK)
     camera.position.copy(this.eye)
     camera.lookAt(this.look)
-    if (Math.abs(camera.fov - VR_FOV) > 0.01) {
-      camera.fov = VR_FOV
+    // 追っている間は、少し寄る（落ちていくネクマックスが小さくなりすぎないように）
+    const fov = VR_FOV - this.watchK * 24
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov
       camera.updateProjectionMatrix()
     }
   }

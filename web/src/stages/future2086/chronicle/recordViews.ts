@@ -289,8 +289,8 @@ function buildEdo(bc: ViewBuildCtx): RecordView {
   // 鳥・茶店のけむり・のぼり旗
   const birds = new Birds(5, v(2, 0, -2))
   const smoke = new Smoke(v(-1.4, 6.2, 5.2))
-  const flagA = new Flag(v(-3.4, 0, -2.6), 2.4, 0.55, paintNobori('#c23a2e', '茶'))
-  const flagB = new Flag(v(8.6, 0, 2.6), 2.4, 0.55, paintNobori('#2c3d6b', '飴'))
+  const flagA = new Flag(v(-3.4, 0, -2.0), 2.4, 0.55, paintNobori('#c23a2e', '茶'))
+  const flagB = new Flag(v(8.6, 0, 2.0), 2.4, 0.55, paintNobori('#2c3d6b', '飴'))
   group.add(birds.group, smoke.group, flagA.group, flagB.group)
   return {
     kind: 'edo1726',

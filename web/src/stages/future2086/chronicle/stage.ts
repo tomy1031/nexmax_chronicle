@@ -1712,7 +1712,7 @@ export class ChronicleFutureStage implements Stage {
     const mid = L.clone().lerp(P, 0.5)
     void this.cine(rt, { look: mid.clone().lerp(L, 0.25), from: mid.clone().addScaledVector(side, 3.4).add(v(0, 0.7, 0)), hold: Infinity, inSec: 0.4, fov: 44 })
     // 黒い火から、小さな影の手
-    this.hands.spawn(LAMP_HAND, L.clone(), { from: 'sky', size: 0.32, normal: dir.clone().add(v(0, 0.5, 0)).normalize(), rest: L.clone().addScaledVector(dir, 0.5).add(v(0, 0.45, 0)), noDecal: true })
+    this.hands.spawn(LAMP_HAND, L.clone(), { from: 'sky', size: 0.45, normal: dir.clone().add(v(0, 0.6, 0)).normalize(), rest: L.clone().addScaledVector(dir, 0.6).add(v(0, 0.6, 0)), noDecal: true })
     await this.wait(0.7)
     // クローの先をつかんで、はらいのける
     const tip = L.clone().addScaledVector(dir, 0.12)
@@ -1852,6 +1852,7 @@ export class ChronicleFutureStage implements Stage {
     // 話している間・ランプをねらう間・黒い手が来る間に、屋上から落ちられないように（朝にもどると prepare で開く）
     this.fence?.close(rectPoints(TOWER.deck.x0 + 0.25, TOWER.deck.x1 - 0.25, TOWER.deck.z0 + 0.25, TOWER.deck.z1 - 0.25), { y: TOWER.deckY, color: '#b08cff' })
     this.lock(rt, true)
+    this.setPhase('tower_deck')
     this.showTowa(TOWA_DECK, rt.player.position, 'idle')
     void this.cine(rt, { look: this.towa.root.position.clone().add(v(0, 1.4, 0)), hold: Infinity, inSec: 1.2, fov: 44 })
     await this.talk(rt, 'ch4_towa')
@@ -1863,7 +1864,10 @@ export class ChronicleFutureStage implements Stage {
     const lampSide = v(-toP.z, 0, toP.x)
     void this.cine(rt, { look: lampAt.clone().add(v(0, -0.15, 0)), from: lampAt.clone().addScaledVector(toP, 1.7).addScaledVector(lampSide, 1.1).add(v(0, 0.35, 0)), hold: Infinity, inSec: 1.0, fov: 40, marker: { pos: lampAt.clone().add(v(0, 0.45, 0)), label: 'ランプ' } })
     await this.talk(rt, 'ch4_lamp_hint')
-    rt.endCinematic()
+    rt.endCinematic(true)
+    // カメラは、ネクマックスのうしろから、ランプのほうを少し見下ろす（胸壁と四すみの提灯にかからないように）
+    rt.camRig.yaw = camYawToward(rt.player.position, lampAt)
+    rt.camRig.pitch = 0.35
     this.lock(rt, false)
     // ランプにクロー（J）→ 黒い火から影の手がのびて、クローをはらいのける
     let grabbed = false

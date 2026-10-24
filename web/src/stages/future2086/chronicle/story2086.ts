@@ -243,6 +243,7 @@ export const OBJECTIVES: Record<string, Objective> = {
   tower_gearhook2: { title: '時計台の回廊へ', sub: '回る歯車の金具が上に来て、金色に光ったら J' },
   tower_debris: { title: '時計台にのぼる', sub: '赤い輪に、がれきが落ちてくる。止まらずに、回廊の南の端へ' },
   tower_top: { title: '時計台のてっぺんへ', sub: 'てっぺんの金色の金具に J' },
+  tower_deck: { title: '時計台のてっぺん', sub: '仮面の男' },
   tower_lamp: { title: 'トワのランプを取る', sub: '影が出てくるランプに J' },
   confide: { title: 'ソラに全部話す', sub: 'ソラのブースへ' },
   show_keychain: { title: 'キーホルダーを見せる', sub: 'F' },

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { ELEPHANT_PATHS, ELEPHANT_DOCK, K, ROUTE_N, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, WATER_HOUSES, arunCenter, mirrorCenter, towerPoint } from '../src/stages/khmer1186/layout'
-import { PingPongWalker, StoneFallLogic, TurntableLogic, angleDiff, segmentHitsBox, stairSegment, stairSlope, wrapAngle, type AABB } from '../src/stages/khmer1186/khmerLogic'
+import { FerryLogic, PingPongWalker, StoneFallLogic, TurntableLogic, angleDiff, segmentHitsBox, stairSegment, stairSlope, wrapAngle, type AABB } from '../src/stages/khmer1186/khmerLogic'
 import { CLAW_TUNING } from '../src/player/clawLogic'
 import { MOVE_TUNING } from '../src/player/controller'
 
@@ -105,6 +105,48 @@ describe('象の往復', () => {
     const back = start.y + 2.75
     expect(Math.abs(ELEPHANT_DOCK.y - back)).toBeLessThan(JUMP_APEX - 0.3)
     expect(Math.abs(ELEPHANT_DOCK.x - ELEPHANT_DOCK.w / 2 - start.x)).toBeLessThan(2.4)
+  })
+})
+
+describe('池の象（乗り場 ⇄ 池のまん中の家）', () => {
+  const run = (f: FerryLogic, w: PingPongWalker, sec: number, riding: boolean) => {
+    for (let i = 0; i < sec * 60; i++) {
+      f.update(1 / 60, w, riding)
+      w.update(1 / 60)
+    }
+  }
+  it('乗るまで乗り場で待ち、乗ると池の家のそばまで行って、そこで待つ', () => {
+    const w = new PingPongWalker(ELEPHANT_PATHS.baray.points, ELEPHANT_PATHS.baray.speed, ELEPHANT_PATHS.baray.wait)
+    const f = new FerryLogic()
+    run(f, w, 30, false)
+    expect(f.state).toBe('dock')
+    expect(w.s).toBe(0)
+    run(f, w, 1, true)
+    expect(f.state).toBe('go')
+    run(f, w, 60, true)
+    expect(f.state).toBe('far')
+    const end = w.s
+    run(f, w, 20, true)
+    expect(w.s).toBeCloseTo(end, 3)
+  })
+  it('とちゅうで落ちても（乗っていなくても）先へ行かない。降りてしばらくすると乗り場へもどる', () => {
+    const w = new PingPongWalker(ELEPHANT_PATHS.baray.points, ELEPHANT_PATHS.baray.speed, ELEPHANT_PATHS.baray.wait)
+    const f = new FerryLogic()
+    run(f, w, 1, true)
+    run(f, w, 4, true)
+    const mid = w.s
+    run(f, w, 5, false)
+    expect(w.s).toBeCloseTo(mid, 3)
+    expect(f.state).toBe('go')
+    run(f, w, 60, true)
+    expect(f.state).toBe('far')
+    run(f, w, 4, false)
+    expect(f.state).toBe('far')
+    run(f, w, 2, false)
+    expect(f.state).toBe('back')
+    run(f, w, 60, false)
+    expect(f.state).toBe('dock')
+    expect(w.s).toBe(0)
   })
 })
 

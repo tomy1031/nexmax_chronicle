@@ -1,9 +1,11 @@
 // 1186年 クメールの都・アルンの寺と村（物語 v7 の 11 章「900年前のカンボジア」）。
 // 舞台は sceneKhmer.ts（池・水の上の家・ナーガの橋・象・寺・三つの塔・大階段・アルン）、進み方は storyKhmer.ts（フラグだけで段階が決まる）。
 //   着く（光の輪・空のひび・食べられた森）→ チャンダ（爪の音が刃と同じ）→ お寺のいちばん上でおばあさん（アルンの話）→ 刃・たたかい方・やくそく →
-//   夜明けの鏡を三つの塔へ（北：水の上の家を飛びうつる／東：回る鏡の台を止める／南：落ちる石を止めて足場）→
+//   夜明けの鏡を三つの塔へ（北：象に乗って池のまん中の家へ → 家から家へ飛びうつる／東：回る鏡の台を止める／南：落ちる石を止めて足場）→
 //   夜：寺の階段の防衛（トワが段をくずす・石を止めてのぼる・チャンダと背中あわせ）→ トワとの話 → 空の口が石像と家を飲みこむ → 夜明け →
 //   三つの鏡の光がアルンへ → 光の扉 → 裏側：オルムの心臓（初戦）→ 900 本の筋・最後の光が七つのつぶでかけらへ・土へ → 帰還
+// チャンダは、話している間はその場で止まってネクマックスを向く（talk）。ついてこなければ、近くで待って呼ぶ。
+// 池の象は、乗るまで乗り場で待ち、乗っていなければ先へ行かない（FerryLogic）。水に落ちたら、すぐ象の背中か、最後に立っていた所へ（fallGuard）。
 import * as THREE from 'three'
 import { ERA_KHMER, eraTintHex } from '../../core/eras'
 import { DialogueDB } from '../../core/dialogue'
@@ -16,13 +18,16 @@ import type { MusicId } from '../../audio/tracks'
 import type { EnemyHandle } from '../../combat/combatSystem'
 import type { EnemyStats } from '../../combat/combatLogic'
 import { SceneClock } from '../../chronicle/kit/clock'
+import { ArenaFence, rectPoints } from '../../chronicle/kit/arena'
 import { Walker } from '../../chronicle/kit/walker'
 import { Curtain } from '../../chronicle/kit/curtain'
 import type { ChronoTarget, SlitHandle } from '../../chronicle/chrono'
 import { Lamp, SHADE_STYLE, createPerson, type PersonCharacter, type PersonPose } from '../../chronicle/visuals'
 import { buildKhmerScene, KHMER_BALL_ID, type KhmerScene } from './sceneKhmer'
 import { KHMER_ENVIRONMENTS, KhmerEnvMaps, applyKhmerTime, type TimeOfDay } from './environment'
-import { K, NPC, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, towerPoint, type Spot, type TowerId } from './layout'
+import { ELEPHANT_DOCK, K, KHMER_CLAW_IDS, NPC, ROUTE_N, SMALL_TOWER, SPAWNS, TOWERS, TOWER_IDS, WATER_HOUSES, towerPoint, type Spot, type TowerId } from './layout'
+import { FerryLogic } from './khmerLogic'
+import type { Elephant } from './elephant'
 import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerMobPhase, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
 import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
@@ -60,6 +65,16 @@ const STONE_KNOCK = 6
 /** すべり落ちていく石に押しのけられる速さ（m/s） */
 const STONE_SHOVE = 3.2
 const TOP_SPAWNS = [v(24, K.TOP_Y, -10.2), v(28, K.TOP_Y, -10.2), v(24, K.TOP_Y, 2.2), v(28.2, K.TOP_Y, 2.2), v(32.2, K.TOP_Y, -4), v(32.2, K.TOP_Y, -7.6)]
+/** 夜の防衛の柵（上の台だけ。ふちから下の段へ落ちない） */
+const TOP_ARENA = { x0: 19.3, x1: 32.7, z0: -10.7, z1: 2.7 }
+/** チャンダが待って呼ぶ遠さ（これより遠いと止まって待つ・これより近いと歩きだす）と、呼ぶまでの秒・呼ぶ間 */
+const LEAD = { wait: 10, go: 7, callAfter: 4, callEvery: 8 }
+/** 水に落ちたとみなす高さ（池の水面の下。岸の石段のいちばん下の段より低い所で、落ちている途中） */
+const SINK_Y = K.WATER_Y - 0.35
+/** 北の塔への道の金具（目印用） */
+const HOOK = (id: string) => ROUTE_N.hooks.find((h) => h.id === KHMER_CLAW_IDS.hook(id)) as (typeof ROUTE_N.hooks)[number]
+/** 象のりばの上（目印） */
+const DOCK_TOP = v(ELEPHANT_DOCK.x, ELEPHANT_DOCK.y, ELEPHANT_DOCK.z)
 
 export class KhmerStage implements Stage {
   readonly key = '1186' as const
@@ -105,6 +120,24 @@ export class KhmerStage implements Stage {
   private stoneMiss = 0
   /** rt.chrono に渡した止める対象（enabled を毎フレーム切りかえる） */
   private readonly fzTargets: { fz: Freezable; t: ChronoTarget }[] = []
+  /** チャンダが話している（その場で止まって、ネクマックスの方を向く）。入れ子で数える */
+  private chandaTalking = 0
+  /** チャンダが、ついてこないネクマックスを待っている（案内のとちゅう） */
+  private chandaWaiting = false
+  private chandaWaitT = 0
+  private chandaCallT = 0
+  private chandaWasWalking = false
+  private readonly chandaPos = new THREE.Vector3()
+  /** 池の象（乗り場 ⇄ 池のまん中の家のそば） */
+  private readonly ferry = new FerryLogic()
+  /** 落ちたときにもどす所：最後に立っていた、動かない地面 */
+  private readonly safe = new THREE.Vector3()
+  /** 最後に乗っていた象と、その時刻（落ちたら、その背中へ） */
+  private rideEl: Elephant | null = null
+  private rideT = -99
+  private readonly fallTo = new THREE.Vector3()
+  /** 夜の防衛の柵 */
+  private fence: ArenaFence | null = null
 
   // ================================================================ 読みこみ
 
@@ -202,11 +235,12 @@ export class KhmerStage implements Stage {
     let missed = 0
     this.sc.turntable.onMissed = () => {
       missed++
-      if (this.step(rt) === 'mirrors' && missed >= 2 && missed % 3 === 2) void rt.dialogue(this.lines('tower_e_hint'))
+      if (this.step(rt) === 'mirrors' && missed >= 2 && missed % 3 === 2) void this.talk(rt, this.lines('tower_e_hint'))
     }
     // 時空裂きで止められる物
     this.addFreezables(rt)
     this.placeForStep(step)
+    this.safe.copy(rt.player.position)
     rt.combat.enabled = false
     rt.save(khmerSpawn(step))
     if (step === 'return') this.openRing(rt)
@@ -253,7 +287,7 @@ export class KhmerStage implements Stage {
           // 落ちる石を、足場にならない高さで止めた：2 回目から、止めどきを教える（そのあとも 3 回ごとに）
           if (fz.goodNow && !fz.goodNow()) {
             this.stoneMiss++
-            if (this.stoneMiss >= 2 && this.stoneMiss % 3 === 2) void rt.dialogue(this.lines('stone_hint'))
+            if (this.stoneMiss >= 2 && this.stoneMiss % 3 === 2) void this.talk(rt, this.lines('stone_hint'))
           }
           fz.setFrozen(true)
         },
@@ -302,7 +336,21 @@ export class KhmerStage implements Stage {
   private async talkOnce(rt: StageRuntime, key: string): Promise<void> {
     if (this.told.has(key)) return
     this.told.add(key)
-    await rt.dialogue(this.lines(key))
+    await this.talk(rt, this.lines(key))
+  }
+
+  /**
+   * 会話を流す。チャンダが話す会話なら、話している間、チャンダはその場で止まって、ネクマックスの方を向く
+   * （歩いているとちゅうなら、話し終わってから続きを歩く）
+   */
+  private async talk(rt: StageRuntime, ls: DialogueLine[]): Promise<void> {
+    const chanda = ls.some((l) => l.speaker === 'チャンダ')
+    if (chanda) this.chandaTalking++
+    try {
+      await rt.dialogue(ls)
+    } finally {
+      if (chanda) this.chandaTalking--
+    }
   }
 
   // ================================================================ 場面：着く
@@ -317,12 +365,12 @@ export class KhmerStage implements Stage {
     rt.rift.close(0.8)
     // お寺・池・空のひび
     void rt.cinematic({ look: v(26, 14, -4), from: v(-36, 3.2, -26), lookTo: v(40, 60, -150), fromTo: v(-35, 3.0, -28), panSec: 9, inSec: 1.8, hold: Infinity, outSec: 1.2, fov: 54 })
-    await rt.dialogue(this.lines('arrive_look'))
+    await this.talk(rt, this.lines('arrive_look'))
     // 食べられた森
     const vil = this.villagers.find((x) => x.id === 'watch2')
     if (vil) vil.ch.setPose('point')
     void rt.cinematic({ look: v(85, 0, -112), from: v(-30, 4, -30), inSec: 1.4, hold: Infinity, outSec: 1.2, fov: 46, marker: { pos: v(85, 2, -112), label: '食べられた森', color: '#c08aff' } })
-    await rt.dialogue(this.lines('villager_fear'))
+    await this.talk(rt, this.lines('villager_fear'))
     if (vil) vil.ch.setPose('idle')
     rt.endCinematic()
     rt.story.set('v7_khmer_arrived', true)
@@ -353,7 +401,7 @@ export class KhmerStage implements Stage {
     this.chanda.lookAt(rt.player.position.clone().setY(0.8))
     this.chanda.setPose('guard')
     void rt.cinematic({ look: this.chanda.root.position.clone().setY(1.0), inSec: 1.0, hold: Infinity, outSec: 0.8, fov: 46 })
-    const p = rt.dialogue(this.lines('chanda_meet'))
+    const p = this.talk(rt, this.lines('chanda_meet'))
     await this.clock.wait(4.5)
     this.chanda.setPose('laugh')
     await p
@@ -362,7 +410,8 @@ export class KhmerStage implements Stage {
     rt.setControlLocked(false)
     this.busy = false
     this.meet = 'follow'
-    void rt.dialogue(this.lines('chanda_follow'))
+    // 「こっち、こっち！」は、ネクマックスの方を向いて言ってから歩きだす
+    void this.talk(rt, this.lines('chanda_follow'))
     void this.chandaLead(rt)
   }
 
@@ -401,17 +450,19 @@ export class KhmerStage implements Stage {
     const altarFrom = v(17.8, 11.0, -3.2)
     void rt.cinematic({ look: this.arunLook(altarFrom), from: altarFrom, lookTo: this.grandma.root.position.clone().setY(10.8), panSec: 14, inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 52 })
     this.sc.arun.setGlow(1.4)
-    await rt.dialogue(this.lines('grandma_arun'))
+    await this.talk(rt, this.lines('grandma_arun'))
     this.sc.arun.setGlow(1)
     // チャンダの刃
     this.walker.face(this.chanda, rt.player.position)
     this.chanda.setPose('guard')
     void rt.cinematic({ look: this.chanda.root.position.clone().setY(10.6), inSec: 1.0, hold: Infinity, outSec: 0.8, fov: 44 })
-    await rt.dialogue(this.lines('chanda_blade'))
+    await this.talk(rt, this.lines('chanda_blade'))
     this.chanda.setPose('point')
     this.chanda.setAim(v(26, 12, -40))
-    await rt.dialogue(this.lines('chanda_plan'))
+    await this.talk(rt, this.lines('chanda_plan'))
     this.chanda.setAim(null)
+    // 北の塔への道：象のりばの象 → 池のまん中の家 → 島の北の塔（上の台から北を見る）
+    await this.showNorthRoute(rt)
     rt.endCinematic()
     rt.story.set('v7_met_chanda', true)
     rt.save('altar')
@@ -421,6 +472,19 @@ export class KhmerStage implements Stage {
     // チャンダは境内へおりて待つ
     this.chanda.setPose('walk')
     void this.walker.walkTo(this.chanda, [v(K.STAIRS.x1, K.TOP_Y, -4.4), v(K.STAIRS.x0 - 0.8, 0, -4), NPC.chanda.temple.pos], 3.0, rt.player.position).then(() => this.chanda.setPose('laugh'))
+  }
+
+  /** 北の塔への道を、カメラで見せる（象 → 池のまん中の家 → 北の塔）。チャンダの短い一言 */
+  private async showNorthRoute(rt: StageRuntime): Promise<void> {
+    const el = this.sc.elephant.baray
+    const from = v(17.6, 14.2, -9.0)
+    const house = WATER_HOUSES.find((h) => h.id === 'h3') as (typeof WATER_HOUSES)[number]
+    const houseAt = v(house.x, house.floorY + 1.2, house.z)
+    void rt.cinematic({ look: el.deckTop.clone().setY(el.deckTop.y + 0.5), from, inSec: 1.2, hold: Infinity, fov: 40, marker: { pos: el.deckTop.clone().setY(el.deckTop.y + 1.2), label: '池の象', color: '#ffd76a' } })
+    const L = this.lines('chanda_route_n')
+    await this.talk(rt, L.slice(0, 1))
+    void rt.cinematic({ look: houseAt, from, lookTo: v(TOWERS.n.x, TOWERS.n.baseY + 6, TOWERS.n.z), panSec: 5, inSec: 1.0, hold: Infinity, fov: 40, marker: { pos: houseAt.clone().setY(houseAt.y + 1.4), label: '池のまん中の家', color: '#ffd76a' } })
+    await this.talk(rt, L.slice(1))
   }
 
   // ================================================================ 場面：鏡
@@ -437,7 +501,7 @@ export class KhmerStage implements Stage {
     const n = 3 - mirrorsLeft(this.f(rt)).length
     const st = this.sc.mirrors[id]
     void rt.cinematic({ look: st.center.clone(), inSec: 0.9, hold: Infinity, outSec: 0.8, fov: 46, marker: { pos: st.center.clone(), label: '夜明けの鏡', color: '#ffd76a' } })
-    await rt.dialogue(this.lines(`mirror_set_${Math.min(3, Math.max(1, n))}`))
+    await this.talk(rt, this.lines(`mirror_set_${Math.min(3, Math.max(1, n))}`))
     rt.endCinematic()
     rt.save(`tower_${id}`)
     rt.setControlLocked(false)
@@ -483,7 +547,7 @@ export class KhmerStage implements Stage {
     rt.hud.banner('― その夜 ―', 'success', 2.4)
     // トワが来る（大階段の下の南から見上げる：トワ・空のひび・松明の階段が一度に見える。回廊の屋根・壁の中に入らない所から）
     void rt.cinematic({ look: v(12.0, 12.2, -10.4), from: v(6.0, 1.4, 1.2), inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 42, marker: { pos: TOWA_NIGHT.clone().add(v(0, 1.2, 0)), label: 'トワ', color: '#c08aff' } })
-    await rt.dialogue(this.lines('night_begin'))
+    await this.talk(rt, this.lines('night_begin'))
     // 段をくずす
     this.towa.setPose('raiseLamp')
     for (const c of COLLAPSE_PLAN) {
@@ -494,7 +558,7 @@ export class KhmerStage implements Stage {
     this.sc.stairs.setStonesActive(true)
     // くずれた段：南西の少し上から（松明の列・落ちてくる石・上の台のチャンダが入る）
     void rt.cinematic({ look: v(13, 6.2, -4.2), from: v(6.4, 5.0, 2.6), inSec: 1.0, hold: Infinity, outSec: 1.0, fov: 52 })
-    await rt.dialogue(this.lines('night_collapse'))
+    await this.talk(rt, this.lines('night_collapse'))
     rt.endCinematic()
     this.towa.setPose('idle')
     rt.combat.setCheckpoint(sp.pos.clone(), sp.facing)
@@ -514,14 +578,17 @@ export class KhmerStage implements Stage {
 
   private async runDefend(rt: StageRuntime): Promise<void> {
     this.night = 'defend'
+    // 上の台だけで戦う（ふちから下の段へ落ちない）
+    if (!this.fence) this.fence = new ArenaFence(this.sc.root, rt.phys)
+    this.fence.close(rectPoints(TOP_ARENA.x0, TOP_ARENA.x1, TOP_ARENA.z0, TOP_ARENA.z1), { y: K.TOP_Y })
     rt.combat.enabled = true
     rt.combat.setCheckpoint(SPAWNS.altar.pos.clone(), SPAWNS.altar.facing)
-    void rt.dialogue(this.lines('night_top'))
+    void this.talk(rt, this.lines('night_top'))
     this.chanda.setPose('guard')
     this.wavesSkipped = false
     for (let w = 0; w < NIGHT_WAVES.length; w++) {
       if (this.night !== 'defend' || this.wavesSkipped) break
-      if (w > 0) void rt.dialogue(this.lines('night_wave2'))
+      if (w > 0) void this.talk(rt, this.lines('night_wave2'))
       this.spawnWave(rt, w)
       await this.clock.until(() => rt.combat.alive('night').length === 0 || this.night !== 'defend' || this.wavesSkipped)
       if (this.clock.dead) return
@@ -549,11 +616,12 @@ export class KhmerStage implements Stage {
     rt.setControlLocked(true)
     for (const h of rt.combat.alive('night')) rt.combat.kill(h)
     rt.combat.enabled = false
+    this.fence?.open()
     this.chanda.setPose('idle')
     this.walker.face(this.towa, rt.player.position)
     void rt.cinematic({ look: TOWA_NIGHT.clone().add(v(0, 0.6, 0)), from: v(19.4, 11.2, -5.6), inSec: 1.4, hold: Infinity, outSec: 1.0, fov: 46 })
     this.towa.setPose('idle')
-    const p = rt.dialogue(this.lines('towa_talk'))
+    const p = this.talk(rt, this.lines('towa_talk'))
     await this.clock.wait(9)
     this.towa.setPose('sad')
     await p
@@ -563,17 +631,17 @@ export class KhmerStage implements Stage {
     await this.clock.wait(1.2)
     const sw = this.sc.swallow.play()
     rt.shake(0.6)
-    await rt.dialogue(this.lines('swallow').slice(0, 2))
+    await this.talk(rt, this.lines('swallow').slice(0, 2))
     await sw
     void rt.cinematic({ look: TOWA_NIGHT.clone().add(v(0, 0.5, 0)), from: v(19.4, 11.2, -5.6), inSec: 1.2, hold: Infinity, outSec: 1.0, fov: 44 })
-    await rt.dialogue(this.lines('swallow').slice(2))
+    await this.talk(rt, this.lines('swallow').slice(2))
     this.towa.setPose('sad')
     // 夜明けが来る：トワが下がる
     this.night = 'dawn'
     // 上の台の東のふちから東の空を見る（祠堂の中・四すみの小さな塔のかげに入らない所）
     void rt.cinematic({ look: v(140, 10, -10), from: v(32.2, 11.4, -4.0), inSec: 1.4, hold: Infinity, outSec: 1.0, fov: 54 })
     this.sc.skyCrack.setOpen(0)
-    await rt.dialogue(this.lines('dawn_coming'))
+    await this.talk(rt, this.lines('dawn_coming'))
     this.towaRetreat = 0
     this.sc.swallow.hideMouth()
     this.sc.stairs.setStonesActive(false)
@@ -643,7 +711,7 @@ export class KhmerStage implements Stage {
     this.door = rt.chrono.slit(D.pos.clone(), { tone: 'dawn', width: D.width, height: D.height, normal: D.normal.clone() })
     this.door.setOpen(1)
     void rt.cinematic({ look: D.pos.clone(), from: v(4, 13, -4), inSec: 1.6, hold: Infinity, outSec: 1.0, fov: 56, marker: { pos: D.pos.clone(), label: '光の扉', color: '#ffd76a' } })
-    await rt.dialogue(this.lines('dawn_door'))
+    await this.talk(rt, this.lines('dawn_door'))
     rt.endCinematic(true)
     rt.setControlLocked(false)
     // 裏側へ（チャンダといっしょに。出ると上の台の扉の前へ）
@@ -678,14 +746,14 @@ export class KhmerStage implements Stage {
     this.chanda.setPose('laugh')
     const afterFrom = v(18.4, 11.0, -4.6)
     void rt.cinematic({ look: this.arunLook(afterFrom), from: afterFrom, inSec: 1.2, hold: Infinity, outSec: 1.0, fov: 46 })
-    const p = rt.dialogue(this.lines('after_back'))
+    const p = this.talk(rt, this.lines('after_back'))
     await this.clock.wait(5)
     this.sc.arun.setScars(1)
     await p
     // アルンにひび → 最後の光が七つのつぶで小さなかけらへ → 土へ
     this.sc.arun.crack()
     rt.shake(0.5)
-    await rt.dialogue(this.lines('after_crack'))
+    await this.talk(rt, this.lines('after_crack'))
     // かけらができる所：西の入口の外から、部屋の中のアルンの前（動くかけらを追うと、壁や土の中から光線を飛ばしてカメラがつぶれるので、決まった所を見る）
     void rt.cinematic({ look: v(23.4, 10.6, -3.6), from: v(19.2, 11.6, -2.9), inSec: 1.0, hold: Infinity, outSec: 1.2, fov: 50 })
     const shard = this.sc.arun.releaseShard({ to: K.SHARD_GROUND.clone() })
@@ -695,7 +763,7 @@ export class KhmerStage implements Stage {
     await this.clock.wait(0.3)
     void rt.cinematic({ look: K.SHARD_GROUND.clone().add(v(0.8, 1.6, -0.8)), from: v(4.2, 3.4, 19.6), inSec: 0.8, hold: Infinity, outSec: 1.2, fov: 50 })
     await shard
-    await rt.dialogue(this.lines('after_shard'))
+    await this.talk(rt, this.lines('after_shard'))
     // 刃のかけらを宝の箱へ
     this.chanda.setPose('walk')
     await this.walker.walkTo(this.chanda, [TREASURE_BOX.clone().add(v(0, 0, 1.0))], 2.0, TREASURE_BOX)
@@ -705,12 +773,12 @@ export class KhmerStage implements Stage {
     this.chanda.setBlade('none')
     this.chanda.setPose('idle')
     this.walker.face(this.chanda, rt.player.position)
-    await rt.dialogue(this.lines('after_box'))
+    await this.talk(rt, this.lines('after_box'))
     rt.endCinematic()
     rt.story.set('v7_khmer_done', true)
     rt.save('altar')
     rt.oreGlow(2)
-    await rt.dialogue(this.lines('after_pull'))
+    await this.talk(rt, this.lines('after_pull'))
     this.chanda.setPose('wave')
     rt.setControlLocked(false)
     this.busy = false
@@ -737,9 +805,30 @@ export class KhmerStage implements Stage {
 
   update(dt: number, frame: ActionFrame, rt: StageRuntime): void {
     this.clock.update(dt)
+    // チャンダ：話している・待っている間は、歩きを止めて（道の続きはそのまま）、ネクマックスの方を向く
+    const holdChanda = (this.chandaTalking > 0 || this.chandaWaiting) && !this.ura.active
+    this.chandaPos.copy(this.chanda.root.position)
+    const chandaYaw = this.chanda.root.rotation.y
     this.walker.update(dt)
+    if (holdChanda) {
+      this.chanda.root.position.copy(this.chandaPos)
+      this.chanda.root.rotation.y = chandaYaw
+      this.walker.turnToward(this.chanda, rt.player.position, dt, 6)
+      if (this.chanda.pose === 'walk') {
+        this.chandaWasWalking = true
+        this.chanda.setPose('idle')
+      }
+    } else if (this.chandaWasWalking) {
+      this.chandaWasWalking = false
+      if (this.walker.speedOf(this.chanda) > 0) this.chanda.setPose('walk')
+    }
+    // 池の象：乗るまで乗り場で待ち、乗っていなければ先へ行かない
+    const baray = this.sc.elephant.baray
+    this.ferry.update(dt, baray.walker, this.sc.rider.riding === baray.deck)
     this.sc.update(dt, rt.playTime, rt.camera)
-    this.sc.carryPlayer(rt.player)
+    const riding = this.sc.carryPlayer(rt.player, Math.hypot(frame.move.x, frame.move.y) > 0.1)
+    this.fallGuard(rt, riding)
+    this.fence?.update(dt, rt.player)
     this.ura.update(dt, frame, rt)
     if (!this.ura.active) rt.combat.passive = this.busy || rt.talking || rt.inCinematic
     const step = this.step(rt)
@@ -748,16 +837,23 @@ export class KhmerStage implements Stage {
     this.updateFreezables(rt, step)
     // 村の人の吹き出し（夜・裏側・場面の間は黙る）
     this.mobs?.update(dt, rt, khmerMobPhase(step, this.ballGiven), this.busy || this.ura.active)
-    // チャンダについて行く → 上の台でおばあさん
+    // チャンダについて行く（ついてこなければ、止まって待って呼ぶ）→ 上の台でおばあさん
+    this.leadWait(dt, rt, step === 'meet' && this.meet === 'follow' && !this.busy)
     if (step === 'meet' && this.meet === 'follow' && !this.busy && this.onTop(rt) && this.chanda.root.position.distanceTo(NPC.chanda.altar.pos) < 3) void this.runAltar(rt)
-    // 鏡：塔に近づいたら一言
+    // 鏡：塔に近づいたら一言（チャンダが話す塔は、チャンダがそばへ来て、止まってから）
     if (step === 'mirrors' && !this.busy) {
       this.nearTower = this.towerNear(rt.player.position)
-      if (this.nearTower && !f(MIRROR_FLAGS[this.nearTower])) void this.talkOnce(rt, `tower_${this.nearTower}_near`)
-      if (this.nearTower === 'e' && !this.sc.turntable.solved && this.chanda.root.position.distanceTo(NPC.chanda.tower_e.pos) > 4 && this.walker.speedOf(this.chanda) === 0) {
-        this.chanda.setPose('walk')
-        void this.walker.walkTo(this.chanda, [NPC.chanda.tower_e.pos], 3, K.TURNTABLE).then(() => this.chanda.setPose('idle'))
+      const id = this.nearTower
+      if (id && !f(MIRROR_FLAGS[id])) {
+        // 北：象のりばでは道を見せる演出（dock_look）があるので、池へ出てから
+        if (id === 'n') {
+          if (this.northRoute(rt) !== 'dock') void this.talkOnce(rt, 'tower_n_near')
+        }
+        else if (id === 'e' && this.sc.turntable.solved) this.told.add('tower_e_near')
+        else if (this.chandaAt(rt, id === 'e' ? NPC.chanda.tower_e : NPC.chanda.tower_s, id === 'e' ? K.TURNTABLE : towerPoint(TOWERS.s, 9, 0, 0))) void this.talkOnce(rt, `tower_${id}_near`)
       }
+      // 象のりばへ来たら、北の塔への道を見せる（1 回）
+      if (!f(MIRROR_FLAGS.n) && !this.told.has('dock_look') && Math.hypot(rt.player.position.x - DOCK_TOP.x, rt.player.position.z - DOCK_TOP.z) < 9 && !rt.talking) void this.runDockLook(rt)
     }
     // 夜：のぼっている間、上の台に着いたら
     if (step === 'night' && this.night === 'defend') this.chandaFight(dt, rt)
@@ -776,6 +872,84 @@ export class KhmerStage implements Stage {
     // 帰りの光の輪
     if (this.ringOpen && !this.busy && !rt.talking && rt.player.position.distanceTo(RETURN_RING) < 6) void this.talkOnce(rt, 'return_ring')
     if (this.ringOpen && !this.leaving && rt.player.position.distanceTo(RETURN_RING) < 1.3) this.leave(rt)
+  }
+
+  /**
+   * チャンダがその塔のそばへ来て、止まっているか（まだなら、歩いて来させる）。
+   * 遠くから話しかけない：着いて、ネクマックスが近くにいるときに true
+   */
+  private chandaAt(rt: StageRuntime, spot: Spot, face: THREE.Vector3): boolean {
+    const c = this.chanda.root.position
+    if (c.distanceTo(spot.pos) > 1.5) {
+      if (this.walker.speedOf(this.chanda) === 0) {
+        this.chanda.setPose('walk')
+        void this.walker.walkTo(this.chanda, [spot.pos], 3.4, face).then(() => this.chanda.setPose('idle'))
+      }
+      return false
+    }
+    return this.walker.speedOf(this.chanda) === 0 && c.distanceTo(rt.player.position) < 14
+  }
+
+  /** 案内のとちゅう：ネクマックスが遠くなったら止まって待ち、しばらくしたら呼ぶ。近づいたら歩きだす */
+  private leadWait(dt: number, rt: StageRuntime, leading: boolean): void {
+    if (!leading) {
+      this.chandaWaiting = false
+      return
+    }
+    const d = this.chanda.root.position.distanceTo(rt.player.position)
+    if (!this.chandaWaiting && d > LEAD.wait && this.walker.speedOf(this.chanda) > 0) {
+      this.chandaWaiting = true
+      this.chandaWaitT = 0
+      this.chandaCallT = 0
+    } else if (this.chandaWaiting && d < LEAD.go) this.chandaWaiting = false
+    if (!this.chandaWaiting) return
+    this.chandaWaitT += dt
+    this.chandaCallT -= dt
+    if (this.chandaWaitT > LEAD.callAfter && this.chandaCallT <= 0 && !rt.talking) {
+      this.chandaCallT = LEAD.callEvery
+      this.chanda.setPose('wave')
+      void this.clock.wait(1.6).then(() => {
+        if (this.chanda.pose === 'wave') this.chanda.setPose('idle')
+      })
+      rt.say('チャンダ', this.lines('chanda_call')[0].text, 2.6)
+    }
+  }
+
+  /** 象のりば：北の塔への道を見せる（象に乗って → 池のまん中の家 → 北の塔） */
+  private async runDockLook(rt: StageRuntime): Promise<void> {
+    this.told.add('dock_look')
+    const house = WATER_HOUSES.find((h) => h.id === 'h3') as (typeof WATER_HOUSES)[number]
+    const houseAt = v(house.x, house.floorY + 1.0, house.z)
+    const from = v(DOCK_TOP.x + 1.4, DOCK_TOP.y + 3.2, DOCK_TOP.z + 4.5)
+    void rt.cinematic({ look: houseAt, from, lookTo: v(TOWERS.n.x, TOWERS.n.baseY + 5, TOWERS.n.z), panSec: 4.5, inSec: 1.0, hold: Infinity, outSec: 1.0, fov: 46, marker: { pos: houseAt.clone().setY(houseAt.y + 1.6), label: '池のまん中の家', color: '#ffd76a' } })
+    await this.talk(rt, this.lines('dock_look'))
+    rt.endCinematic()
+  }
+
+  /**
+   * 水に落ちたら、すぐもどす（池の底には当たり判定が無い）。少し前まで象の背中にいたら、その背中へ。
+   * それ以外は、最後に立っていた、動かない地面へ。落ちた所のもどし先（player の killY）も毎フレームここにそろえる
+   * （シェルの「最後に立っていた所」は、象の背中だと、象が先へ行ったあとの空中になり、落ちつづけてしまう）
+   */
+  private fallGuard(rt: StageRuntime, riding: ReturnType<KhmerScene['carryPlayer']>): void {
+    if (this.ura.active) return
+    const pl = rt.player
+    const p = pl.position
+    const el = riding ? (this.sc.elephants.list.find((e) => e.deck === riding) ?? null) : null
+    if (el) {
+      this.rideEl = el
+      this.rideT = rt.playTime
+    } else if (pl.grounded && !pl.isExternal && p.y > K.WATER_Y + 0.25 && !this.sc.bodies.kinematics.some((k) => k.enabled && k.supports(p, 0.2, 0.4))) this.safe.copy(p)
+    const back = this.rideEl && rt.playTime - this.rideT < 8 && this.rideEl.deckTop.distanceTo(p) < 16 ? this.rideEl : null
+    if (back) this.fallTo.copy(back.deckTop).setY(back.deckTop.y + 0.08)
+    else this.fallTo.copy(this.safe)
+    pl.setCheckpoint(this.fallTo)
+    if (pl.isExternal || this.busy) return
+    if ((p.y < SINK_Y && !pl.grounded) || p.y < K.WATER_Y - 0.75) {
+      rt.claw.reset()
+      pl.teleport(this.fallTo.clone().setY(this.fallTo.y + (back ? 0 : 0.3)))
+      rt.shake(0.15)
+    }
   }
 
   private updateFreezables(_rt: StageRuntime, step: KhmerStep): void {
@@ -871,6 +1045,7 @@ export class KhmerStage implements Stage {
     if (best) return best
     // 北の塔：水の上の村の東・象のりば・池の中
     if (p.z < -45 && p.x > -42) return 'n'
+    if (Math.hypot(p.x - DOCK_TOP.x, p.z - DOCK_TOP.z) < 12) return 'n'
     if (Math.hypot(p.x - K.TURNTABLE.x, p.z - K.TURNTABLE.z) < 9) return 'e'
     return null
   }
@@ -878,7 +1053,7 @@ export class KhmerStage implements Stage {
   animate(dt: number, t: number, rt: StageRuntime): void {
     const cam = rt.camera.position
     // 裏側にいる間のチャンダは UraBattle が動かす
-    if (!this.ura.active) this.chanda.update(dt, this.walker.speedOf(this.chanda))
+    if (!this.ura.active) this.chanda.update(dt, this.chandaTalking > 0 || this.chandaWaiting ? 0 : this.walker.speedOf(this.chanda))
     this.grandma.update(dt, this.walker.speedOf(this.grandma))
     if (this.towa.root.visible) {
       this.towaFloat += dt
@@ -923,11 +1098,11 @@ export class KhmerStage implements Stage {
         return true
       }
       if (near(this.grandma.root, 3)) {
-        void rt.dialogue(this.lines('grandma_altar_more'))
+        void this.talk(rt, this.lines('grandma_altar_more'))
         return true
       }
       if (near(this.chanda.root, 2.6)) {
-        void rt.dialogue([{ speaker: 'チャンダ', text: `のこりは、${mirrorsLeft(this.f(rt)).map((id) => ({ n: '北', e: '東', s: '南' })[id]).join('と')}の塔！ アハハ、がんばって！` }])
+        void this.talk(rt, [{ speaker: 'チャンダ', text: `のこりは、${mirrorsLeft(this.f(rt)).map((id) => ({ n: '北', e: '東', s: '南' })[id]).join('と')}の塔！ アハハ、がんばって！` }])
         return true
       }
     }
@@ -965,7 +1140,7 @@ export class KhmerStage implements Stage {
     this.kidBall.position.copy(kid.root.position).add(v(0.4, 0.17, 0.3))
     this.sc.root.add(this.kidBall)
     kid.setPose('cheer')
-    void rt.dialogue(this.lines('kids_ball_back'))
+    void this.talk(rt, this.lines('kids_ball_back'))
   }
 
   // ================================================================ 案内・目標
@@ -991,7 +1166,9 @@ export class KhmerStage implements Stage {
     const u = this.ura.objective(rt)
     if (u) return u
     const step = this.step(rt)
-    return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower, climbed: this.towerClimbed(rt) })
+    const nr = step === 'mirrors' && this.nearTower === 'n' ? this.northRoute(rt) : null
+    const northRide = nr === 'riding' ? (this.ferry.state === 'far' ? 'arrived' : 'riding') : nr === 'h2' || nr === 'h3' || nr === 'h4' ? 'houses' : nr === 'dock' ? 'dock' : undefined
+    return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower, climbed: this.towerClimbed(rt), northRide })
   }
 
   objectiveTarget(rt: StageRuntime): THREE.Vector3 | null {
@@ -1018,6 +1195,7 @@ export class KhmerStage implements Stage {
       case 'mirrors':
         for (const id of mirrorsLeft(this.f(rt))) {
           if (id === 'e' && !this.sc.turntable.solved) out.push({ pos: this.sc.turntable.point.clone().setY(2.6), label: '回る鏡の台' })
+          else if (id === 'n' && this.northMark(rt)) out.push(this.northMark(rt) as ObjectiveMark)
           else out.push({ pos: this.sc.mirrors[id].top.clone().setY(this.sc.mirrors[id].top.y + 1.4), label: `${({ n: '北', e: '東', s: '南' } as const)[id]}の塔の台` })
         }
         break
@@ -1029,6 +1207,41 @@ export class KhmerStage implements Stage {
         break
     }
     return out
+  }
+
+  /** 北の塔への道の、次の目印（島に着いたら null：塔の台を指す） */
+  private northMark(rt: StageRuntime): ObjectiveMark | null {
+    const r = this.northRoute(rt)
+    const hook = (id: string, label: string): ObjectiveMark => ({ pos: HOOK(id).point.clone().setY(HOOK(id).point.y + 0.6), label })
+    switch (r) {
+      case 'dock':
+        return { pos: DOCK_TOP.clone().setY(DOCK_TOP.y + 1.2), label: '象のりば' }
+      case 'riding':
+        return this.ferry.state === 'far' ? hook('h3s', '家の軒の金具') : { pos: this.sc.elephant.baray.deckTop.clone().setY(this.sc.elephant.baray.deckTop.y + 2.2), label: '池の象' }
+      case 'h2':
+        return hook('h3w', '家の軒の金具')
+      case 'h3':
+        return hook('h4w', '家の軒の金具')
+      case 'h4':
+        return { pos: v(18.2, 3.2, -66), label: '島の柱の金具' }
+      default:
+        return null
+    }
+  }
+
+  /** 北の塔への道のどこにいるか（目標の文と目印） */
+  private northRoute(rt: StageRuntime): 'dock' | 'riding' | 'h2' | 'h3' | 'h4' | 'island' | 'water' {
+    const p = rt.player.position
+    const I = K.ISLAND
+    if (p.x > I.x0 && p.x < I.x1 && p.z > I.z0 && p.z < I.z1) return 'island'
+    if (this.sc.rider.riding === this.sc.elephant.baray.deck) return 'riding'
+    for (const id of ['h4', 'h3', 'h2'] as const) {
+      const h = WATER_HOUSES.find((x) => x.id === id) as (typeof WATER_HOUSES)[number]
+      if (Math.abs(p.x - h.x) < h.w / 2 + h.porch + 0.4 && Math.abs(p.z - h.z) < h.d / 2 + h.porch + 0.4 && p.y > h.floorY - 0.5) return id
+    }
+    // 池の上（板の道・ほかの家）にいるときは、象のりばへは呼びもどさない
+    if (p.z < -45 && p.y > 0.8) return 'water'
+    return 'dock'
   }
 
   music(rt: StageRuntime): MusicId | null {
@@ -1043,8 +1256,10 @@ export class KhmerStage implements Stage {
     if (e.kind === 'connected' && e.target.id === KHMER_BALL_ID && !this.ballGiven) rt.hud.toast('子どもたちのところへ持っていこう（F で返す）', 2.6)
   }
 
+  /** 水などに落ちて、シェルが戻したとき：もどし先は fallGuard がそろえている（象の背中か、動かない地面） */
   onRespawn(rt: StageRuntime): void {
-    void rt
+    if (this.ura.active) return
+    rt.claw.reset()
   }
 
   // ================================================================ 開発用
@@ -1109,6 +1324,10 @@ export class KhmerStage implements Stage {
       collapsed: this.sc.stairs.collapsedList,
       ring: this.ringOpen,
       near: this.nearTower,
+      ferry: this.ferry.state,
+      riding: this.sc.rider.riding === this.sc.elephant.baray.deck ? 'baray' : this.sc.rider.riding ? 'road' : null,
+      chandaHold: this.chandaTalking > 0 ? 'talk' : this.chandaWaiting ? 'wait' : null,
+      fence: this.fence?.closed ?? false,
       mobs: this.mobs?.debugInfo() ?? null,
       ...(this.ura?.debug() ?? {}),
     }
@@ -1120,6 +1339,8 @@ export class KhmerStage implements Stage {
     this.curtain?.dispose()
     this.mobs?.dispose()
     this.mobs = null
+    this.fence?.dispose()
+    this.fence = null
     this.maps?.dispose()
     this.ura?.dispose()
     this.sc?.dispose()

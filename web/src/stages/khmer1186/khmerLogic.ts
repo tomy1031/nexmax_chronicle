@@ -330,6 +330,74 @@ export class PingPongWalker {
   }
 }
 
+export type FerryState = 'dock' | 'go' | 'far' | 'back'
+
+/**
+ * 池の象（乗り場 ⇄ 池のまん中の家のそば）の動き方。PingPongWalker を毎フレーム、歩かせる前にあやつる。
+ * ・乗り場：乗るまで待つ（池の方を向いて）。乗って boardSec 秒で歩きだす
+ * ・行き：乗っていなければ、その場で待つ（落ちても置いていかない）。strandSec 秒だれも乗らなければ乗り場へもどる
+ * ・池の家のそば：止まって待つ。降りて（家へうつって）leaveSec 秒で、乗り場へもどる
+ */
+export class FerryLogic {
+  state: FerryState = 'dock'
+  /** その状態で、乗っている／乗っていない時間 */
+  t = 0
+  readonly boardSec: number
+  readonly leaveSec: number
+  readonly strandSec: number
+
+  constructor(boardSec = 0.8, leaveSec = 5, strandSec = 25) {
+    this.boardSec = boardSec
+    this.leaveSec = leaveSec
+    this.strandSec = strandSec
+  }
+
+  /** riding：プレイヤーが背中に乗っている。walker.update の前に呼ぶ */
+  update(dt: number, w: PingPongWalker, riding: boolean): void {
+    this.t += dt
+    w.waitT = 0
+    switch (this.state) {
+      case 'dock': {
+        w.s = 0
+        w.dir = 1
+        w.paused = true
+        w.sampleTo(0, w.pos)
+        // 池の方を向いて待つ（象は向きの方へ、その場でゆっくり回る）
+        const a = w.points[0]
+        const b = w.points[1]
+        const l = Math.hypot(b.x - a.x, b.z - a.z) || 1
+        w.heading.set((b.x - a.x) / l, 0, (b.z - a.z) / l)
+        if (!riding) this.t = 0
+        else if (this.t >= this.boardSec) this.go('go')
+        break
+      }
+      case 'go':
+        w.dir = 1
+        w.paused = !riding
+        if (riding) this.t = 0
+        else if (this.t > this.strandSec) this.go('back')
+        if (w.s >= w.total - 1e-3) this.go('far')
+        break
+      case 'far':
+        w.dir = -1
+        w.paused = true
+        if (riding) this.t = 0
+        else if (this.t > this.leaveSec) this.go('back')
+        break
+      case 'back':
+        w.dir = -1
+        w.paused = false
+        if (w.s <= 1e-3) this.go('dock')
+        break
+    }
+  }
+
+  private go(s: FerryState): void {
+    this.state = s
+    this.t = 0
+  }
+}
+
 // ------------------------------------------------------------------ 大階段
 
 /** 大階段の区切り i（0 が下）の範囲：x（西→東）と高さ。区切りがくずれると、上面は y0 の平らな所になる */

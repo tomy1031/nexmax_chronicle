@@ -120,7 +120,8 @@ export type KhmerScene = {
   /** 物理ができた後に 1 回（begin(rt) で rt.phys を渡す） */
   attachPhysics(phys: Physics): void
   /** 動く足場にプレイヤーを乗せて運ぶ（ステージの update で、プレイヤーの更新の後に） */
-  carryPlayer(player: PlayerController): KinematicBox | null
+  /** 動く足場（象の背中）に乗っていたら運ぶ。moving：プレイヤーが歩く入力をしている（していなければ、足場の上の同じ所に置き直す） */
+  carryPlayer(player: PlayerController, moving?: boolean): KinematicBox | null
   /** 「止める」で狙えるもの（回る鏡の台・落ちてくる石） */
   freezables(): Freezable[]
   /** 塔の上に鏡を立てる・光の筋をアルンへ（夜明け） */
@@ -309,8 +310,8 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
     attachPhysics(phys: Physics) {
       bodies.attach(phys)
     },
-    carryPlayer(player: PlayerController) {
-      return rider.carry(player, herd.decks)
+    carryPlayer(player: PlayerController, moving = false) {
+      return rider.carry(player, herd.decks, moving)
     },
     freezables() {
       return [turntable.freezable(), ...towerStones.map((s) => s.freezable()), ...stairs.stones.map((s) => s.freezable())]

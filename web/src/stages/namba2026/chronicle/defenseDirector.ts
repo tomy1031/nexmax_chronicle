@@ -85,6 +85,7 @@ export class DefenseDirector {
   private sayCd = 0
   private darkHitCd = 0
   private handT = 0
+  private glowT = 0
   private hintBest = -1
   private readonly hands: ShadowHands
   private lowSaid = false
@@ -260,6 +261,9 @@ export class DefenseDirector {
     if (ok) {
       this.stats.triggers++
       this.rt.shake(0.06)
+      // 影が輪の中にいたら、光が広がる間にひるむ（叩きつけの溜めも止まる。「今や！」で押せば、いつでも間に合う）
+      const h = this.big
+      if (h && h.alive && this.phase === 'big' && inRing(this.ns.lightPosts.center(i), h.pos)) h.brain.stun(LIGHT_TUNING.rise + 0.15)
     }
     return ok
   }
@@ -424,10 +428,16 @@ export class DefenseDirector {
       } else {
         const L = posts.logic(this.caughtBy)
         h.brain.stun(Math.max(0.2, L.left + 0.1))
-        // 光の輪の中にとどめる（まん中へ少しずつ）
+        // 光の中で、まぶしそうにちらちら光る（弱っている）
+        this.glowT -= dt
+        if (this.glowT <= 0) {
+          this.glowT = 0.55
+          h.model.hit()
+        }
+        // パンチで光の輪の外へ押し出されたら、ふちの内へもどす（ネクマックスに重ならない所だけ）
         const c = posts.center(this.caughtBy)
         const d = Math.hypot(h.pos.x - c.x, h.pos.z - c.z)
-        if (d > LIGHT_TUNING.radius * 0.7) {
+        if (d > LIGHT_TUNING.radius && Math.hypot(P.x - h.pos.x, P.z - h.pos.z) > 2.0) {
           h.pos.x += (c.x - h.pos.x) * Math.min(1, dt * 1.5)
           h.pos.z += (c.z - h.pos.z) * Math.min(1, dt * 1.5)
         }

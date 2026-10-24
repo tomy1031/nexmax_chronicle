@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { STONE_CANDIDATES, IDO_RECORDS, SEARCH_WORDS, checkedCount, matchedWords, recordOfKanban, searchRecords } from "../src/stages/namba2026/chronicle/idoSearchLogic";
 import { ALLEY_PALETTES, ALLEY_PHASES, phaseMix, sunDirection } from "../src/stages/namba2026/chronicle/alleyTime";
 import { DEFENSE_WAVES, SHRINE_HITS, ShrineGuard, damageStage, dueSpawns, guardLevel, waveCount } from "../src/stages/namba2026/chronicle/shrineGuard";
-import { ALLEY_V7, DEFENSE, KANBAN, LOT, SHRINE, SPOTS_V7, V7_SPAWNS } from "../src/stages/namba2026/chronicle/layoutV7";
+import { ALLEY_V7, ARMOR_SOURCES, DEFENSE, FENCE_V7, KANBAN, LOT, PILLARS, SHRINE, SPOTS_V7, V7_SPAWNS } from "../src/stages/namba2026/chronicle/layoutV7";
+import { insidePoly } from "../src/chronicle/kit/arenaLogic";
 import { N } from "../src/stages/namba2026/layout";
 
 describe("IDO 検索（6 章）", () => {
@@ -184,5 +185,32 @@ describe("v7 の配置", () => {
     const p = SPOTS_V7.matsuiToKanban;
     expect(p[0].equals(SPOTS_V7.matsuiShrine.pos)).toBe(true);
     expect(p[p.length - 1].equals(SPOTS_V7.matsuiProject.pos)).toBe(true);
+  });
+});
+
+describe("戦いの柵（ArenaFence。ボスの間は戦う場所の外へ行けない）", () => {
+  const inside = (pts: readonly { x: number; z: number }[], p: { x: number; z: number }) => insidePoly(pts, p.x, p.z);
+
+  it("6 章：影獣の戦いの場所・やり直しの位置・ぶつける柱・社長と佐伯さんは柵の中。ビルの中（z 11 より奥）は外", () => {
+    const F = FENCE_V7.beast;
+    expect(inside(F, { x: 2.6, z: 4.4 })).toBe(true);
+    expect(inside(F, { x: -0.4, z: 9.0 })).toBe(true);
+    for (const p of PILLARS) expect(inside(F, p.pos), p.id).toBe(true);
+    for (const a of ARMOR_SOURCES) expect(inside(F, a.pos), a.id).toBe(true);
+    for (const s of [SPOTS_V7.matsuiFight, SPOTS_V7.saekiSafe]) expect(inside(F, s.pos)).toBe(true);
+    expect(inside(F, { x: -10, z: 12 })).toBe(false);
+    expect(inside(F, { x: 13, z: 8 })).toBe(false);
+  });
+
+  it("9 章：影の出口（路地の口・トンネル）・大きな影・ほこら・かんばんは柵の中。表の通りは外", () => {
+    const F = FENCE_V7.lot;
+    for (const p of [...DEFENSE.spawns.north, ...DEFENSE.spawns.south]) expect(inside(F, p)).toBe(true);
+    for (const c of DEFENSE.darkCorners) expect(inside(F, c)).toBe(true);
+    expect(inside(F, SHRINE.front)).toBe(true);
+    expect(inside(F, KANBAN.c.pos)).toBe(true);
+    expect(inside(F, V7_SPAWNS.v7_shrine.pos)).toBe(true);
+    expect(inside(F, SPOTS_V7.matsuiProject.pos)).toBe(true);
+    expect(inside(F, { x: 16.5, z: 9.0 })).toBe(false);
+    expect(inside(F, { x: 19.6, z: 31.0 })).toBe(false);
   });
 });

@@ -22,7 +22,7 @@ import type { EnemyHandle } from '../../../combat/combatSystem'
 import type { MusicId } from '../../../audio/tracks'
 import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from '../../../game/stage'
 import { SceneClock } from '../../../chronicle/kit/clock'
-import { ArenaFence, rectPoints } from '../../../chronicle/kit/arena'
+import { ArenaFence } from '../../../chronicle/kit/arena'
 import { Walker } from '../../../chronicle/kit/walker'
 import { Curtain } from '../../../chronicle/kit/curtain'
 import { KinematicBox } from '../../../chronicle/kit/kinematic'
@@ -42,7 +42,7 @@ import { V7_ART, loadArtCanvas } from '../../../chronicle/art'
 import { IDO_RECORDS, SEARCH_WORDS, recordOfKanban } from './idoSearchLogic'
 import { createOfujiPlaceholder } from './ofuji'
 import { DefenseDirector } from './defenseDirector'
-import { ARMOR_SOURCES, KANBAN, LAB, SHRINE, SPOTS_V7, V7_SPAWNS, type KanbanId } from './layoutV7'
+import { ARMOR_SOURCES, FENCE_V7 as FENCE, KANBAN, LAB, SHRINE, SPOTS_V7, V7_SPAWNS, type KanbanId } from './layoutV7'
 import { KANBAN_RECORD, STEP_SPAWN, STEP_TIME, combatStep, nambaV7Objective, nambaV7Step, stepMusic, type NambaV7Ctx, type NambaV7Step } from './storyNamba'
 import { BEAST_STATS, BeastFight, type BeastHandle } from './beastFight'
 import { BEAST_TUNING, beastBossName } from './beastLogic'
@@ -60,12 +60,6 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 /** よろいの影獣（6 章）：はじめに動かない秒・体力 0 で戻るときのやり直しの位置（水辺の広場の東。看板の柱のそば） */
 const BEAST = { firstStun: 2.0, retry: v(2.6, 0, 4.4) }
 
-/** 戦う場所の柵（chronicle/kit/arena.ts）。6 章：NEXTMAKE の前の水辺の広場と遊歩道（ビルの中・橋の向こうへ行かない）。
- *  9 章：路地のおくの空き地（路地の口・トンネル路地の外へ行かない） */
-const FENCE = {
-  beast: rectPoints(-22.6, 7.9, 1.0, 10.82),
-  lot: rectPoints(11.05, 22.35, 20.08, 27.3),
-}
 
 type Spot = { pos: THREE.Vector3; face: THREE.Vector3 }
 type Person = Character

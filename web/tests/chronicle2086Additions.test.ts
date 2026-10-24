@@ -6,8 +6,10 @@ import { DEBRIS_WARN, HAND_NORTH, HAND_AWAY, gearHookAngle, gearHookInWindow, ge
 import { B_SOUTH_Z, E_SOUTH_Z, SECTION, SWING_ASSIST, WALL_HAND, climbPhase, nearWall, sectionAt, swingAssist, swingOf, swingTarget } from '../src/stages/future2086/chronicle/towerClimb'
 import { swingGuidePath } from '../src/stages/future2086/chronicle/towerSwings'
 import * as THREE from 'three'
-import { YearDialLogic } from '../src/stages/future2086/chronicle/yearDialLogic'
+import { DIAL_ANCHORS, DIAL_SNAP_DEG, YearDialLogic, angleToYear, yearToAngle } from '../src/stages/future2086/chronicle/yearDialLogic'
 import { F } from '../src/stages/future2086/layout'
+import { ARENAS_2086 } from '../src/stages/future2086/chronicle/arenas2086'
+import { insidePoly } from '../src/chronicle/kit/arenaLogic'
 
 /** プレイヤーの跳べる高さ（player/controller.ts の jump 5.6・gravity 17 → 約 0.92m） */
 const JUMP_H = (5.6 * 5.6) / (2 * 17)
@@ -320,11 +322,12 @@ describe('年代ダイヤル', () => {
     expect(d.year).toBe(2026)
     expect(d.locked).toBe(true)
     expect(d.match).toBe(1)
-    expect(d.detune).toBe(0)
+    expect(d.near).toBe(1)
   })
-  it('ずれるほど、そろい具合が下がる', () => {
+  it('ずれるほど、そろい具合と近さが下がる', () => {
     const d = new YearDialLogic({ start: 2026, target: 2026 })
     const m0 = d.match
+    const n0 = d.near
     d.step(1)
     const m1 = d.match
     for (let i = 0; i < 9; i++) d.step(1)
@@ -332,23 +335,120 @@ describe('年代ダイヤル', () => {
     expect(m0).toBeGreaterThan(m1)
     expect(m1).toBeGreaterThan(m10)
     expect(m10).toBeLessThan(0.1)
+    expect(d.near).toBeLessThan(n0)
+    // 遠い年（1186 年から見た 2086 年）は、近さ 0
+    expect(new YearDialLogic({ start: 2086, target: 1186 }).near).toBe(0)
   })
-  it('押し続けると速くなり、2086 年から 1186 年まで 15 秒以内に届く。目当ての近くでは速くならない', () => {
+  it('押し続けると速くなり、2086 年から 1186 年まで 7 秒以内。通りこさずに、ぴたりと止まる', () => {
     const d = new YearDialLogic({ start: 2086, target: 1186 })
     let t = 0
-    while (d.year > 1186 + 30 && t < 30) {
+    while (!d.locked && t < 30) {
+      d.hold(-1, 1 / 30)
+      t += 1 / 30
+      expect(d.year).toBeGreaterThanOrEqual(1186)
+    }
+    expect(d.locked).toBe(true)
+    expect(t).toBeLessThan(7)
+    // 押したままでは、そこから動かない
+    for (let i = 0; i < 60; i++) d.hold(-1, 1 / 30)
+    expect(d.year).toBe(1186)
+    // 離して、もう一度押すと動く（はじめは 1 年）
+    d.hold(0, 1 / 30)
+    d.hold(-1, 1 / 30)
+    expect(d.year).toBe(1185)
+  })
+  it('2086 年から 2026 年へは、押しっぱなしで 3 秒以内に合う', () => {
+    const d = new YearDialLogic({ start: 2086, target: 2026 })
+    let t = 0
+    while (!d.locked && t < 30) {
       d.hold(-1, 1 / 30)
       t += 1 / 30
     }
-    expect(t).toBeLessThan(15)
-    const y0 = d.year
-    for (let i = 0; i < 30; i++) d.hold(-1, 1 / 30)
-    expect(y0 - d.year).toBeLessThanOrEqual(9)
-    d.hold(0, 1 / 30)
+    expect(d.locked).toBe(true)
+    expect(t).toBeLessThan(3)
+  })
+  it('目当ての年に近づくと、ゆっくりになる', () => {
+    const d = new YearDialLogic({ start: 2086, target: 1186 })
+    // 2 秒押して、いちばん速い所の 1 フレームの歩み
+    for (let i = 0; i < 60; i++) d.hold(-1, 1 / 30)
+    let y = d.year
+    d.hold(-1, 1 / 30)
+    const farStep = y - d.year
+    // 目当ての 12 年手前の 1 フレームの歩み
+    d.year = 1186 + 12
+    y = d.year
+    d.hold(-1, 1 / 30)
+    const nearStep = y - d.year
+    expect(nearStep).toBeGreaterThan(0)
+    expect(nearStep).toBeLessThan(farStep / 4)
   })
   it('範囲の外へは回らない', () => {
     const d = new YearDialLogic({ start: 2086, target: 2026 })
     d.step(1)
     expect(d.year).toBe(2086)
+  })
+  it('指でなぞると、目当ての年の近くでは、すいつく', () => {
+    const d = new YearDialLogic({ start: 2086, target: 1186 })
+    d.setYear(angleToYear(yearToAngle(1186) + DIAL_SNAP_DEG - 1))
+    expect(d.year).toBe(1186)
+    d.setYear(1500)
+    expect(d.year).toBe(1500)
+    d.setYear(1190, false)
+    expect(d.year).toBe(1190)
+  })
+  it('目もりの角度：昔が左（-）・今が右（+）。年と角度は行き来できる', () => {
+    expect(yearToAngle(2086)).toBeGreaterThan(yearToAngle(2026))
+    expect(yearToAngle(2026)).toBeGreaterThan(yearToAngle(1726))
+    expect(yearToAngle(1726)).toBeGreaterThan(yearToAngle(1186))
+    expect(yearToAngle(1186)).toBeLessThan(0)
+    expect(yearToAngle(2026)).toBeGreaterThan(0)
+    for (const [y, a] of DIAL_ANCHORS) {
+      expect(yearToAngle(y)).toBeCloseTo(a, 6)
+      expect(angleToYear(a)).toBe(y)
+    }
+    for (let y = 1100; y <= 2086; y += 7) expect(Math.abs(angleToYear(yearToAngle(y)) - y)).toBeLessThanOrEqual(1)
+    // 行ける年どうしは、ダイヤルの上で 40° 以上はなれている（指で押しやすい）
+    const ys = [1186, 1726, 2026, 2086]
+    for (let i = 1; i < ys.length; i++) expect(yearToAngle(ys[i]) - yearToAngle(ys[i - 1])).toBeGreaterThanOrEqual(40)
+  })
+})
+
+describe('戦いの柵の形（arenas2086）', () => {
+  const inC = (x: number, z: number) => insidePoly(ARENAS_2086.courtyard, x, z)
+  const inP = (x: number, z: number) => insidePoly(ARENAS_2086.plaza, x, z)
+  it('中庭の決闘：はじまりの位置・影の出る所・トワの下・ほこらの前は中。門・通り・縁側・北の棟は外', () => {
+    for (const [x, z] of [
+      [13.4, -40.8],
+      [13.4, -42.4],
+      [13.4, -46.4],
+      [15.6, -38.4],
+      [SITE.shrine.pos.x + 1.6, SITE.shrine.pos.z],
+    ])
+      expect(inC(x, z), `${x},${z}`).toBe(true)
+    // 影の出る輪（中心 13.4,-42.4・横 3.2・たて 2.6）
+    for (let a = 0; a < Math.PI * 2; a += 0.3) expect(inC(13.4 + Math.cos(a) * 3.2, -42.4 + Math.sin(a) * 2.6)).toBe(true)
+    expect(inC((SITE.gate.x0 + SITE.gate.x1) / 2, (SITE.gate.z0 + SITE.gate.z1) / 2)).toBe(false)
+    expect(inC(3.0, -39.0)).toBe(false)
+    expect(inC(SITE.toolbox.deck.x0 + 0.4, -42)).toBe(false)
+    expect(inC(14, SITE.yard.z0 - 0.3)).toBe(false)
+  })
+  it('最後の夜の広場：はじまりの位置・ソラの立つ所は中。ブースのわっか・屋台・ステージ・南のゲートは外', () => {
+    for (const [x, z] of [
+      [0.9, 6.4],
+      [-1.0, 8.2],
+      [2.4, 7.0],
+    ])
+      expect(inP(x, z), `${x},${z}`).toBe(true)
+    expect(inP(F.PORTAL.x, F.PORTAL.z)).toBe(false)
+    for (const z of F.STALLS.zs) expect(inP(F.STALLS.x - F.STALLS.d / 2, z)).toBe(false)
+    expect(inP((F.STAGE.x0 + F.STAGE.x1) / 2, (F.STAGE.z0 + F.STAGE.z1) / 2)).toBe(false)
+    expect(inP(0, F.SOUTH_GATE.z0)).toBe(false)
+    // 黒い手がのびてくる 3 か所（はじまりの位置からの足し算。stage.ts の startHands）
+    for (const [dx, dz] of [
+      [4, -3],
+      [-4.5, -1],
+      [0.5, 4.5],
+    ])
+      expect(inP(0.9 + dx, 6.4 + dz)).toBe(true)
   })
 })

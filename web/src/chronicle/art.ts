@@ -38,23 +38,53 @@ export const V7_TEXTURES = {
   khmerSandstone: base('story/v7/khmer_sandstone.webp'),
 } as const
 
-/** 会話の顔（話者名 → 絵）。話者名は台詞の JSON の speaker と同じにする */
+/**
+ * 会話の顔（話者名 → 絵。全員分。384px の正方形）。話者名は台詞の JSON の speaker と同じにする。
+ * 同じ人の言いかえ（「ソラ（通信）」「量産型NEXMAX No.33」など）は、ui/future/speakerIcons.ts の正規表現で同じ絵になる。
+ * ネクマックスの表情は「ネクマックス#happy」のように # のあとに付ける（speakerIcons.ts の dialogFaceName）。
+ */
 export const V7_PORTRAITS: Readonly<Record<string, string>> = {
-  トワ: base('portraits/towa_mask.webp'),
+  ネクマックス: base('portraits/nexmax.webp'),
+  'ネクマックス#happy': base('portraits/nexmax_happy.webp'),
+  'ネクマックス#surprised': base('portraits/nexmax_surprised.webp'),
+  'ネクマックス#worried': base('portraits/nexmax_worried.webp'),
+  ソラ: base('portraits/sora.webp'),
+  'ソラ（8歳）': base('portraits/sora_child.webp'),
+  マツイ社長: base('portraits/matsui.webp'),
+  佐伯: base('portraits/saeki.webp'),
+  '佐伯（2068年）': base('portraits/saeki_old.webp'),
+  源兵衛: base('portraits/genbei.webp'),
+  おはる: base('portraits/oharu.webp'),
+  量産型NEXMAX: base('portraits/unit.webp'),
+  トワのお母さん: base('portraits/towa_mother.webp'),
   仮面の男: base('portraits/towa_mask.webp'),
+  トワ: base('portraits/towa_mask.webp'),
   'トワ（小さいころ）': base('portraits/towa_child.webp'),
   チャンダ: base('portraits/chanda.webp'),
   チャンダのおばあさん: base('portraits/elder.webp'),
   おふじ: base('portraits/ofuji.webp'),
-  '佐伯（2068年）': base('portraits/saeki_old.webp'),
 }
 
 /** 仮面を外したトワの顔（12 章の結末から。stage が rt.hud.setSpeakerIcon('トワ', TOWA_UNMASKED) で差しかえる） */
 export const TOWA_UNMASKED = base('portraits/towa.webp')
 
-/** 会話の顔のイラストを HUD に入れる（シェルが起動時に 1 回） */
+/** 先に読んでおいた絵（読み終わるまで手放さない） */
+const warmed: HTMLImageElement[] = []
+
+/**
+ * 会話の顔のイラストを HUD に入れる（シェルが起動時に 1 回）。
+ * 絵は小さい（1 枚 20KB ほど）ので、ここで全部を先に読んでおき、最初の会話からすぐ出るようにする。
+ */
 export function applyV7Portraits(hud: Pick<Hud, 'setSpeakerIcon'>): void {
   for (const [name, url] of Object.entries(V7_PORTRAITS)) hud.setSpeakerIcon(name, url)
+  if (typeof Image === 'undefined' || warmed.length) return
+  for (const url of new Set([...Object.values(V7_PORTRAITS), TOWA_UNMASKED])) {
+    const img = new Image()
+    img.decoding = 'async'
+    img.setAttribute('fetchpriority', 'low')
+    img.src = url
+    warmed.push(img)
+  }
 }
 
 /** 絵をキャンバスに読む（hud.showIdo の image 用）。読めなければ null */

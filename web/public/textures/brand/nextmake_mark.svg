@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 355 280">
+  <!-- NEXTMAKE の印：三つの直角三角形で「M」。奥から右の濃い青・まん中の明るい青・左の濃い青 -->
+  <polygon points="355,0 355,280 46,280" fill="#0a5aa0"/>
+  <polygon points="80,25 80,280 310,280" fill="#0a8ad0"/>
+  <polygon points="0,100 0,280 190,280" fill="#0a5aa0"/>
+</svg>

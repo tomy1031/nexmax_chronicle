@@ -1,7 +1,7 @@
 /* 戦闘（combatSystem.ts）：体力 0 のときの暗転と、ボスの体力 */
 .combat-fade { position: absolute; inset: 0; background: #05030c; opacity: 0; pointer-events: none; z-index: 4; }
 .combat-boss {
-  position: absolute; left: 50%; top: calc(var(--nx-top, 0px) + 9vh); transform: translateX(-50%); width: min(560px, 62vw);
+  position: absolute; left: 50%; top: calc(var(--nx-top, 0px) + max(12.5vh, 64px)); transform: translateX(-50%); width: min(560px, 62vw);
   pointer-events: none; font-family: var(--ui-font); color: #fff; text-align: center; z-index: 3; animation: combat-boss-in 0.5s ease-out;
 }
 @keyframes combat-boss-in { from { opacity: 0; transform: translate(-50%, -8px); } }

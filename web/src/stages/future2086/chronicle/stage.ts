@@ -13,7 +13,7 @@ import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadConte
 import { autoFramePosition, type CineShot } from '../../../game/cinematic'
 import type { ActionFrame } from '../../../player/inputActions'
 import { toTouchText } from '../../../player/touchLogic'
-import type { WireEvent } from '../../../player/clawLogic'
+import type { ClawTargetDef, WireEvent } from '../../../player/clawLogic'
 import type { Hint } from '../../../ui/hud'
 import type { Character } from '../../../world/characters'
 import type { MusicId } from '../../../audio/tracks'
@@ -21,6 +21,7 @@ import { SceneClock } from '../../../chronicle/kit/clock'
 import { Walker, faceYaw } from '../../../chronicle/kit/walker'
 import { Curtain } from '../../../chronicle/kit/curtain'
 import { ChoiceBox } from '../../../chronicle/kit/choice'
+import { ArenaFence, rectPoints } from '../../../chronicle/kit/arena'
 import { lightsLeft, type Flags } from '../../../chronicle/progress'
 import { V7_ART, TOWA_UNMASKED, loadArtCanvas } from '../../../chronicle/art'
 import { BlackHands, Lamp, SHADE_STYLE, createPerson, type PersonCharacter } from '../../../chronicle/visuals'
@@ -38,6 +39,8 @@ import { INTRO_LAYOUT } from '../introProps2086'
 import { buildChronicleFuture, type ChronicleAdditions } from './additions'
 import { CHRONICLE_SPOTS, COURSE, SITE, TOWER, UNDER, chronicleKillY } from './layoutChronicle'
 import { QR_RECORDS, dialRecord, type QrRecord } from './qrStand'
+import { IdoVr, recordViewOf } from './idoVr'
+import { VrVisitors } from './vrFolk'
 import { SECTION, TowerClimb } from './towerClimb'
 import { SlamRings } from './slamRing'
 import { MobTalkV7, mobPhaseV7 } from './mobTalkV7'
@@ -110,6 +113,28 @@ export class ChronicleFutureStage implements Stage {
   private climbT0 = 0
   /** 町の人のおしゃべり */
   private mob: MobTalkV7 | null = null
+  /**
+   * 戦い・追いかけの間の柵（chronicle/kit/arena.ts）：2 章の夜の広場・4 章の地下・4 章の時計台の屋上。
+   * 場面に関係ない所へ行けない・てっぺんから落ちられないように。朝にもどる（prepare）と開く
+   */
+  private fence: ArenaFence | null = null
+  /** 4 章のてっぺん：トワの手さげランプ（クローでねらう。とどくと影の手がはらいのける） */
+  private lampDef!: ClawTargetDef
+  private lampGrab: (() => void) | null = null
+  /** はらいのける間は、クローの先（lampDef.point）をステージが動かす */
+  private lampHold = false
+  /** IDO の VR（物語 v7.2）：QR を読むと、ネクマックスの見ている景色が記録の町になる（少し上から、見回すだけ） */
+  private vr!: IdoVr
+  /** ソラのブースのまわりの、ゴーグルで昔を見ているお客さん */
+  private vrVisitors!: VrVisitors
+  /** 見回している間：F・タップでおわる */
+  private vrDone: (() => void) | null = null
+  /** 見ている間に、歩こう・つかもうとした（「見えるだけ」の案内は 1 回だけ） */
+  private vrTried = false
+  /** 見ていた景色の中へ落ちていく間（見回す案内を出さない） */
+  private vrFalling = false
+  /** 見ている間にねらえなくした的と、もとの enabled */
+  private vrTargets: Array<[ClawTargetDef, boolean]> | null = null
 
   // ---- 進み
   private rt: StageRuntime | null = null
@@ -206,6 +231,8 @@ export class ChronicleFutureStage implements Stage {
     this.props.screen.setOn(true, true)
     this.beam = new ScanBeam(fs.root)
     this.ring = new RingRecord(fs.root)
+    this.vr = new IdoVr(fs.root, mats, ctx.quality)
+    this.vrVisitors = new VrVisitors(fs.root, fs.colliders)
     this.lens = new LensMount(fs.root)
     this.tear = new SkyTear(fs.root)
     this.sky = new SkyEvent(this.tear, fs.orum)
@@ -216,6 +243,9 @@ export class ChronicleFutureStage implements Stage {
     this.towa.holdLamp(this.lamp)
     this.towa.root.visible = false
     fs.root.add(this.towa.root)
+    // 4 章のてっぺんでねらうランプ（ふだんはねらえない。物を引きよせる的だが、とどいたら場面がはらいのける）
+    this.lampDef = { id: 'towa_lamp', type: 'pull_object', label: 'ランプ', point: new THREE.Vector3(), radius: 0.35, enabled: false, noLineOfSight: true, priority: 1, range: 12 }
+    fs.claw.targets.push(this.lampDef)
     // 12 章の裏側（足場の当たり判定を足すので load で組む。x = +3000 の遠く）
     this.ura = UraBattle.build({ root: fs.root, colliders: fs.colliders, scenario: 'final', quality: ctx.quality })
     ctx.progress(0.8, 'ソラを読み込み中…')
@@ -253,6 +283,8 @@ export class ChronicleFutureStage implements Stage {
     this.dialPanel = new YearDialPanel(this.ui)
     this.fx = new LoopFx(rt.camera, rt.scene)
     this.ch.attachPhysics(rt.phys)
+    this.fence = new ArenaFence(this.fs.root, rt.phys)
+    if (this.ui) this.vr.attachUi(this.ui)
     this.mob = new MobTalkV7(this.fs, [this.ch.stallUnit], this.ui, rt.camera)
     // 時代を移って着いた：帰還のフラグ（光のつぶが 1 つへる）
     const back = arrivalFlag(this.f)
@@ -315,6 +347,11 @@ export class ChronicleFutureStage implements Stage {
     this.ch.tower.setTime(part === 'morning' ? 10 : part === 'evening' ? 17 : 20, part === 'night' ? 40 : 30)
     this.ch.tower.setNextHook(null)
     this.ch.tower.setSkySeam(0)
+    this.fence?.open(true)
+    this.lampDef.enabled = false
+    this.lampHold = false
+    // ゴーグルのお客さんは、昼と夕方だけ（夜は展示がおしまい）
+    this.vrVisitors.setVisible(part !== 'night')
   }
 
   private newsFor(day: number) {
@@ -662,9 +699,9 @@ export class ChronicleFutureStage implements Stage {
   // ================================================================== 毎朝の型
 
   /**
-   * 街頭ビジョン → 風船（毎朝同じ電灯に引っかかる）→ 選ぶ（風船を取ってあげる／ソラのところへ行く）。day は何度目の 10月18日。
-   * 2 度目の朝からは、同じ場面を短く見せて F・タップでとばせる。選ぶ画面は「ソラのところへ行く」が先（F 1 回で進める）。
-   * 取ってあげると選んだら true
+   * 街頭ビジョン → 風船（毎朝同じ電灯に引っかかる）→ 1 度目の朝だけ選ぶ（風船を取ってあげる／ソラのところへ行く）。day は何度目の 10月18日。
+   * 2 度目の朝からは（物語 v7.2）、同じ場面を短く見せて F・タップでとばせる。選ぶ画面は出さず、目標はソラ。
+   * 風船は、取りたければ J で取って男の子にわたせる（目標にはしない）。取ってあげると選んだら true
    */
   private async runMorning(rt: StageRuntime, day: number): Promise<boolean> {
     this.lock(rt, true)
@@ -700,11 +737,17 @@ export class ChronicleFutureStage implements Stage {
     // カメラがもどりきってから選ぶ画面を出す（もどる間の F はシェルが受け取らないので、押しても決まらない）
     await this.until(() => !rt.inCinematic)
     if (!this.alive) return false
+    // 2 度目の朝から：選ばない。風船は電灯に引っかかったまま、取りたければ取れる（ソラのところへ行くとちゅうで）
+    if (loop) {
+      this.props.balloon.def.enabled = true
+      this.lock(rt, false)
+      return false
+    }
     this.setPhase('balloon_choice')
-    const take = (await this.askChoice(rt, 'balloon', '男の子の風船が、電灯に引っかかっている……', loop ? [BALLOON_OPT.go, BALLOON_OPT.take] : [BALLOON_OPT.take, BALLOON_OPT.go])) === 'take'
+    const take = (await this.askChoice(rt, 'balloon', '男の子の風船が、電灯に引っかかっている……', [BALLOON_OPT.take, BALLOON_OPT.go])) === 'take'
     if (!this.alive) return false
     if (take) await this.talk(rt, 'balloon_take')
-    else await this.talk(rt, loop ? 'balloon_leave_loop' : 'balloon_leave')
+    else await this.talk(rt, 'balloon_leave')
     // 取ってあげないときは、風船は電灯に引っかかったまま（ねらえない）
     this.props.balloon.def.enabled = take
     this.lock(rt, false)
@@ -756,6 +799,24 @@ export class ChronicleFutureStage implements Stage {
     if (thanks) void this.talk(rt, first && !this.f('v7_rewind1') ? 'balloon_back' : 'balloon_back_loop')
   }
 
+  /**
+   * くり返しの朝（2 度目から）：ソラのところへ。風船は目標にしないが、とちゅうで取って持っていたら、男の子の目印も出す
+   * （わたすのは男の子のそばで F。interact）
+   */
+  private async goSoraLoop(rt: StageRuntime): Promise<void> {
+    const sora = this.sora.root.position
+    const soraMark: ObjectiveMark = { pos: sora.clone().setY(sora.y + 1.9), label: 'ソラ' }
+    const kidMark: ObjectiveMark = { pos: BALLOON_KID.clone().setY(1.6), label: '男の子' }
+    this.setPhase('loop_greet', [soraMark])
+    await this.until(
+      () => {
+        this.marks = this.balloon === 'carry' ? [soraMark, kidMark] : [soraMark]
+        return Math.hypot(rt.player.position.x - sora.x, rt.player.position.z - sora.z) < 3.4 && Math.abs(rt.player.position.y - sora.y) < 3
+      },
+      () => this.teleport(rt, sora.clone().add(v(1.0, 0, 1.0)), faceYaw(sora.clone().add(v(1.0, 0, 1.0)), sora)),
+    )
+  }
+
   /** 会話の場面に入る前：持っている風船は、だまって男の子へ返す（持ったまま場面が進まないように） */
   private settleBalloon(rt: StageRuntime): void {
     if (this.balloon === 'carry') this.giveBalloon(rt, false)
@@ -777,7 +838,8 @@ export class ChronicleFutureStage implements Stage {
     this.lock(rt, true)
     this.settleBalloon(rt)
     this.walker.face(this.sora, rt.player.position)
-    await this.talkShot(rt, 'ch1_greet', F.PORTAL.y > 0 ? v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z) : sora, undefined, { fov: 52 })
+    // ゴーグルをつけて昔の町を見ているお客さん（IDO は VR。わっかは、その景色がまわりにも見える板）
+    await this.talkShot(rt, 'ch1_greet', this.vrVisitors.center.clone(), this.vrVisitors.center.clone().add(v(3.4, 0.6, 3.2)), { fov: 50 })
     // 箱の山のいちばん上のレンズを見せる
     void this.cine(rt, FOCUS_SHOTS.lens({ player: rt.player.position, lens: this.lensObject?.position.clone() ?? this.fs.markers.lens.clone(), short: true }))
     await this.wait(2.6)
@@ -972,13 +1034,13 @@ export class ChronicleFutureStage implements Stage {
     this.lock(rt, false)
     await this.readQr(rt, QR_RECORDS.edo1726, 'qr_demo')
     if (!this.alive) return
-    // わっかの中に、300 年前の瓦屋根の路地が組み上がる
+    // ネクマックスの見ている景色が、300 年前の路地になる（少し上から。見回すだけ。わっかには、その景色がうつる）
     this.ring.show('edo1726', 2.6)
-    const ringC = v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z)
-    void this.cine(rt, { look: ringC, from: ringC.clone().add(v(Math.sin(F.PORTAL.yaw) * 5.2 + 1.2, -0.6, Math.cos(F.PORTAL.yaw) * 5.2 + 0.4)), hold: Infinity, inSec: 1.2, fov: 50 })
-    await this.wait(2.6)
+    await this.enterVr(rt, QR_RECORDS.edo1726)
     await this.talk(rt, 'ch1_qr')
-    rt.endCinematic()
+    await this.lookAround(rt, 'ch1_qr_look')
+    if (!this.alive) return
+    await this.exitVr(rt)
     this.ring.showVisitor()
     qr.setRecord(QR_RECORDS.idle)
     this.set(rt, 'v7_qr_demo')
@@ -1010,6 +1072,121 @@ export class ChronicleFutureStage implements Stage {
     qr.setScan(0)
     qr.setNear(0)
     rt.endCinematic()
+  }
+
+  // ================================================================== IDO の VR（物語 v7.2）
+
+  /** 記録の名前の札（画面の下のまん中） */
+  private vrCaption(rec: QrRecord): string {
+    return `IDO　${rec.era}　${rec.title}`
+  }
+
+  /** QR を読んだあと：ネクマックスの見ている景色が、記録の町になる（白っぽい水色の幕の間に切りかえる） */
+  private async enterVr(rt: StageRuntime, rec: QrRecord): Promise<void> {
+    await this.fade(true, 0.35, '#d4f6ff')
+    this.vr.enter(recordViewOf(rec), this.vrCaption(rec), rt.camRig, rt.camera)
+    this.vrTried = false
+    // 見ている間は、クローでねらえる物を出さない（照準が、見ている景色の上に出ないように）
+    if (!this.vrTargets) {
+      this.vrTargets = this.fs.claw.targets.map((t) => [t, t.enabled] as [ClawTargetDef, boolean])
+      for (const t of this.fs.claw.targets) t.enabled = false
+    }
+    await this.wait(0.2)
+    await this.fade(false, 0.55, '#d4f6ff')
+  }
+
+  /** 見るのをやめて、ブースの前のネクマックスにもどる */
+  private async exitVr(rt: StageRuntime): Promise<void> {
+    this.vrDone = null
+    await this.fade(true, 0.3, '#d4f6ff')
+    this.vr.exit(rt.camRig, rt.camera)
+    for (const [t, on] of this.vrTargets ?? []) t.enabled = on
+    this.vrTargets = null
+    await this.wait(0.15)
+    await this.fade(false, 0.45, '#d4f6ff')
+  }
+
+  /** 見回す（F・タップか、maxSec 秒でおわる）。line：はじめのひとこと */
+  private async lookAround(rt: StageRuntime, line: string | null, maxSec = 24): Promise<void> {
+    if (line) await this.talk(rt, line)
+    if (!this.alive) return
+    let done = false
+    this.vrDone = () => (done = true)
+    this.setPhase('vr_look')
+    const t0 = this.clock.time
+    await this.until(() => done || this.clock.time - t0 > maxSec, () => (done = true))
+    this.vrDone = null
+  }
+
+  /** 見ている間に歩こう・つかもうとしたら、1 回だけ「見えるだけ」と知らせる */
+  private watchVrTry(frame: ActionFrame, rt: StageRuntime): void {
+    if (!this.vr.active || this.vrTried || rt.talking) return
+    if (frame.pressed.has('claw_fire') || frame.pressed.has('jump') || Math.hypot(frame.move.x, frame.move.y) > 0.6) {
+      this.vrTried = true
+      rt.hud.toast('見えるだけ。さわったり、歩いたりはできないよ', 2.8)
+    }
+  }
+
+  /**
+   * QR を読む → 少し上から記録の町を見る（VR）→ 背中の石がコチ、コチ、コチと大きく鳴る → 見ているだけだった景色の中へ、
+   * ネクマックスが本当に落ちていく → 時代を移る。5 章（60 年前の NEXTMAKE）・8 章（ダイヤルでえらんだ 2026 年）・
+   * 10 章のあと（1186 年）の旅立ちで、ダイヤルのあとに呼ぶ（8・10 章は後半の担当）。
+   * phase：QR を読む間の目標（OBJECTIVES のキー）。o.lines：石が鳴ったあとの会話、o.go：落ちる前の会話（ソラ「待って――！」など）、
+   * o.flag：時代を移る前に立てるフラグ。セーブは 'exhibit'（ブースの前）
+   */
+  private async diveIntoRecord(rt: StageRuntime, rec: QrRecord, phase: string, o: { lines?: string; go?: string; flag?: string; to: '2026' | '1186'; spawn: string }): Promise<void> {
+    await this.readQr(rt, rec, phase)
+    if (!this.alive) return
+    this.lock(rt, true)
+    // わっかには、ネクマックスの見ている景色がうつる（ソラが見る）
+    if (rec.seed === 1186) this.ring.showUrl(V7_ART.relief1186, 2.2)
+    else this.ring.showUrl(V7_ART.recordNextmake, 2.2)
+    await this.enterVr(rt, rec)
+    this.setPhase('vr_dive')
+    // いつものように、少し見回せる
+    await this.wait(2.4)
+    // 石が、コチ、コチ、コチと大きく鳴って、強く光る
+    for (let i = 0; i < 6 && this.alive; i++) {
+      rt.oreGlow(1.2 + i * 0.2)
+      rt.shake(0.06 + i * 0.015)
+      this.vr.tick(0.8 + i * 0.15)
+      await this.wait(0.42)
+    }
+    if (o.lines) await this.talk(rt, o.lines)
+    if (!this.alive) return
+    // 見ているだけだった景色が、本物になる（ブースのわっかも、本物の扉に）
+    this.vr.setReal()
+    this.vrFalling = true
+    rt.oreGlow(2.6)
+    rt.shake(0.25)
+    for (let k = 0; k <= 10; k++) {
+      this.fs.openRift(k / 10)
+      this.ring.setRift(k / 10)
+      await this.wait(0.03)
+    }
+    if (o.go) await this.talk(rt, o.go)
+    if (!this.alive) return
+    // ネクマックスが、景色の中へ落ちていく（カメラは見ていた所から、落ちていくネクマックスを追う）
+    this.vr.addFloor(rt.phys)
+    const land = this.vr.landWorld()
+    const eye = this.vr.eyeWorld()
+    const fwd = v(land.x - eye.x, 0, land.z - eye.z)
+    if (fwd.lengthSq() < 0.01) this.vr.forward(rt.camRig, fwd)
+    fwd.normalize()
+    const start = land.clone().addScaledVector(fwd, -1.2).setY(eye.y + 1.2)
+    rt.claw.reset()
+    rt.player.teleport(start, Math.atan2(-fwd.x, -fwd.z))
+    this.vr.watch(rt.player.position)
+    rt.oreGlow(2.2)
+    const t0 = this.clock.time
+    await this.until(() => (rt.player.grounded && this.clock.time - t0 > 0.3) || this.clock.time - t0 > 2.2)
+    if (!this.alive) return
+    rt.shake(0.2)
+    await this.wait(0.35)
+    if (o.flag) this.set(rt, o.flag)
+    rt.save('exhibit')
+    this.lock(rt, false)
+    this.travel(rt, o.to, o.spawn)
   }
 
   private async sceneCh1Keychain(rt: StageRuntime): Promise<void> {
@@ -1087,12 +1264,14 @@ export class ChronicleFutureStage implements Stage {
     await this.until(() => this.sky.done || !this.sky.running)
     rt.endCinematic(true)
     // トワが見下ろして言う（石の力をもらいに来た）
-    void this.cine(rt, { look: top.clone().add(v(0, 1.3, 0)), from: v(4.4, 1.8, 6.4), hold: Infinity, inSec: 1.0, fov: 20, marker: { pos: top.clone().add(v(0, 2.6, 0)), label: 'トワ' } })
+    void this.cine(rt, { look: top.clone().add(v(0, 1.3, 0)), from: v(4.4, 1.8, 6.4), hold: Infinity, inSec: 1.0, fov: 20, marker: { pos: top.clone().add(v(0, 2.6, 0)), label: '仮面の男' } })
     await this.talk(rt, 'ch2_tear')
     rt.endCinematic()
     // 黒い手 3 本：人ごみの上をこえて、ネクマックスとソラへ
     this.fs.setAction(true)
     this.startHands(rt, 'protect')
+    // 黒い手が出ている間は、夜の広場から出られない（北の通り・回廊へ行かない。南のゲートは中）
+    this.fence?.close(rectPoints(PLAZA_FENCE.x0, PLAZA_FENCE.x1, PLAZA_FENCE.z0, PLAZA_FENCE.z1), { y: 0 })
     const soraHand = 'hand0'
     this.hands.reachTo(soraHand, this.sora.root.position.clone().add(v(0.3, 2.3, 0.2)), 1.6)
     this.hands.reachTo('hand1', rt.player.position.clone().add(v(-0.4, 2.6, 0.4)), 1.8)
@@ -1387,8 +1566,7 @@ export class ChronicleFutureStage implements Stage {
     if (take) await this.balloonErrand(rt)
     if (!this.alive) return
     const sora = this.sora.root.position
-    this.setPhase('loop_greet', [{ pos: sora.clone().setY(sora.y + 1.9), label: 'ソラ' }])
-    await this.waitNear(rt, sora, 3.4)
+    await this.goSoraLoop(rt)
     if (!this.alive) return
     this.lock(rt, true)
     this.settleBalloon(rt)
@@ -1478,6 +1656,8 @@ export class ChronicleFutureStage implements Stage {
     }
     const hp = UNDER.handHole.clone()
     this.hands.spawn('cellar', hp.clone().setY(UNDER.ceilY + 0.2), { from: 'sky', size: 0.8, rest: hp.clone().setY(UNDER.floorY + 1.4), noDecal: true, normal: v(0, -1, 0) })
+    // 黒い手が出ている間は、地下の部屋と通路から出られない（階段の下に光の幕）
+    this.fence?.close(UNDER_FENCE, { y: UNDER.floorY })
     await this.wait(0.8)
     this.hands.reachTo('cellar', this.sora.root.position.clone().add(v(0, 1.0, 0)), 0.8)
     this.sora.setPose('hold')
@@ -1514,6 +1694,48 @@ export class ChronicleFutureStage implements Stage {
     this.lock(rt, false)
   }
 
+  /**
+   * 4 章のてっぺん：ランプにとどいたクローを、黒い火からのびた影の手がはらいのける（横から、ランプとクローの先を見せる）。
+   * クローの先（lampDef.point）はランプにとどいたまま止めて、影の手にはたかれたら横へ飛ばし、ワイヤーを外す
+   */
+  private async lampSwat(rt: StageRuntime): Promise<void> {
+    this.lock(rt, true)
+    this.lampHold = true
+    const L = this.lamp.center(new THREE.Vector3())
+    this.lampDef.point.copy(L)
+    const P = rt.player.position.clone().add(v(0, 0.75, 0))
+    const dir = v(P.x - L.x, 0, P.z - L.z)
+    if (dir.lengthSq() < 1e-4) dir.set(-1, 0, 0)
+    dir.normalize()
+    const side = v(-dir.z, 0, dir.x)
+    // カメラ：ランプとネクマックスのあいだの横から（ランプが画面の左寄り、ネクマックスが右寄り）
+    const mid = L.clone().lerp(P, 0.5)
+    void this.cine(rt, { look: mid.clone().lerp(L, 0.25), from: mid.clone().addScaledVector(side, 3.4).add(v(0, 0.7, 0)), hold: Infinity, inSec: 0.4, fov: 44 })
+    // 黒い火から、小さな影の手
+    this.hands.spawn(LAMP_HAND, L.clone(), { from: 'sky', size: 0.32, normal: dir.clone().add(v(0, 0.5, 0)).normalize(), rest: L.clone().addScaledVector(dir, 0.5).add(v(0, 0.45, 0)), noDecal: true })
+    await this.wait(0.7)
+    // クローの先をつかんで、はらいのける
+    const tip = L.clone().addScaledVector(dir, 0.12)
+    this.hands.reachTo(LAMP_HAND, tip, 0.3)
+    await this.wait(0.32)
+    rt.shake(0.35)
+    rt.oreGlow(0.8)
+    this.hands.passThrough(LAMP_HAND, tip)
+    const from = this.lampDef.point.clone()
+    const to = L.clone().addScaledVector(side, 1.3).addScaledVector(dir, 0.9).add(v(0, -0.6, 0))
+    for (let k = 1; k <= 8 && this.alive; k++) {
+      this.lampDef.point.lerpVectors(from, to, k / 8)
+      await this.wait(0.03)
+    }
+    rt.claw.reset()
+    this.lampHold = false
+    this.hands.idle(LAMP_HAND, L.clone().addScaledVector(dir, 0.35).add(v(0, 0.3, 0)))
+    await this.talk(rt, 'ch4_lamp_swat')
+    this.hands.retract(LAMP_HAND)
+    rt.endCinematic()
+    await this.wait(0.3)
+  }
+
   private passListeners: Array<() => void> = []
   /** すりぬけ（ura に J）を待つ */
   private onPass(fn: () => void): () => void {
@@ -1535,8 +1757,7 @@ export class ChronicleFutureStage implements Stage {
     if (!this.alive) return
     // ソラにたのむ：今夜は、ブースで待ってて
     const sora = this.sora.root.position
-    this.setPhase('loop_greet', [{ pos: sora.clone().setY(sora.y + 1.9), label: 'ソラ' }])
-    await this.waitNear(rt, sora, 3.4)
+    await this.goSoraLoop(rt)
     if (!this.alive) return
     this.lock(rt, true)
     this.settleBalloon(rt)
@@ -1561,7 +1782,7 @@ export class ChronicleFutureStage implements Stage {
     await this.fade(false, 1.0)
     // てっぺんのトワ：塔の真下からだと屋上の床に隠れるので、南の広場の側から見上げる
     this.towa.setRim('#b08cff', 1.0)
-    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(6.0, 1.6, 6.0), hold: Infinity, inSec: 1.2, fov: 18, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.6, 0)), label: 'トワ' } })
+    void this.cine(rt, { look: TOWER.towa.pos.clone().add(v(0, 1.3, 0)), from: v(6.0, 1.6, 6.0), hold: Infinity, inSec: 1.2, fov: 18, marker: { pos: TOWER.towa.pos.clone().add(v(0, 2.6, 0)), label: '仮面の男' } })
     await this.wait(2.6)
     // のぼる道すじ：回る大歯車から、通りの両側のビルをつなぐ光る輪・時計の部分まで、通りの上の高い所から見下ろす
     void this.cine(rt, { look: v(0.5, 7.5, -28.5), lookTo: v(0.6, 9.0, -27.0), from: v(1.0, 25.0, -15.5), fromTo: v(0.2, 23.5, -16.8), panSec: 4.0, hold: Infinity, inSec: 1.3, fov: 62, marker: { pos: COURSE_FIRST_GEAR.clone().add(v(0, 1.4, 0)), label: '大歯車' } })
@@ -1627,42 +1848,44 @@ export class ChronicleFutureStage implements Stage {
     rt.camRig.distance = camDist
     this.fs.setAction(false)
     if (!this.alive) return
-    // てっぺん：トワと話す
+    // てっぺん：仮面の男と話す（名のるまでは「仮面の男」）。屋上のふちに柵（見えない壁と光の幕）を立てて、
+    // 話している間・ランプをねらう間・黒い手が来る間に、屋上から落ちられないように（朝にもどると prepare で開く）
+    this.fence?.close(rectPoints(TOWER.deck.x0 + 0.25, TOWER.deck.x1 - 0.25, TOWER.deck.z0 + 0.25, TOWER.deck.z1 - 0.25), { y: TOWER.deckY, color: '#b08cff' })
     this.lock(rt, true)
-    this.showTowa(v(8.6, TOWER.deckY, -20.4), rt.player.position, 'idle')
+    this.showTowa(TOWA_DECK, rt.player.position, 'idle')
     void this.cine(rt, { look: this.towa.root.position.clone().add(v(0, 1.4, 0)), hold: Infinity, inSec: 1.2, fov: 44 })
     await this.talk(rt, 'ch4_towa')
+    // トワの手さげランプ（黒い火から影がこぼれる）を見せる：ランプを取れば、影が止まるかもしれない
+    this.towa.setPose('point')
+    await this.wait(0.3)
+    const lampAt = this.lamp.center(new THREE.Vector3())
+    const toP = v(rt.player.position.x - lampAt.x, 0, rt.player.position.z - lampAt.z).normalize()
+    const lampSide = v(-toP.z, 0, toP.x)
+    void this.cine(rt, { look: lampAt.clone().add(v(0, -0.15, 0)), from: lampAt.clone().addScaledVector(toP, 1.7).addScaledVector(lampSide, 1.1).add(v(0, 0.35, 0)), hold: Infinity, inSec: 1.0, fov: 40, marker: { pos: lampAt.clone().add(v(0, 0.45, 0)), label: 'ランプ' } })
+    await this.talk(rt, 'ch4_lamp_hint')
     rt.endCinematic()
-    await this.talk(rt, 'ch4_ring_hint')
     this.lock(rt, false)
-    // 黒い輪に J（すりぬける）
-    const orumPt = this.fs.orum.center.clone()
-    let passed = false
-    rt.chrono.add({
-      id: 'chrono_orum',
-      kind: 'ura',
-      label: '黒い輪',
-      point: orumPt,
-      radius: 40,
-      enabled: true,
-      range: 600,
-      noLineOfSight: true,
-      onAct: () => (passed = true),
-      onPassThrough: () => (passed = true),
-    })
-    this.setPhase('tower_ring', [{ pos: orumPt, label: '黒い輪' }])
+    // ランプにクロー（J）→ 黒い火から影の手がのびて、クローをはらいのける
+    let grabbed = false
+    this.lampGrab = () => (grabbed = true)
+    this.lampDef.enabled = true
     await this.until(
       () => {
-        // 立ち止まったら、黒い輪のほうを向く（クローは向いている方へのびる）
+        const c = this.lamp.center(this.tmp)
+        this.setPhase('tower_lamp', [{ pos: c.clone().add(v(0, 0.55, 0)), label: 'ランプ' }])
+        // 立ち止まったら、ランプのほうを向く（クローは向いている方へのびる）
         const p = rt.player.position
-        if (rt.player.speed < 0.3 && rt.player.grounded) rt.player.turnToward(orumPt.x - p.x, orumPt.z - p.z, this.lastDt, 4)
-        return passed
+        if (rt.player.speed < 0.3 && rt.player.grounded) rt.player.turnToward(c.x - p.x, c.z - p.z, this.lastDt, 4)
+        return grabbed
       },
-      () => (passed = true),
+      () => (grabbed = true),
     )
-    rt.chrono.remove('chrono_orum')
+    this.lampGrab = null
+    this.lampDef.enabled = false
     if (!this.alive) return
-    this.lock(rt, true)
+    await this.lampSwat(rt)
+    if (!this.alive) return
+    this.towa.setPose('idle')
     await this.talk(rt, 'ch4_shield')
     // 8時41分：空の黒い輪から手が来る
     this.hands.spawn(TOWER_HAND, v(TOWER.cx + 2, TOWER.deckY + 8, TOWER.cz - 2), { from: 'sky', size: 1.1 })
@@ -1723,30 +1946,9 @@ export class ChronicleFutureStage implements Stage {
     this.lens.set(true)
     this.ring.setWobble(0)
     this.placeSora('exhibit')
-    // ソラが展示の台に、NEXTMAKE のビルの前のかんばんの、いちばん古い記録（60 年前）の QR を出す
-    await this.readQr(rt, QR_RECORDS.nextmake2026, 'qr_door')
-    if (!this.alive) return
-    const ringC = v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z)
-    this.ring.showUrl(V7_ART.recordNextmake, 2.2)
-    void this.cine(rt, { look: ringC, hold: Infinity, inSec: 1.2, fov: 50 })
-    // 石が、コチ、コチ、コチと大きく鳴って、強く光る
-    for (let i = 0; i < 6; i++) {
-      rt.oreGlow(1.2 + i * 0.2)
-      rt.shake(0.08)
-      await this.wait(0.35)
-    }
-    await this.talk(rt, 'ch5_record')
-    for (let k = 0; k <= 20; k++) {
-      this.fs.openRift(k / 20)
-      this.ring.setRift(k / 20)
-      await this.wait(0.05)
-    }
-    await this.talk(rt, 'ch5_go')
-    rt.endCinematic(true)
-    this.set(rt, 'v7_door1')
-    rt.save('exhibit')
-    this.lock(rt, false)
-    this.travel(rt, '2026', 'v7_nextmake')
+    // ソラが展示の台に、NEXTMAKE のビルの前のかんばんの、いちばん古い記録（60 年前）の QR を出す。
+    // 読むと、いつものように少し上から 60 年前の町が見える → 石が鳴る → 見ているだけだった景色の中へ、本当に落ちていく
+    await this.diveIntoRecord(rt, QR_RECORDS.nextmake2026, 'qr_door', { lines: 'ch5_record', go: 'ch5_go', flag: 'v7_door1', to: '2026', spawn: 'v7_nextmake' })
   }
 
   private travel(rt: StageRuntime, to: '2026' | '1186', spawn: string): void {
@@ -2571,9 +2773,11 @@ export class ChronicleFutureStage implements Stage {
     this.updateDial(dt, frame, rt)
     this.watchMisses(frame, rt)
     this.updateHands(dt, rt)
+    this.fence?.update(dt, rt.player)
     if (this.climb && !this.busy && !rt.talking) this.climb.update(dt, rt)
     this.updateDuel(dt, rt)
     this.updateBalloon(rt)
+    this.watchVrTry(frame, rt)
     if (!this.duel) rt.combat.passive = this.busy || rt.talking || rt.inCinematic
     this.mob?.update(dt, rt, mobPhaseV7(this.f, this.part), this.busy || this.climb !== null)
     // 裏側（UraBattle）は出たあとも自分の時計で暗転を明けるので、active でなくても毎フレーム回す
@@ -2654,6 +2858,10 @@ export class ChronicleFutureStage implements Stage {
       }
     }
     if (this.rt) this.updateSora(dt, rt)
+    // IDO の VR：記録の町の動きと、カメラ（シェルのカメラのあとで、目の位置と見ている向きに置きなおす）
+    this.vrVisitors.update(dt)
+    this.vr.update(dt)
+    if (this.vr.active) this.vr.apply(rt.camera, rt.camRig, dt)
     // QR を読む光：ネクマックスの目から台の QR へ
     if (this.scanT > 0) {
       this.scanT = Math.max(0, this.scanT - dt)
@@ -2667,6 +2875,8 @@ export class ChronicleFutureStage implements Stage {
       this.lamp.update(dt, t)
       if (this.towa.root.visible) this.towa.update(dt, 0)
     }
+    // 4 章のてっぺん：ねらうランプの位置（はらいのける間は、ステージが動かす）
+    if (this.lampDef.enabled && !this.lampHold) this.lamp.center(this.lampDef.point)
     if (this.fx) this.fx.setAspect(rt.camera.aspect)
     this.mob?.render(dt)
   }
@@ -2680,6 +2890,13 @@ export class ChronicleFutureStage implements Stage {
       return true
     }
     if (this.ura.active && this.ura.interact(rt)) return true
+    // IDO の VR：見回すのをおわる
+    if (this.vrDone) {
+      const d = this.vrDone
+      this.vrDone = null
+      d()
+      return true
+    }
     if (this.dial) {
       if (this.dial.logic.locked) this.finishDial()
       else rt.hud.toast('石の音と記録の音がそろうまで、← → で回そう', 2)
@@ -2738,6 +2955,8 @@ export class ChronicleFutureStage implements Stage {
     if (this.choice.open) return [{ key: 'W／S', label: '選ぶ' }, { key: 'F', label: '決定' }]
     if (this.ura.active) return this.ura.hints(rt)
     if (this.dial) return [{ key: '← →', label: '回す' }, { key: 'F', label: this.dial.logic.locked ? '決める' : 'そろえてから' }]
+    if (this.vrDone) return [{ key: '↑↓←→', label: '見回す' }, { key: 'F', label: 'おわる' }]
+    if (this.vr.active) return this.vrFalling ? [] : [{ key: '↑↓←→', label: '見回す' }]
     if (this.balloonNearKid(rt)) return [{ key: 'F', label: '風船をわたす' }]
     if (this.lensNearSora(rt)) return [{ key: 'F', label: 'レンズをわたす' }]
     const w = this.fWait
@@ -2776,6 +2995,9 @@ export class ChronicleFutureStage implements Stage {
       case 'tower_top':
         base = [{ key: 'J', label: '金具に飛びつく' }]
         break
+      case 'tower_lamp':
+        base = [{ key: 'J', label: 'ランプをつかむ' }]
+        break
       case 'hands':
         base = [{ key: 'J', label: '止まった手を裂く' }]
         break
@@ -2808,6 +3030,8 @@ export class ChronicleFutureStage implements Stage {
 
   onClawEvent(e: WireEvent): void {
     if (e.kind === 'connected' && e.target.id === this.props.balloon.def.id) this.props.balloon.grab()
+    // 4 章のてっぺん：クローがランプにとどいた
+    if (e.kind === 'connected' && e.target === this.lampDef) this.lampGrab?.()
     // 時計台のぼり：光る輪にぶら下がった・手をはなした
     if (this.climb && this.rt) this.climb.onClawEvent(e, this.rt)
   }
@@ -2863,6 +3087,8 @@ export class ChronicleFutureStage implements Stage {
       duel: this.duel ? { thread: this.duel.thread, window: this.duel.window } : null,
       balloon: this.balloon,
       choice: this.choice.open ? this.choice.id : null,
+      vr: this.vr?.active ?? null,
+      fence: this.fence?.closed ?? false,
       climb: this.climb ? { section: this.climb.section, best: this.climb.best, falls: this.climb.falls, hits: this.climb.hits, assists: this.climb.assists, sec: +(this.clock.time - this.climbT0).toFixed(1) } : null,
       climbLog: this.climbLog,
       handHits: this.handHits,
@@ -2889,6 +3115,9 @@ export class ChronicleFutureStage implements Stage {
     this.mob = null
     this.climb?.end()
     this.climb = null
+    this.vr?.dispose()
+    this.fence?.dispose()
+    this.fence = null
     // 夜の環境マップを使ったまま消さない（シェルが次の時代の環境を入れるまでの間）
     if (this.rt && this.nightEnv && this.rt.scene.environment === this.nightEnv.texture) this.rt.scene.environment = this.dayEnv
     this.nightEnv?.dispose()
@@ -2910,6 +3139,22 @@ const KEY_STALL_X = 15.2
 /** 4 章の黒い手の名前（地下でソラをつかむ手・時計台のてっぺんへ来る手） */
 const CELLAR_HAND = 'cellar'
 const TOWER_HAND = 'tower'
+/** 2 章：黒い手が出ている間の、夜の広場の柵（北の通り・東の屋台の裏・西の回廊の下へは行かない。南のゲートは中） */
+const PLAZA_FENCE = { x0: -15.5, x1: 13.6, z0: -13.5, z1: 19.6 } as const
+/** 4 章：地下の部屋と通路（階段の下でふさぐ） */
+const UNDER_FENCE = [
+  { x: -11.7, z: -41.7 },
+  { x: -6.4, z: -41.7 },
+  { x: -6.4, z: -43.3 },
+  { x: -0.7, z: -43.3 },
+  { x: -0.7, z: -31.7 },
+  { x: -6.3, z: -31.7 },
+  { x: -6.3, z: -35.9 },
+  { x: -11.7, z: -35.9 },
+]
+/** 4 章のてっぺん：トワのランプの黒い火から出る小さな影の手と、トワが立つ所（屋上の南東） */
+const LAMP_HAND = 'lamp_hand'
+const TOWA_DECK = v(8.6, TOWER.deckY, -20.4)
 
 /** 10 章のあと：ダイヤルでえらんだ年の、カンボジアの遺跡のかんばんの記録 */
 function ruinsRecord(year: number): QrRecord {
@@ -2952,7 +3197,7 @@ const MISS_HINTS: Record<string, string> = {
   tower_swing2: '↑ キーで金色の光る輪を見上げて、画面のまん中に入れてから J',
   tower_swing3: '↑ キーで金色の光る輪を見上げて、画面のまん中に入れてから J',
   tower_top: '回廊の南のはしで、↑ キーでてっぺんの金色の金具を見上げてから J',
-  tower_ring: '↑ キーで空を見上げて、黒い輪を画面のまん中に入れてから J',
+  tower_lamp: '立ち止まって、トワの手さげランプのほうを向いてから J',
   seam: '池の上の、うすく光る縦のすじ（ゆらぎ）のほうを向いて J',
   gear: '縁側の西の端で、大歯車のほうを向いて J',
   duel: '影を K でたおすと、ランプの黒い糸が光る。光ったら、糸をねらって J',

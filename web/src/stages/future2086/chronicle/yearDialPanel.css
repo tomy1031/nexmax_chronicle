@@ -12,13 +12,15 @@
 .ydial.on { display: block; animation: yd-in 0.3s ease-out; }
 .ydial.frozen { visibility: hidden; }
 @keyframes yd-in { from { opacity: 0; } }
-/* ダイヤルの間は、スマホのスティックとボタンを見せない（押せないので） */
-.ydial-open .touch-layer { visibility: hidden; }
+/* ダイヤルの間は、スマホのスティックとボタン・HUD を見せない（押せない・ダイヤルだけを見てほしい） */
+.ydial-open .touch-layer,
+.ydial-open .nx-hud { visibility: hidden; }
 
 .yd-wrap {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: min(5vw, 56px);
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: min(5vw, 56px); pointer-events: none;
   padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
 }
+.yd-wrap > * { pointer-events: auto; }
 .yd-dial { position: relative; width: var(--d); height: var(--d); flex: none; }
 .yd-dial svg { display: block; width: 100%; height: 100%; overflow: visible; touch-action: none; cursor: grab; }
 .yd-dial svg:active { cursor: grabbing; }
@@ -30,14 +32,17 @@
 /* 年の印：光る（行ける）・暗い（今は行けない） */
 .yd-mark .yd-hit { fill: transparent; }
 .yd-mark .yd-gem { fill: #4a5878; stroke: #8996b4; stroke-width: 1.2; }
-.yd-mark .yd-label { fill: #8b97b3; font: 800 12px/1 'M PLUS Rounded 1c', system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; }
-.yd-mark .yd-label-sub { fill: #6f7c99; font: 700 7px/1 'M PLUS Rounded 1c', system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+.yd-mark .yd-label { fill: #8b97b3; font: 800 12px/1 'M PLUS Rounded 1c', system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: #0b1a46; stroke-width: 3px; stroke-linejoin: round; }
+.yd-mark .yd-label-sub { fill: #6f7c99; font: 700 7px/1 'M PLUS Rounded 1c', system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: #0b1a46; stroke-width: 2.4px; stroke-linejoin: round; }
 .yd-mark.now .yd-gem { fill: #8fe6ff; stroke: #e9fbff; }
 .yd-mark.now .yd-label { fill: #bfeeff; }
 .yd-mark.open { cursor: pointer; }
 .yd-mark.open .yd-gem { fill: var(--gold); stroke: #fff6c8; stroke-width: 1.8; filter: drop-shadow(0 0 calc(3px + var(--near, 0) * 7px) rgba(255, 214, 80, 0.95)); animation: yd-gem 1.1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 .yd-mark.open .yd-label { fill: #fff3b0; font-size: 15px; filter: drop-shadow(0 0 3px rgba(255, 200, 60, 0.8)); }
-.yd-mark.open .yd-label-sub { fill: #ffe9a0; font-size: 8px; }
+.yd-mark.open .yd-label-sub { fill: #ffe9a0; font-size: 8.5px; }
+/* スマホ：小さな字を少し大きく */
+.ydial.touch .yd-mark .yd-label-sub { font-size: 8px; }
+.ydial.touch .yd-mark.open .yd-label-sub { font-size: 9.5px; }
 @keyframes yd-gem { 50% { transform: scale(1.25); } }
 
 /* 針とまん中（石と今の年） */
@@ -62,10 +67,14 @@
 }
 
 /* 右の列 */
-.yd-side { width: min(38vw, 400px); display: flex; flex-direction: column; align-items: flex-start; gap: clamp(6px, 2.2vh, 18px); }
+.yd-side {
+  width: min(38vw, 400px); box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; gap: clamp(6px, 2.2vh, 18px);
+  padding: clamp(10px, 3vh, 22px) clamp(12px, 2.4vw, 26px); border-radius: 20px;
+  background: linear-gradient(180deg, rgba(8, 22, 58, 0.78), rgba(4, 12, 34, 0.84)); box-shadow: inset 0 0 0 1.5px rgba(143, 230, 255, 0.35);
+}
 .yd-title { font-size: clamp(15px, 3.6vh, 24px); font-weight: 800; letter-spacing: 0.12em; color: #bfeeff; display: flex; flex-direction: column; gap: 2px; }
 .yd-title small { font-size: clamp(11px, 2.4vh, 15px); font-weight: 700; letter-spacing: 0.04em; color: #8fc4dc; }
-.yd-msg { font-size: clamp(16px, 4.6vh, 30px); font-weight: 900; line-height: 1.3; text-shadow: 0 0 10px rgba(80, 200, 255, 0.6); min-height: 2.6em; display: flex; align-items: center; }
+.yd-msg { font-size: clamp(16px, 4.6vh, 30px); font-weight: 900; line-height: 1.3; text-shadow: 0 0 10px rgba(80, 200, 255, 0.6); min-height: 2.6em; display: flex; align-items: center; word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
 .ydial.lock .yd-msg { color: #fff3b0; text-shadow: 0 0 12px rgba(255, 200, 60, 0.9); }
 .yd-keys { font-size: clamp(11px, 2.7vh, 16px); font-weight: 700; color: #a9d6ea; }
 .ydial.lock .yd-keys { visibility: hidden; }
@@ -73,8 +82,8 @@
 /* この年へ行く：ぴったりのときだけ、大きく前に */
 .yd-go {
   position: relative; margin: 0; border: 0; cursor: pointer; touch-action: none; pointer-events: auto;
-  display: none; align-items: center; gap: 14px; padding: clamp(10px, 3vh, 20px) clamp(20px, 4vw, 40px); border-radius: 999px;
-  font: 900 clamp(20px, 6vh, 36px)/1.1 'M PLUS Rounded 1c', system-ui, sans-serif; color: #3a2400; letter-spacing: 0.04em;
+  display: none; align-items: center; gap: 12px; padding: clamp(10px, 3vh, 20px) clamp(18px, 3vw, 34px); border-radius: 999px; white-space: nowrap;
+  font: 900 clamp(19px, 5.4vh, 32px)/1.1 'M PLUS Rounded 1c', system-ui, sans-serif; color: #3a2400; letter-spacing: 0.04em;
   background: linear-gradient(180deg, #fff6c0, #ffd84a 55%, #f0a91a);
   box-shadow: 0 0 0 3px #fff3b0, 0 0 26px rgba(255, 200, 60, 0.9), 0 6px 0 #a8670a;
 }
@@ -89,10 +98,11 @@
   font: 800 0.6em/1 system-ui, sans-serif; color: #12305a; background: #eaf8ff; box-shadow: 0 2px 0 #6a8db0;
 }
 .ydial.touch kbd { display: none; }
+.ydial.touch .yd-go { min-height: 58px; padding: 0 30px; font-size: clamp(20px, 6vh, 30px); }
 
 /* もどる（右上） */
 .yd-back {
-  position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); margin: 0; cursor: pointer; touch-action: none;
+  position: absolute; z-index: 2; top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); margin: 0; cursor: pointer; touch-action: none;
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px;
   border: 2px solid rgba(143, 230, 255, 0.7); background: rgba(10, 30, 70, 0.85); color: #dff6ff;
   font: 800 clamp(13px, 3.4vh, 18px)/1 'M PLUS Rounded 1c', system-ui, sans-serif;

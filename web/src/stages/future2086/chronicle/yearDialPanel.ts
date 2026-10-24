@@ -126,8 +126,8 @@ export class YearDialPanel {
       <circle class="yd-face" r="91" fill="url(#yd-face)"/>
       <path class="yd-track" d="${arcPath(DIAL_ANCHORS[0][1], DIAL_ANCHORS[DIAL_ANCHORS.length - 1][1], R_TICK)}"/>
       <g class="yd-ticks"></g>
-      <g class="yd-marks"></g>
       <g class="yd-needle"><path d="M -3.2 -30 L 0 -${R_TICK + 9} L 3.2 -30 Z"/><circle cy="-${R_TICK + 3}" r="4.2"/></g>
+      <g class="yd-marks"></g>
       <g class="yd-hub"><circle class="yd-hub-glow" r="34"/><circle class="yd-hub-ring" r="30"/><circle class="yd-stone" r="9" cy="-12" fill="url(#yd-stone)"/></g>
       <text class="yd-year" y="14">2086</text><text class="yd-nen" y="25">年</text>`
     this.svg = svg
@@ -326,7 +326,7 @@ export class YearDialPanel {
         ? 'まだ、ぴったりじゃないよ'
         : this.near > 0.55
           ? '石の音が、速くなってきた！'
-          : '光る年に、ダイヤルを合わせよう'
+          : '光る年に合わせよう'
     if (this.msg.textContent !== text) this.msg.textContent = text
   }
 

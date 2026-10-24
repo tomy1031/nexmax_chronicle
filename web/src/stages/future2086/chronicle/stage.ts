@@ -1840,7 +1840,7 @@ export class ChronicleFutureStage implements Stage {
   private async dialUntilGo(rt: StageRuntime, o: { target: number; sub: string; record: (year: number) => QrRecord }): Promise<void> {
     for (;;) {
       const go = await this.openDial(rt, o)
-      rt.endCinematic()
+      rt.endCinematic(!go)
       if (!this.alive || go) return
       this.lock(rt, false)
       this.setPhase('dial_again', [{ pos: v(F.PORTAL.x, F.PORTAL.y + 2.6, F.PORTAL.z), label: '年代ダイヤル' }])
@@ -1857,10 +1857,15 @@ export class ChronicleFutureStage implements Stage {
     this.lock(rt, true)
     const front = this.fs.markers.exhibit
     const ringC = v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z)
-    if (Math.hypot(rt.player.position.x - front.x, rt.player.position.z - front.z) > 1.6) this.teleport(rt, front, faceYaw(front, ringC))
-    // わっかの正面から（ダイヤルの画面のうしろに、わっかとダイヤルが見える）
-    const n = v(Math.sin(F.PORTAL.yaw), 0, Math.cos(F.PORTAL.yaw))
-    void this.cine(rt, { look: ringC.clone().add(v(0, -0.3, 0)), from: ringC.clone().addScaledVector(n, 6.6).add(v(0, 0.2, 0)), hold: Infinity, inSec: 0.7, fov: 46 })
+    // 遠ければわっかの前へ。近くても、その場で止めて（歩いてきた勢いですべらない）わっかの方を向く
+    const at = Math.hypot(rt.player.position.x - front.x, rt.player.position.z - front.z) > 1.6 ? front.clone() : rt.player.position.clone()
+    this.teleport(rt, at, faceYaw(at, ringC))
+    // ネクマックスのうしろから、わっかを見る（ダイヤルの画面の右の方に、わっかの前に立つネクマックスが見える）
+    const p = rt.player.position
+    const fw = ringC.clone().sub(p).setY(0).normalize()
+    const right = v(-fw.z, 0, fw.x)
+    const shift = right.clone().multiplyScalar(-1.9)
+    void this.cine(rt, { look: p.clone().add(v(0, 1.1, 0)).lerp(ringC, 0.55).add(shift), from: p.clone().addScaledVector(fw, -3.6).add(v(0, 1.9, 0)).add(shift), hold: Infinity, inSec: 0.7, fov: 50 })
     this.ch.dial.setDial(true)
     const logic = new YearDialLogic({ start: 2086, target: o.target })
     this.dialRecord = o.record

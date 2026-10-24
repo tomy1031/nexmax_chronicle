@@ -8,6 +8,9 @@
   --cyan: #5fe0ff;
 }
 html, body { margin: 0; height: 100%; background: #0b1426; overflow: hidden; }
+/* スマホ：ダブルタップ・ピンチで拡大しない、引っぱって画面がずれない、長押しで文字が選ばれない（main.ts の guardZoom と組） */
+html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { position: fixed; inset: 0; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 #app { position: fixed; inset: 0; }
 #app canvas { display: block; width: 100%; height: 100%; }
 #ui { position: fixed; inset: 0; pointer-events: none; font-family: var(--ui-font); color: #f4f7ff; }

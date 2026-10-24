@@ -896,3 +896,38 @@
   .nx-hud *,
   .nx-loading * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------------------------------------------------------------- 会話のきろく（ログ）と AUTO（talkLog.ts）。上中央、コンパスの下 */
+.nx-talkbar {
+  position: absolute; left: 50%; top: calc(68 * var(--u)); transform: translateX(-50%); z-index: 7;
+  display: flex; gap: max(6px, calc(10 * var(--u))); pointer-events: auto;
+}
+.nx-tb {
+  display: inline-flex; align-items: center; gap: 0.4em; min-height: max(26px, calc(34 * var(--u))); padding: 0 max(10px, calc(14 * var(--u)));
+  font: 800 max(11px, calc(15 * var(--u))) / 1 var(--nx-jp); letter-spacing: 0.08em; color: var(--nx-ink);
+  background: linear-gradient(160deg, var(--nx-glass-a), var(--nx-glass-b)); border: 1px solid var(--nx-line-dim); border-radius: 999px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.25); cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; opacity: 0.86;
+}
+.nx-tb:hover { opacity: 1; border-color: var(--nx-line); }
+.nx-tb b { font-family: var(--nx-num); font-size: 0.85em; color: var(--nx-line-dim); }
+.nx-tb-auto.on { border-color: var(--nx-line); box-shadow: 0 0 12px color-mix(in srgb, var(--nx-line) 55%, transparent); }
+.nx-tb-auto.on b { color: var(--nx-line-hi); text-shadow: 0 0 8px var(--nx-line); }
+.nx-log { z-index: 8; pointer-events: auto; background: rgba(2, 8, 24, 0.55); }
+.nx-log-panel {
+  position: relative; width: min(92vw, calc(980 * var(--u))); max-height: 82vh; display: flex; flex-direction: column;
+  padding: max(10px, calc(18 * var(--u))) max(12px, calc(24 * var(--u))); border-radius: 16px;
+  background: linear-gradient(160deg, var(--nx-deep-a), var(--nx-deep-b)); border: 1px solid var(--nx-line-dim); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.nx-log-head { display: flex; align-items: center; gap: 0.8em; margin-bottom: 0.6em; font-family: var(--nx-jp); color: var(--nx-ink); }
+.nx-log-tag { font: 700 max(10px, calc(13 * var(--u))) / 1 var(--nx-num); letter-spacing: 0.2em; color: var(--nx-line); }
+.nx-log-title { font-weight: 800; font-size: max(14px, calc(20 * var(--u))); }
+.nx-log-close {
+  margin-left: auto; min-height: 32px; padding: 0 16px; border-radius: 999px; cursor: pointer; touch-action: none;
+  font: 800 max(12px, calc(15 * var(--u))) / 1 var(--nx-jp); color: var(--nx-ink); background: transparent; border: 1px solid var(--nx-line-dim);
+}
+.nx-log-list { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding-right: 6px; }
+.nx-log-row { display: grid; grid-template-columns: max(84px, calc(150 * var(--u))) 1fr; gap: 0.8em; padding: 0.45em 0; border-bottom: 1px solid rgba(255, 255, 255, 0.07); font-family: var(--nx-jp); }
+.nx-log-who { font-weight: 800; font-size: max(11px, calc(14 * var(--u))); color: var(--c, var(--nx-line)); overflow-wrap: anywhere; }
+.nx-log-text { font-weight: 600; font-size: max(13px, calc(17 * var(--u))); line-height: 1.55; color: var(--nx-ink); }
+.nx-log-empty { padding: 1.5em 0; text-align: center; opacity: 0.7; font-family: var(--nx-jp); color: var(--nx-ink); }
+.nx-log-foot { margin-top: 0.6em; font: 600 max(10px, calc(13 * var(--u))) / 1.2 var(--nx-jp); color: var(--nx-ink); opacity: 0.65; }

@@ -41,6 +41,7 @@ export const V7_TEXTURES = {
 /** 会話の顔（話者名 → 絵）。話者名は台詞の JSON の speaker と同じにする */
 export const V7_PORTRAITS: Readonly<Record<string, string>> = {
   トワ: base('portraits/towa_mask.webp'),
+  仮面の男: base('portraits/towa_mask.webp'),
   'トワ（小さいころ）': base('portraits/towa_child.webp'),
   チャンダ: base('portraits/chanda.webp'),
   チャンダのおばあさん: base('portraits/elder.webp'),

@@ -162,7 +162,7 @@ export function buildKeychainStall(c: FCtx, root: THREE.Group): KeychainStall {
     items.instanceMatrix.needsUpdate = true
   }
   place(0)
-  // 量産型ネクマックスの店番は units（buildUnits）を additions が足す
+  // 量産型NEXMAXの店番は units（buildUnits）を additions が足す
 
   return {
     buy: S.buy.clone(),

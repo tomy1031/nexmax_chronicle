@@ -2,7 +2,7 @@
 // 屋根の前に浮かぶネオンの丸い看板（たこ焼き・焼きそば・りんご飴・金魚すくい）、ホロのメニュー、
 // 浮かぶ提灯ドローン、未来風の品物（回る鉄板・光る水槽の金魚など）。コンセプト画像：
 // assets_src/reference/bg2086/nx_stalls2086_concept.png
-// 屋台の位置・大きさ・当たり判定は layout.ts の F.STALLS のまま（量産型ネクマックスの店番の台も同じ高さ）。
+// 屋台の位置・大きさ・当たり判定は layout.ts の F.STALLS のまま（量産型NEXMAXの店番の台も同じ高さ）。
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { M } from '../../render/batch'
@@ -217,7 +217,7 @@ function stall(c: FCtx, zc: number, i: number, signMat: THREE.Material, fish: TH
   c.b.add(ribbon(roundedRect(cw + 0.03, 0.85, 0.39, 0.86), 0.9, 0.93), c.fm.glow, place(0), { tint: k.glow, cast: false, receive: false })
   // 天板（少し張り出した白い板）
   c.b.add(slabGeometry(roundedRect(cw + 0.12, 0.96, 0.42, 0.84), 0.06, 0.02), tm.pearl, place(1.06), { tint: '#f4f7fb' })
-  // 店番の台（量産型ネクマックスがカウンターに届くように。高さはそのまま）
+  // 店番の台（量産型NEXMAXがカウンターに届くように。高さはそのまま）
   fbox(c, tm.pearl, S.x + 0.15, 0.19, zc, 0.95, 0.38, S.w - 0.7, { r: 0.08, tint: '#e8edf3' })
   // 後ろの棚（丸い白い箱）＋中の光る棚板
   c.b.add(slabGeometry(roundedRect(S.w - 0.5, 0.5, 0.22, -1.0), 1.75, 0.06), tm.pearl, place(1.75), { tint: '#eef2f6' })

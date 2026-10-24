@@ -89,7 +89,7 @@ describe("future2086Story", () => {
     expect(d.key).toBe("prep_talk");
     expect(d.lines.some((l) => l.speaker === "ソラ" && l.text === "最新型じゃなくても、私は君と作りたい。")).toBe(true);
     // 量産型に軽くからかわれる
-    expect(d.lines.some((l) => l.speaker === "量産型ネクマックス")).toBe(true);
+    expect(d.lines.some((l) => l.speaker === "量産型NEXMAX")).toBe(true);
     expect(s.busy).toBe(true);
     s.send({ kind: "dialogue_done", key: "prep_talk" });
     const after = s.drain();

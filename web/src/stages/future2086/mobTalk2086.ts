@@ -1,4 +1,4 @@
-// 2086年 時代博覧祭の町の人（モブ）と量産型ネクマックスのおしゃべり（吹き出し・F の会話）。台詞は mob_lines_2086.json。
+// 2086年 時代博覧祭の町の人（モブ）と量産型NEXMAXのおしゃべり（吹き出し・F の会話）。台詞は mob_lines_2086.json。
 // ・話す人：祭りの人出（crowd.ts の立っている人）から、道・屋台・IDO 展示の前・入口・回廊の上の人を選ぶ（MOB_SLOTS_2086）＋
 //   会場で働く量産型（units.ts）。見た目・配置はそのまま（台詞を足すだけ）
 // ・場面（mobPhase2086）は物語のステップではなく、時間帯（夜か）と周回数（StoryState.loop_count）だけで決める：
@@ -121,7 +121,7 @@ export class MobTalk2086 {
         talkReach: 2.1,
       })
     }
-    // 会場で働く量産型ネクマックス（店番は台の向こうなので少し遠くまで）
+    // 会場で働く量産型NEXMAX（店番は台の向こうなので少し遠くまで）
     for (const u of fs.units.list) {
       const root = u.ch.root
       const stall = /^unit_(takoyaki|soba|ame|kingyo)$/.test(u.spec.id)

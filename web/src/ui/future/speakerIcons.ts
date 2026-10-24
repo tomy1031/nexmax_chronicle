@@ -28,6 +28,9 @@ const KNOWN: Array<[RegExp, SpeakerStyle]> = [
   [/^ソラ/, { key: 'sora', color: '#c8a6ff', source: 'sora' }],
   // 物語 v7 の人物（顔は chronicle/visuals/person.ts の手続きの人物から）
   [/^トワ（小さいころ）/, { key: 'towa_child', color: '#9fd8ff', source: null }],
+  [/^トワのお母さん/, { key: 'towa_mother', color: '#ffd6a8', source: null }],
+  // 名のる前のトワ（物語 v7.2：2・4 章は「仮面の男」）
+  [/^仮面の男/, { key: 'towa', color: '#b99cff', source: null }],
   [/^トワ/, { key: 'towa', color: '#b99cff', source: 'towa' }],
   [/^チャンダのおばあさん|^守り手/, { key: 'elder', color: '#f2d27a', source: 'khmerElder' }],
   [/^チャンダ/, { key: 'chanda', color: '#ffb36b', source: 'chanda' }],

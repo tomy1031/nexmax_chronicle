@@ -3,8 +3,9 @@
 //   arrive   路地に着く → 茶運び人形が歩いてくる（J でつかんで止める）→ おはる → v7_met_oharu
 //   workshop おはるについて工房へ → 書（青い刃のかけらの絵）→ 奥の木の箱へ近づくと、石とかけらが同じ音 → 源兵衛の話 → v7_fragment_seen
 //   demo     作業台のそばで実演（切れ目の向こうに黒いもの）→ 表と裏・時を裂く → 爪を見る → 書に「時を裂く爪」→ v7_demo_seen
-//   night    その夜：空のひび → 時の鐘人形にのりうつる → 広場でボス戦（右の肩・左のひざ・胸の歯車を J で 3 秒つかむ。
-//            ふりおろしと鐘の衝撃波）→ 源兵衛「爪を使え！」→ 指先ほどの切れ目 → 影がはがれる → 夜明け → v7_doll_down
+//   night    その夜：空のひび → 時の鐘人形にのりうつる → 広場でボス戦（柵で広場だけにしぼる。よける → すき → つかむ のくり返し：
+//            木槌のふりおろしをよける → 木槌がささる → 右の肩／足ぶみをよける → ひざがロック → 左のひざ／大技の輪をとぶ → 胸の戸がひらく → 胸。
+//            光っている歯車を J でつかんで引っぱる。1 つに 2 回）→ 源兵衛「爪を使え！」→ 指先ほどの切れ目 → 影がはがれる → 夜明け → v7_doll_down
 //   dawn     朝：時を裂く爪・針の目もり・ネクマックスの思いつき → からくりの箱を J で持ってほこらへ → 錠前・おはるの約束 → v7_claw_stored
 //   leave    石が引っぱる → 光の輪（F）→ 2086年（return・v7_from_1726）
 import * as THREE from 'three'
@@ -20,18 +21,19 @@ import type { Hint } from '../../../ui/hud'
 import type { MusicId } from '../../../audio/tracks'
 import type { ObjectiveMark, SpawnPoint, Stage, StageEnvironment, StageLoadContext, StageRuntime, StageWorld } from '../../../game/stage'
 import { SceneClock } from '../../../chronicle/kit/clock'
+import { ArenaFence } from '../../../chronicle/kit/arena'
 import { Walker } from '../../../chronicle/kit/walker'
 import { Curtain } from '../../../chronicle/kit/curtain'
 import { TeaDoll } from '../karakuri'
 import { Townsfolk } from './townsfolk7'
 import { MobTalkEdo7 } from './mobTalkEdo7'
 import { buildChronicleEdo, type ChronicleEdoWorld } from './scene'
-import { C, CHRONICLE_SPAWNS, ARRIVE_RING, RETURN_RING, WORKSHOP_SPOTS, YAW } from './layout'
+import { C, CHRONICLE_SPAWNS, ARRIVE_RING, RETURN_RING, WORKSHOP_SPOTS } from './layout'
 import { EDO_LOOKS, type EdoSkyCycle } from './skyCycle'
 import { KarakuriBox, shrineMaterialsFrom } from './shrine'
 import { TimeClawProp, ResonanceWave } from './clawProp'
-import { GEAR_NAMES, SWING_HIT, type DollImpact } from './bellDoll'
-import { GearOrder, edoObjective, edoSpawn, edoStep, edoTime, type EdoStep, type EdoSub } from './storyEdo7'
+import { GEAR_NAMES, STOMP_RADIUS, SWING_HIT, type DollImpact } from './bellDoll'
+import { GearPulls, dollAttack, edoObjective, edoSpawn, edoStep, edoTime, type EdoStep, type EdoSub } from './storyEdo7'
 import linesJson from './lines_v7.json'
 
 const lines = new DialogueDB(linesJson)
@@ -55,12 +57,29 @@ const GENBEI_ARM = v(-15.25, 0.06, 18.55)
 /** 広場でのおはるの立ち位置：裏口の東のわき（ネクマックスの肩ごしに人形を見る線に入らない） */
 const OHARU_PLAZA = v(-13.7, 0.03, 24.5)
 const PLAZA_ENTRY = v(-16.0, 0.03, 24.2)
+/** ボス戦のはじめ・やられたときにもどる所（柵のふちから 3 m 内がわ） */
+const BOSS_START = v(-18.4, 0.03, 26.2)
 /** からくりの箱（朝まで工房の床。クローで運ぶ） */
 const BOX_HOME = v(-13.65, 0.06, 18.25)
 const BOX_ID = 'v7_karakuri_box'
 const TEA_ID = 'v7_tea_doll'
-/** 時の鐘人形：攻撃の間（秒）・衝撃波にする遠さ・当たったときに飛ばされる速さ（衝撃波は waveKnock） */
-const BOSS = { swingCd: 3.0, bellCd: 4.4, far: 9.5, hurtKnock: 7, waveKnock: 6 }
+/**
+ * 時の鐘人形：攻撃のあとの休み（秒。怒りで少し短く）・木槌が地面にささっている秒（右の肩のすき）・
+ * 近づくのをあきらめて別の攻撃にするまでの秒・飛ばされる速さ（ふりおろし・衝撃波・足ぶみ）
+ */
+const BOSS = { rest: 1.4, stuck: 4.6, chase: 4.0, far: 9.5, hurtKnock: 7, waveKnock: 6, stompKnock: 6.5 }
+/**
+ * ボス戦の柵（広場だけ。工房の裏口・路地のおくの木戸・南の家の中へは行けない）。広場のまわりの塀・蔵・家のすぐ内がわに沿わせる
+ * （柵と壁のあいだにカメラが入って、幕ごしに見ることがないように）。工房の裏口の前だけ、内へへこませる
+ */
+const ARENA_PTS = [
+  { x: -43.6, z: 21.75 },
+  { x: -15.4, z: 21.75 },
+  { x: -15.4, z: 22.6 },
+  { x: -13.4, z: 22.6 },
+  { x: -13.4, z: 47.4 },
+  { x: -43.6, z: 47.4 },
+]
 
 type Who = 'genbei' | 'oharu'
 
@@ -103,12 +122,19 @@ export class ChronicleEdoStage implements Stage {
   private readonly look: Record<Who, THREE.Vector3 | null> = { genbei: null, oharu: null }
   private genbeiPose: 'crank' | 'idle' | 'wave' = 'crank'
   /** ボス戦 */
-  private readonly gears = new GearOrder(3)
+  private readonly gears = new GearPulls()
   private bossCd = 2.5
-  private attacks = 0
+  /** その段階で何回目の攻撃か（dollAttack） */
+  private attackN = 0
+  /** 近づこうとしている秒（長いと別の攻撃に） */
+  private chaseT = 0
+  /** いま見えている（つかめる）次の歯車（null は無し） */
+  private openGear: number | null = null
   private waveHit = false
-  private warnedSwing = 0
-  private warnedBell = 0
+  private readonly warned: Record<string, number> = {}
+  private missedSaid = -99
+  /** ボス戦の柵（広場だけで戦う） */
+  private fence: ArenaFence | null = null
   /** 夜明けの空（-1 は動かしていない） */
   private dawnAnim = -1
   private ringOpen = false
@@ -255,7 +281,11 @@ export class ChronicleEdoStage implements Stage {
         // 'before'（広場へ行ける）は、夜の場面（空のひび・のりうつり）が終わってから
         this.sub.boss = undefined
         this.gears.next = 0
+        this.gears.pulls = 0
         this.gears.release()
+        this.openGear = null
+        this.attackN = 0
+        this.fence?.open(true)
         this.place('oharu', v(-14.2, 0.06, 18.9), v(-16.4, 0, 17.6), 'idle')
         break
       case 'dawn':
@@ -534,7 +564,10 @@ export class ChronicleEdoStage implements Stage {
     this.walker.stop(this.oharu)
     this.place('oharu', OHARU_PLAZA, d.position, 'wave')
     d.faceTo(rt.player.position)
-    void rt.cinematic({ look: d.headWorld().add(v(0, -1.6, 0)), from: v(-17.2, 1.4, 25.6), hold: Infinity, inSec: 1.2, fov: 54, marker: { pos: d.gearWorld(0), label: '右の肩の歯車', color: '#ffd447' } })
+    // 広場だけで戦う（工房の裏口・路地のおくの木戸・南の家の中へは行けない）。ネクマックスは柵のふちから少し内へ
+    rt.player.teleport(BOSS_START, Math.atan2(-(d.position.x - BOSS_START.x), -(d.position.z - BOSS_START.z)))
+    this.closeFence(rt)
+    void rt.cinematic({ look: d.headWorld().add(v(0, -1.6, 0)), from: v(-16.2, 1.6, 24.4), hold: Infinity, inSec: 1.2, fov: 54, marker: { pos: d.gearWorld(0), label: '右の肩の歯車', color: '#ffd447' } })
     d.setGearHighlight(0)
     await rt.dialogue(lines.lines('boss_intro'))
     rt.endCinematic()
@@ -548,9 +581,10 @@ export class ChronicleEdoStage implements Stage {
     // 戦いのはじまり
     this.sub.boss = 'fight'
     this.sub.nextGear = this.gears.next
+    this.sub.left = this.gears.left
     rt.combat.enabled = true
-    rt.combat.setCheckpoint(PLAZA_ENTRY, YAW.south)
-    rt.combat.showBossBar('時の鐘人形', 1 - this.gears.next / 3)
+    rt.combat.setCheckpoint(BOSS_START, Math.atan2(-(d.position.x - BOSS_START.x), -(d.position.z - BOSS_START.z)))
+    rt.combat.showBossBar('時の鐘人形', this.gears.life)
     // K でたたいても効かない（歯車をつかむ戦い）：おはるが教える
     let lastHint = -99
     rt.combat.addHitTarget({
@@ -566,42 +600,66 @@ export class ChronicleEdoStage implements Stage {
         }
       },
     })
-    for (let i = 0; i < 3; i++) d.targets[i].enabled = !d.gearIsStopped(i)
+    for (const t of d.targets) t.enabled = false
     d.setGearHighlight(this.gears.next)
+    d.setRage(this.gears.rage)
+    this.openGear = null
+    this.attackN = 0
+    this.chaseT = 0
     this.bossCd = 2.2
     rt.save('v7_plaza')
     rt.say('おはる', lines.lines(`call_${this.gears.next}`)[0].text, 3.4)
     this.lock(rt, false)
   }
 
-  /** ボスの頭（毎フレーム）：近づく・向く・攻撃を選ぶ・つかまれている間はあばれる */
+  private closeFence(rt: StageRuntime): void {
+    if (!this.fence) this.fence = new ArenaFence(this.w.root, rt.phys)
+    if (!this.fence.closed) this.fence.close(ARENA_PTS, { y: C.PLAZA.y })
+  }
+
+  /** 攻撃の予告：はじめの数回は「よけて！」の案内、ときどき、おはるの声 */
+  private warn(rt: StageRuntime, key: 'warn_swing' | 'warn_bell' | 'warn_stomp' | 'warn_charge', coach: string, every: number): void {
+    const said = rt.combat.coach(coach)
+    if (!said && rt.playTime - (this.warned[key] ?? -99) > every) {
+      this.warned[key] = rt.playTime
+      rt.say('おはる', lines.lines(key)[0].text, 2.4)
+    }
+  }
+
+  /** ボスの頭（毎フレーム）：近づく・向く・攻撃を選ぶ・すきを見せる・引っぱられている間はあばれる */
   private bossUpdate(dt: number, rt: StageRuntime): void {
     const d = this.w.doll
     const p = rt.player.position
     // 体に入りこんだら押し出す
     const out = d.pushOut(p, 0.35, this.tmp)
     if (out && !rt.player.isExternal) rt.player.burstMove((out.x - p.x) * 8, (out.z - p.z) * 8, 0.1)
-    // 衝撃波
-    const wf = d.waveFront
-    if (wf.active) {
-      if (!this.waveHit && d.waveHits(p, rt.player.grounded, p.y)) {
+    // 衝撃波（大技は 2 つ。1 つに当たったら、そのあとの輪は当たらない）
+    if (d.wavesActive) {
+      const c = this.waveHit ? null : d.waveHit(p, rt.player.grounded, p.y)
+      if (c) {
         this.waveHit = true
-        this.hurt(rt, 1, wf.center, BOSS.waveKnock)
+        this.hurt(rt, 1, c, BOSS.waveKnock)
       }
     } else this.waveHit = false
-    // 保持：3 秒で止まる。その間は攻撃しない
+    this.updateOpening(rt)
+    // 引っぱっている：PULL_SEC 秒で 1 回。その間は攻撃しない
     if (this.gears.holding >= 0) {
       const i = this.gears.holding
-      d.setGearStrain(i, 0.25 + this.gears.progress * 0.75)
-      rt.combat.setBossBar(1 - (this.gears.next + this.gears.progress) / 3)
-      if (Math.random() < dt * 3) rt.shake(0.08 + this.gears.progress * 0.12)
-      const stopped = this.gears.tick(dt)
-      if (stopped >= 0) this.onGearStopped(rt, stopped)
+      d.setGearStrain(i, 0.3 + this.gears.progress * 0.7)
+      rt.combat.setBossBar(this.gears.life)
+      if (Math.random() < dt * 4) rt.shake(0.08 + this.gears.progress * 0.14)
+      const r = this.gears.tick(dt)
+      if (r !== 'none') this.onPulled(rt, i, r === 'stopped')
       return
     }
-    if (rt.talking && this.busy) return
+    // 攻撃とすきの間（と、そのあとの休み）は、次の攻撃を選ばない。会話の間も
+    if (!d.ready || rt.talking) {
+      this.bossCd = Math.max(this.bossCd, BOSS.rest / d.rage)
+      this.chaseT = 0
+      if (rt.talking) d.stopWalking()
+      return
+    }
     this.bossCd -= dt
-    if (!d.ready) return
     const dd = dist2(d.position, p)
     d.faceTo(p)
     if (this.bossCd > 0) {
@@ -610,34 +668,73 @@ export class ChronicleEdoStage implements Stage {
       else d.stopWalking()
       return
     }
-    this.attacks++
-    // 体の右と左、どちらにいるか
-    const rx = Math.cos(d.yaw)
-    const rz = -Math.sin(d.yaw)
-    const side = (p.x - d.position.x) * rx + (p.z - d.position.z) * rz > 0 ? 'right' : 'left'
-    // 木槌（鐘）がとどく遠さ。少し遠いくらいなら、ふりおろす（とどかない分は手前の地面をたたく）。
-    // 足もとに近すぎて木槌がとどかないときは、鐘の音にする
-    const [rMin, rMax] = dd > BOSS.far || this.attacks % 3 === 0 ? [0, 0] : d.swingReach(side)
-    const reach = rMax + 1.2
-    if (rMax === 0 || dd < rMin - 0.6 || (dd > reach && d.gearIsStopped(1))) {
-      d.bellWave()
-      this.bossCd = BOSS.bellCd / d.rage
-      if (rt.playTime - this.warnedBell > 14) {
-        this.warnedBell = rt.playTime
-        rt.say('おはる', lines.lines('warn_bell')[0].text, 2.4)
-      }
-    } else if (dd <= reach) {
-      // ふりおろす所：ネクマックスの足もと。人形は、木槌の頭がそこへ落ちるように向きとかがみを決める
-      if (d.swing(side, this.tmp2.copy(p).setY(C.PLAZA.y)) > 0) {
-        this.bossCd = BOSS.swingCd / d.rage
-        if (rt.playTime - this.warnedSwing > 16) {
-          this.warnedSwing = rt.playTime
-          rt.say('おはる', lines.lines('warn_swing')[0].text, 2.2)
+    const plan = dollAttack(this.gears.next, this.attackN)
+    // 近づく（とどかない）：chase 秒まで歩く。あきらめたら false
+    const approach = (): boolean => {
+      if (d.gearIsStopped(1) || this.chaseT > BOSS.chase) return false
+      this.chaseT += dt
+      d.walkTo(this.tmp2.copy(p).lerp(d.position, 0.45), 1.8)
+      return true
+    }
+    let done = false
+    if (plan === 'swing' || plan === 'swingL') {
+      const side = plan === 'swing' ? 'right' : 'left'
+      // 木槌（鐘）がとどく遠さ。少し遠いくらいなら、ふりおろす（とどかない分は手前の地面をたたく）
+      const [rMin, rMax] = d.swingReach(side)
+      if (dd <= rMax + 1.2 && dd >= rMin - 0.6) {
+        // ふりおろす所：ネクマックスの足もと。右の木槌は、地面にささって抜けなくなる（右の肩のすき）
+        if (d.swing(side, this.tmp2.copy(p).setY(C.PLAZA.y), side === 'right' ? BOSS.stuck : 0) > 0) {
+          this.warn(rt, 'warn_swing', '赤い円から出て！', 16)
+          done = true
         }
+      } else if (dd > rMax + 1.2 && approach()) return
+      else if (d.bellWave() > 0) {
+        // 足もとに近すぎる・近づけない：鐘の音。次も、ふりおろしをねらう（すきを作る攻撃を飛ばさない）
+        this.warn(rt, 'warn_bell', '輪がくる！ Space でとんで！', 14)
+        this.chaseT = 0
+        this.bossCd = 0
+        return
       }
-    } else {
-      this.bossCd = 0.6
-      d.walkTo(this.tmp2.copy(p).lerp(d.position, 0.5), 1.8)
+    } else if (plan === 'stomp') {
+      // 足ぶみの赤い輪がとどく所まで近づく（あきらめたら、その場で）
+      if (dd > STOMP_RADIUS + 1.0 && approach()) return
+      if (d.stomp() > 0) {
+        this.warn(rt, 'warn_stomp', '赤い輪の外へにげて！', 14)
+        done = true
+      }
+    } else if (plan === 'charge') {
+      if (d.charge() > 0) {
+        this.warn(rt, 'warn_charge', '大きい輪がくる！ Space でとんで！', 12)
+        done = true
+      }
+    } else if (d.bellWave() > 0) {
+      this.warn(rt, 'warn_bell', '輪がくる！ Space でとんで！', 14)
+      done = true
+    }
+    if (done) {
+      this.attackN++
+      this.chaseT = 0
+      this.bossCd = 0
+    }
+  }
+
+  /** すき（次の歯車が見えている）の出入り：見えたら照準の対象に・おはるが「今！」。閉じたら、つかめない */
+  private updateOpening(rt: StageRuntime): void {
+    const d = this.w.doll
+    const o = d.opening
+    const open = o !== null && o === this.gears.next ? o : null
+    if (open === this.openGear) return
+    const was = this.openGear
+    this.openGear = open
+    this.sub.open = open !== null
+    for (let i = 0; i < 3; i++) d.targets[i].enabled = i === open || i === this.gears.holding
+    if (open !== null) {
+      rt.say('おはる', lines.lines(`open_${open}`)[0].text, 2.6)
+      rt.oreGlow(0.8)
+    } else if (was !== null && this.gears.holding < 0 && rt.playTime - this.missedSaid > 14) {
+      // つかめずに、すきが終わった
+      this.missedSaid = rt.playTime
+      rt.say('おはる', lines.lines('missed')[0].text, 2.4)
     }
   }
 
@@ -645,11 +742,12 @@ export class ChronicleEdoStage implements Stage {
     const rt = this.rt
     if (!rt) return
     rt.shake(e.kind === 'bell' ? 0.45 : 0.6)
+    if (this.sub.boss !== 'fight') return
+    const p = rt.player.position
     // ふりおろし：木槌（鐘）の頭が地面をたたいた所から SWING_HIT の中にいたら当たり（頭の上をとびこえていればよけた）
-    if (e.kind === 'swing' && this.sub.boss === 'fight') {
-      const p = rt.player.position
-      if (dist2(p, e.pos) < SWING_HIT && p.y < e.pos.y + 1.3) this.hurt(rt, 1, e.pos, BOSS.hurtKnock)
-    }
+    if (e.kind === 'swing' && dist2(p, e.pos) < SWING_HIT && p.y < e.pos.y + 1.3) this.hurt(rt, 1, e.pos, BOSS.hurtKnock)
+    // 足ぶみ：赤い輪の中で、地面にいたら当たり（ジャンプしていればよけた）
+    if (e.kind === 'stomp' && dist2(p, e.pos) < STOMP_RADIUS && rt.player.grounded && p.y < e.pos.y + 0.6) this.hurt(rt, 1, e.pos, BOSS.stompKnock)
   }
 
   /** プレイヤーに当たった（体力 1）。from：当てた物（木槌の頭・衝撃波の中心）。歯車をつかんでいたら、ふりほどかれる */
@@ -661,6 +759,7 @@ export class ChronicleEdoStage implements Stage {
     dir.normalize()
     if (this.gears.holding >= 0) {
       this.w.doll.setGearStrain(this.gears.holding, 0)
+      this.w.doll.grabbed(false)
       this.gears.release()
       rt.claw.reset()
       rt.say('おはる', lines.lines('shaken')[0].text, 2.2)
@@ -669,17 +768,48 @@ export class ChronicleEdoStage implements Stage {
     rt.combat.hurtPlayer(dmg, dir, knock)
   }
 
+  /** 1 回引っぱった（stopped：その歯車が止まった） */
+  private onPulled(rt: StageRuntime, i: number, stopped: boolean): void {
+    const d = this.w.doll
+    d.setGearStrain(i, 0)
+    rt.claw.reset()
+    rt.shake(0.45)
+    if (stopped) {
+      this.onGearStopped(rt, i)
+      return
+    }
+    // ガコッ！ 歯車が少しとび出る。人形はよろけて、すきが終わる
+    d.setGearHits(i, this.gears.pulls)
+    d.stagger()
+    this.openGear = null
+    this.sub.open = false
+    this.sub.left = this.gears.left
+    d.targets[i].enabled = false
+    rt.combat.setBossBar(this.gears.life)
+    rt.hud.banner(`${GEAR_NAMES[i]}の歯車が、ガコッ！ あと ${this.gears.left} 回`, 'success', 1.6)
+    rt.say('おはる', lines.lines('pulled')[0].text, 2.4)
+    this.bossCd = Math.max(this.bossCd, 1.6)
+  }
+
   private onGearStopped(rt: StageRuntime, i: number): void {
     const d = this.w.doll
     d.setGearStopped(i)
+    d.setGearHits(i, 0)
     d.setGearStrain(i, 0)
-    d.targets[i].enabled = false
+    d.stagger()
+    for (const t of d.targets) t.enabled = false
+    this.openGear = null
+    this.sub.open = false
+    this.sub.left = this.gears.left
     rt.claw.reset()
     rt.shake(0.5)
     rt.hud.banner(`${GEAR_NAMES[i]}の歯車が止まった！`, 'success', 1.8)
-    rt.combat.setBossBar(1 - this.gears.next / 3)
+    rt.combat.setBossBar(this.gears.life)
     this.sub.nextGear = this.gears.next
-    this.bossCd = Math.max(this.bossCd, 2.2)
+    // 止めるたびに、速く・攻撃の種類がふえる
+    d.setRage(this.gears.rage)
+    this.attackN = 0
+    this.bossCd = Math.max(this.bossCd, 2.4)
     if (this.gears.done) {
       d.setGearHighlight(null)
       void this.runChestDone(rt)
@@ -729,6 +859,8 @@ export class ChronicleEdoStage implements Stage {
     await rt.dialogue(lines.lines('tiny_slit'))
     this.clawProp.setGlow(0)
     this.sub.boss = 'over'
+    // 戦いが終わった：柵を開ける
+    this.fence?.open()
     const down = d.collapse()
     void rt.cinematic({ look: d.headWorld().add(v(0, -2, 0)), from: v(-20.5, 2.0, 28.6), hold: Infinity, inSec: 1.2, fov: 54 })
     await down
@@ -762,7 +894,12 @@ export class ChronicleEdoStage implements Stage {
     this.gears.release()
     rt.claw.reset()
     if (this.sub.boss === 'fight') {
+      // 止めた歯車・引っぱった回数はそのまま。人形は台座の前から、少し休んでから
       this.w.doll.resetFight()
+      for (const t of this.w.doll.targets) t.enabled = false
+      this.openGear = null
+      this.sub.open = false
+      this.chaseT = 0
       this.bossCd = 3
     }
   }
@@ -951,6 +1088,7 @@ export class ChronicleEdoStage implements Stage {
       this.sky.dawn(this.dawnAnim)
     }
     rt.combat.passive = this.busy || rt.talking || rt.inCinematic
+    this.fence?.update(dt, rt.player)
     this.mobs?.update(dt, rt, this.step, this.busy)
     this.keepCameraInWorkshop(rt)
     // 人物の向き
@@ -1029,31 +1167,24 @@ export class ChronicleEdoStage implements Stage {
       }
       if (id.startsWith('bell_doll_gear_') && this.sub.boss === 'fight') {
         const i = Number(id.slice(-1))
-        const r = this.gears.grab(i)
+        const r = this.gears.grab(i, this.openGear)
         const d = this.w.doll
         if (r === 'hold') {
-          // つかまれると、攻撃をやめてあばれる（衝撃波も消える）
-          d.interrupt()
+          // つかまれると、攻撃（予告・衝撃波）をやめて、すきの姿のまま、あばれる
+          d.grabbed(true)
           this.waveHit = false
-          d.setGearStrain(i, 0.2)
-          rt.hud.toast(`${GEAR_NAMES[i]}の歯車をつかんだ！ はなさないで！`, 2.4)
-        } else {
-          rt.claw.reset()
-          if (r === 'wrong') {
-            d.setRage(this.gears.rage)
-            rt.shake(0.3)
-            // 2 回まちがえたら、照準の切りかえ（R）を教える
-            const key = this.gears.mistakes >= 2 ? 'wrong_hint' : 'wrong'
-            rt.say('おはる', lines.lines(key)[0].text, 3.2)
-          }
-        }
+          d.setGearStrain(i, 0.3)
+          rt.hud.toast(`${GEAR_NAMES[i]}の歯車をつかんだ！ 引っぱれ！`, 1.6)
+        } else rt.claw.reset()
       }
     } else if (e.kind === 'released' && e.target.id.startsWith('bell_doll_gear_')) {
       const i = Number(e.target.id.slice(-1))
       if (this.gears.holding === i) {
+        // 引っぱり終わる前にはなした：すきのつづきから
         this.gears.release()
         this.w.doll.setGearStrain(i, 0)
-        rt.combat.setBossBar(1 - this.gears.next / 3)
+        this.w.doll.grabbed(false)
+        rt.combat.setBossBar(this.gears.life)
       }
     }
   }
@@ -1110,7 +1241,8 @@ export class ChronicleEdoStage implements Stage {
       void this.runTinySlit(rt)
       return true
     }
-    const who = this.nearNpc(rt)
+    // 戦いの間は、おはると話さない（F の案内も出さない）
+    const who = this.sub.boss === 'fight' ? null : this.nearNpc(rt)
     // 源兵衛・おはるがそばにいなければ、町の人と話す
     if (!who) return this.mobs?.interact(rt) ?? false
     if (this.step === 'demo' && who === 'genbei' && dist2(rt.player.position, BENCH_FRONT) < 3) {
@@ -1148,14 +1280,15 @@ export class ChronicleEdoStage implements Stage {
     if (this.nearBook(rt)) return [{ key: 'F', label: '書を見る' }]
     if (this.nearShrine(rt)) return [{ key: 'F', label: '箱をほこらに置く' }]
     if (this.nearDoll(rt)) return [{ key: 'F', label: '爪で胸の影を裂く' }]
-    if (this.step === 'night' && this.gears.holding >= 0) return [{ key: 'J', label: 'はなす（3秒つかむと止まる）' }]
+    if (this.step === 'night' && this.gears.holding >= 0) return [{ key: 'J', label: 'はなす' }]
+    if (this.sub.boss === 'fight') return null
     if (this.nearNpc(rt)) return [{ key: 'F', label: '話す' }]
     return this.mobs?.hints(rt) ?? null
   }
 
   objective(_rt: StageRuntime): { title: string; sub: string } {
-    if (this.step === 'night' && this.sub.boss === 'fight' && this.gears.holding >= 0) return { title: 'はなさないで！', sub: `${GEAR_NAMES[this.gears.holding]}の歯車が止まるまで（${Math.ceil((1 - this.gears.progress) * 3)}秒）` }
-    return edoObjective(this.step, { ...this.sub, nextGear: this.gears.next, mistakes: this.gears.mistakes })
+    if (this.step === 'night' && this.sub.boss === 'fight' && this.gears.holding >= 0) return { title: '引っぱれ！', sub: `${GEAR_NAMES[this.gears.holding]}の歯車を引っぱっている` }
+    return edoObjective(this.step, { ...this.sub, nextGear: this.gears.next, open: this.openGear !== null, left: this.gears.left })
   }
 
   objectiveTarget(rt: StageRuntime): THREE.Vector3 | null {
@@ -1170,7 +1303,8 @@ export class ChronicleEdoStage implements Stage {
         return BENCH_FRONT
       case 'night':
         if (this.sub.boss === 'before') return rt.player.position.z < 21.4 ? BACK_DOOR : this.w.doll.position
-        if (this.sub.boss === 'fight') return this.w.doll.targets[Math.min(2, this.gears.next)].point
+        // 戦いの間：すきのときだけ、次の歯車を指す（すきでなければ人形）
+        if (this.sub.boss === 'fight') return this.openGear !== null ? this.w.doll.targets[this.openGear].point : this.w.doll.headWorld(this.markAt)
         if (this.sub.boss === 'claw') return this.w.doll.targets[2].point
         return null
       case 'dawn':
@@ -1193,7 +1327,7 @@ export class ChronicleEdoStage implements Stage {
     else if (this.step === 'arrive') out.push({ pos: at.setY(t.y + 0.7), label: '茶運び人形' })
     else if (this.step === 'workshop') out.push({ pos: at.setY(t.y + (this.sub.inWorkshop ? 0.7 : 3.0)), label: !this.sub.inWorkshop ? '源兵衛の工房' : this.sub.bookSeen ? '木の箱' : '書' })
     else if (this.step === 'demo') out.push({ pos: at.setY(1.6), label: '作業台' })
-    else if (this.step === 'night') out.push({ pos: at.clone().setY(t.y + 0.9), label: this.sub.boss === 'before' ? (rt.player.position.z < 21.4 ? '裏口' : '時の鐘人形') : `${GEAR_NAMES[Math.min(2, this.gears.next)]}の歯車` })
+    else if (this.step === 'night') out.push({ pos: at.clone().setY(t.y + 0.9), label: this.sub.boss === 'before' ? (rt.player.position.z < 21.4 ? '裏口' : '時の鐘人形') : this.sub.boss === 'fight' && this.openGear === null ? '時の鐘人形' : `${GEAR_NAMES[Math.min(2, this.gears.next)]}の歯車` })
     else if (this.step === 'dawn') out.push({ pos: at.setY(t.y + 0.9), label: this.sub.carryBox ? '時の神さまのほこら' : 'からくりの箱' })
     else if (this.step === 'leave') out.push({ pos: at.setY(2.6), label: '光の輪' })
     return out
@@ -1236,9 +1370,10 @@ export class ChronicleEdoStage implements Stage {
         else if (this.sub.boss === 'fight') {
           while (!this.gears.done) {
             const i = this.gears.next
-            this.gears.grab(i)
+            this.gears.grab(i, i)
             this.gears.holdT = this.gears.holdSec
-            this.onGearStopped(rt, this.gears.tick(0))
+            const r = this.gears.tick(0)
+            if (r === 'stopped') this.onGearStopped(rt, i)
           }
         } else if (this.sub.boss === 'claw') {
           rt.player.teleport(this.w.doll.position.clone().add(v(0, 0.03, -4.5)))
@@ -1266,8 +1401,12 @@ export class ChronicleEdoStage implements Stage {
       sub: { ...this.sub },
       busy: this.busy,
       gearNext: this.gears.next,
+      pulls: this.gears.pulls,
       holding: this.gears.holding,
       hold: +this.gears.progress.toFixed(2),
+      open: this.openGear,
+      attackN: this.attackN,
+      fence: this.fence?.closed ?? false,
       dollState: d.state,
       dollPos: d.position.toArray().map((x) => +x.toFixed(1)),
       rage: d.rage,
@@ -1290,6 +1429,8 @@ export class ChronicleEdoStage implements Stage {
     this.wave = null
     this.mobs?.dispose()
     this.mobs = null
+    this.fence?.dispose()
+    this.fence = null
     const rt = this.rt
     if (rt) {
       rt.combat.showBossBar(null)

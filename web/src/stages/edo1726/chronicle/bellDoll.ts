@@ -3,11 +3,15 @@
 // 見上げるほど大きくなって台座から降り、工房（かけら）へ向かって歩く。
 //
 // 弱点の歯車は 3 つ（おはるの声の順）：0＝右の肩・1＝左のひざ・2＝胸。それぞれ hold_mechanism の ClawTargetDef（targets）。
-// J でつかんで保持すると止まる（止めるのはステージ：setGearStopped）。止まると
+// 戦い方は「よける → すきができる → つかむ」のくり返し（どの攻撃も地面の赤い予告が先に出る）：
+//   swing(side, at, stuck)  腕のふりおろし（予告の円 → たたきつけ）。stuck 秒、木槌が地面にささって動けない＝右の肩の歯車が見える
+//   stomp()                 足ぶみの地ひびき（人形のまわりの赤い輪 → ドン）。そのあと左ひざがロックして、ひざをつく＝ひざの歯車
+//   charge()                大技：鐘をかかげて力をためる（胸の戸がひらく）→ 輪の衝撃波が 2 つ → つかれて止まる＝胸の歯車
+//   bellWave()              鐘の衝撃波（地面を広がる輪。ジャンプでよける）
+// opening：いま見えている（つかめる）歯車。止めると（setGearStopped）、
 //   右の肩 → 右うでがだらりと下がる（木槌はもう使えない）／左のひざ → 左ひざをついて動けなくなる（胸が低くなる）／
 //   胸 → 全部が止まる（collapse で影がはがれる）
-// 攻撃：swing(side) 腕のふりおろし（地面に予告の円 → たたきつけ）・bellWave() 鐘の衝撃波（地面を広がる輪。ジャンプでよける）。
-// 当たったかどうかはステージが onImpact・hitTest で決める（ここは見た目と時間だけ）。
+// 当たったかどうかはステージが onImpact・waveHit で決める（ここは見た目と時間だけ）。
 import * as THREE from 'three'
 import { Batch, M, rbox } from '../../../render/batch'
 import type { MaterialLibrary } from '../../../render/materials'
@@ -23,9 +27,28 @@ export const GEAR_NAMES = ['右の肩', '左のひざ', '胸'] as const
 export type GearIndex = 0 | 1 | 2
 export type DollSide = 'left' | 'right'
 /** 攻撃が地面をたたいた。pos：たたいた所（ふりおろしは木槌・鐘の頭の真下、鐘の音は人形の足もと） */
-export type DollImpact = { kind: 'swing' | 'bell'; side?: DollSide; pos: THREE.Vector3; radius: number }
+export type DollImpact = { kind: 'swing' | 'bell' | 'stomp'; side?: DollSide; pos: THREE.Vector3; radius: number }
 
-type DollState = 'idle' | 'chime' | 'possessing' | 'stepdown' | 'stand' | 'walk' | 'windup' | 'slam' | 'recover' | 'bellUp' | 'bellHit' | 'collapse' | 'down'
+type DollState =
+  | 'idle'
+  | 'chime'
+  | 'possessing'
+  | 'stepdown'
+  | 'stand'
+  | 'walk'
+  | 'windup'
+  | 'slam'
+  | 'stuck'
+  | 'recover'
+  | 'bellUp'
+  | 'bellHit'
+  | 'stompUp'
+  | 'stompHit'
+  | 'kneeLock'
+  | 'chargeUp'
+  | 'tired'
+  | 'collapse'
+  | 'down'
 
 /** 大きさ：ふだん（台座の上）とのりうつられたとき */
 const NORMAL_SCALE = 0.86
@@ -39,8 +62,29 @@ const POSSESSED_SCALE = 1.1
 /** 台座の高さ・寸法 */
 export const PEDESTAL = { w: 5.4, h: 2.0, d: 4.2 }
 /** 時間（秒） */
-// ふりおろし：予告の円（windup）からたたきつけ（slam）まで、怒りがいちばん上（1.3 倍）でも 1.2 秒より長く
-const T = { windup: 1.35, slam: 0.22, recover: 1.3, bellUp: 1.0, bellHit: 0.25, possess: 2.6, stepdown: 1.4, collapse: 3.2 }
+// ふりおろし：予告の円（windup）からたたきつけ（slam）まで、怒りがいちばん上（1.25 倍）でも 1.2 秒より長く。
+// 足ぶみ：赤い輪（stompUp）からドンまで 1.6 秒（怒り 1.25 倍で 1.28 秒）。大技：ため（chargeUp）2.6 秒、2 つ目の輪は 0.95 秒あと。
+// すき（stuck・kneeLock・tired）は怒りで短くしない（子どもがねらう時間）
+const T = {
+  windup: 1.4,
+  slam: 0.22,
+  recover: 1.3,
+  bellUp: 1.0,
+  bellHit: 0.25,
+  stompUp: 1.6,
+  stompHit: 0.2,
+  kneeLock: 4.6,
+  chargeUp: 2.6,
+  wave2: 0.95,
+  tired: 4.8,
+  possess: 2.6,
+  stepdown: 1.4,
+  collapse: 3.2,
+}
+/** 足ぶみの地ひびきがとどく半径（人形の足もとから。予告の赤い輪と同じ） */
+export const STOMP_RADIUS = 5.2
+/** 胸の戸がひらききる角度（rad） */
+const DOOR_OPEN = 1.7
 /** 衝撃波：広がる速さ（m/s）・最大の半径・輪の高さ */
 // 輪がゆっくり広がるほど、ジャンプのタイミングを合わせやすい
 export const BELL_WAVE = { speed: 6.0, maxR: 19, height: 0.7, width: 0.9 }
@@ -480,7 +524,24 @@ export class TimeBellDoll {
   private readonly dialHand: THREE.Mesh
   private readonly pedestalGears: THREE.Object3D[] = []
   private readonly warn = new WarnCircle()
-  private readonly wave = new BellWaveFx()
+  /** 足ぶみの予告の赤い輪（人形のまわり） */
+  private readonly stompWarn = new WarnCircle()
+  /** 鐘の衝撃波（大技は 2 つ続けて出すので 2 本） */
+  private readonly waves: Array<{ r: number; center: THREE.Vector3; fx: BellWaveFx }> = [0, 1].map(() => ({ r: -1, center: new THREE.Vector3(), fx: new BellWaveFx() }))
+  /** 大技の 2 つ目の輪までの秒（-1 は無し） */
+  private pendingWave = -1
+  /** 胸の戸（左右の 2 枚。蝶番のまわりに回る）と、ひらき具合 */
+  private readonly doors: THREE.Group[] = []
+  private doorK = 0
+  /** 大技のためで光る鐘 */
+  private readonly bellGlow: THREE.Sprite
+  private chargeGlow = 0
+  /** 歯車を引っぱった回数（少しずつ外へとび出る） */
+  private readonly gearHits = [0, 0, 0]
+  /** 木槌が地面にささっている秒（swing で決める） */
+  private stuckSec = 0
+  /** 歯車をつかまれている（すきの姿勢のまま止まる） */
+  private held = false
   private readonly mist: DollMist
   private readonly pose: Pose = { ...REST }
   private readonly want: Pose = { ...REST }
@@ -501,8 +562,6 @@ export class TimeBellDoll {
   private struck = true
   /** たたきつける頭のワールド位置（毎フレーム） */
   private readonly strikeAt = new THREE.Vector3()
-  private waveR = -1
-  private readonly waveCenter = new THREE.Vector3()
   private struggleK = 0
   private kneeling = 0
   private onPedestal = true
@@ -540,6 +599,7 @@ export class TimeBellDoll {
     this.gears.push(this.buildGear(this.torso, v(1.18, 2.42, -0.52), 0.5, 16, new THREE.Euler(-0.2, -0.585, 0), 0))
     this.gears.push(this.buildGear(this.legL.knee, v(0, 0, -0.4), 0.42, 14, new THREE.Euler(0, 0, 0), 1))
     this.gears.push(this.buildGear(this.torso, v(0, 1.4, -0.86), 0.5, 18, new THREE.Euler(0, 0, 0), 2))
+    this.buildDoors()
     // 輪郭線（体の大きな部品だけ。歯車・金具は線なし）。人物と同じ画面の太さ（近くで太くなりすぎない）
     addOutlines(this.body, 0.006, '#2a1410', (m) => m.material !== this.mats.gold && !this.mats.gears.includes(m.material as THREE.MeshStandardMaterial) && m.material !== this.mats.iron, OUTLINE_PX.figure)
     this.targets = this.gears.map((_g, i) => ({
@@ -553,8 +613,13 @@ export class TimeBellDoll {
       range: 18,
       facing: new THREE.Vector3(0, 0, -1),
     }))
-    // 目（ふだんは黒い点、のりうつると光る）
-    this.fx.add(this.warn.mesh, this.wave.group, this.mist.points, this.mist.embers)
+    // 大技のためで光る鐘（左手の鐘の口のあたり）
+    this.bellGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlowTexture(), color: '#ff4fa0', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, toneMapped: false }))
+    this.bellGlow.position.set(0, -1.0, 0)
+    this.bellGlow.scale.setScalar(3.2)
+    this.armL.hand.add(this.bellGlow)
+    this.stompWarn.mesh.name = 'doll_stomp_warn'
+    this.fx.add(this.warn.mesh, this.stompWarn.mesh, ...this.waves.map((w) => w.fx.group), this.mist.points, this.mist.embers)
     this.fx.name = 'time_bell_doll_fx'
     this.root.scale.setScalar(this.scale)
     this.root.updateMatrixWorld(true)
@@ -879,6 +944,27 @@ export class TimeBellDoll {
     return spin
   }
 
+  /** 胸の戸（漆の観音びらき。大技のためでひらき、胸の歯車が見える） */
+  private buildDoors(): void {
+    const m = this.mats
+    for (const e of [-1, 1]) {
+      const hinge = new THREE.Group()
+      hinge.position.set(e * 0.62, 1.4, -0.9)
+      this.torso.add(hinge)
+      // 半円の板：蝶番（外がわ）から胸のまんなかまで
+      const door = this.part('doll_chest_door', (b) => {
+        const g = new THREE.CircleGeometry(0.62, 16, e < 0 ? -Math.PI / 2 : Math.PI / 2, Math.PI)
+        b.add(g, m.lacquer, M(-e * 0.62, 0, -0.02, 0, Math.PI, 0), { tint: '#7a1c18' })
+        g.dispose()
+        b.add(new THREE.TorusGeometry(0.62, 0.035, 5, 16, Math.PI), m.gold, M(-e * 0.62, 0, -0.03, 0, 0, e < 0 ? Math.PI / 2 : -Math.PI / 2), { tint: '#ffffff' })
+        // 合わせ目の金の縁
+        b.add(rbox(0.05, 1.18, 0.05, 0.01), m.gold, M(-e * 0.59, 0, -0.04), { tint: '#ffffff' })
+      })
+      hinge.add(door)
+      this.doors.push(hinge)
+    }
+  }
+
   // -------------------------------------------------------------- 外から使う
 
   /** 足元（ワールド） */
@@ -955,9 +1041,44 @@ export class TimeBellDoll {
     } else this.faceTarget = y
   }
 
-  /** 攻撃中か（ふりおろし・鐘） */
+  /** 攻撃中か（ふりおろし・鐘・足ぶみ・大技と、そのあとのすき） */
   get attacking(): boolean {
-    return this.state === 'windup' || this.state === 'slam' || this.state === 'recover' || this.state === 'bellUp' || this.state === 'bellHit'
+    switch (this.state) {
+      case 'windup':
+      case 'slam':
+      case 'stuck':
+      case 'recover':
+      case 'bellUp':
+      case 'bellHit':
+      case 'stompUp':
+      case 'stompHit':
+      case 'kneeLock':
+      case 'chargeUp':
+      case 'tired':
+        return true
+      default:
+        return false
+    }
+  }
+
+  /**
+   * いま見えている（つかめる）歯車。よけたあとのすき：木槌が地面にささっている＝右の肩・足ぶみのあとひざがロック＝左のひざ・
+   * 大技のため（半分すぎてから）とそのあとのつかれ＝胸（戸がひらく）。止めた歯車・すきが無いときは null
+   */
+  get opening(): number | null {
+    if (this.state === 'stuck' && this.side === 'right' && !this.gearStopped[0]) return 0
+    if (this.state === 'kneeLock' && !this.gearStopped[1]) return 1
+    if (!this.gearStopped[2] && (this.state === 'tired' || (this.state === 'chargeUp' && this.st * this.rage >= T.chargeUp * 0.35))) return 2
+    return null
+  }
+
+  /** すきの残りの秒（すきが無ければ 0） */
+  get openingLeft(): number {
+    if (this.state === 'stuck') return Math.max(0, this.stuckSec - this.st)
+    if (this.state === 'kneeLock') return Math.max(0, T.kneeLock - this.st)
+    if (this.state === 'tired') return Math.max(0, T.tired - this.st)
+    if (this.state === 'chargeUp') return T.tired + Math.max(0, T.chargeUp - this.st * this.rage) / this.rage
+    return 0
   }
 
   /** 次の命令を受けられる（立っている・歩いている） */
@@ -970,10 +1091,11 @@ export class TimeBellDoll {
    * at（ねらう地面）を渡すと、木槌（左手なら鐘）の頭が、そこへ本当に落ちるように、体の向き・前へのかがみ・腕の角度を決める
    * （とどかない遠さ・近さなら、とどく所まで）。予告の円は、頭が落ちる所に出す。at を省くと体の前
    */
-  swing(side: DollSide, at?: THREE.Vector3): number {
+  swing(side: DollSide, at?: THREE.Vector3, stuck = 0): number {
     if (!this.ready || this.state === 'collapse') return -1
     if (side === 'right' && this.gearStopped[0]) side = 'left'
     this.side = side
+    this.stuckSec = side === 'right' ? stuck : 0
     this.walkTarget = null
     const r = this.root.position
     const dist = at ? Math.hypot(at.x - r.x, at.z - r.z) : 3.5 * (this.scale / POSSESSED_SCALE)
@@ -1081,20 +1203,61 @@ export class TimeBellDoll {
     return (T.bellUp + T.bellHit) / this.rage
   }
 
-  /** 衝撃波の今の輪（active でなければ広がっていない） */
-  get waveFront(): { active: boolean; center: THREE.Vector3; radius: number; width: number } {
-    return { active: this.waveR >= 0, center: this.waveCenter, radius: Math.max(0, this.waveR), width: BELL_WAVE.width }
+  /** 足ぶみの地ひびき（人形のまわりに赤い輪 → ドン → 左ひざがロック）。ドンまでの秒を返す（できなければ -1） */
+  stomp(): number {
+    if (!this.ready || this.gearStopped[1]) return -1
+    this.walkTarget = null
+    this.struck = true
+    this.stompWarn.show(this.root.position.clone().setY(Math.max(0, this.root.position.y)), STOMP_RADIUS)
+    this.enter('stompUp')
+    return T.stompUp / this.rage
+  }
+
+  /** 大技：鐘をかかげて力をためる（胸の戸がひらく）→ 輪の衝撃波を 2 つ → つかれて止まる。1 つ目の輪までの秒を返す */
+  charge(): number {
+    if (!this.ready) return -1
+    this.walkTarget = null
+    this.struck = true
+    this.enter('chargeUp')
+    return T.chargeUp / this.rage
+  }
+
+  /** 衝撃波が広がっているか（大技の 2 つ目を待っている間も） */
+  get wavesActive(): boolean {
+    return this.pendingWave >= 0 || this.waves.some((w) => w.r >= 0)
   }
 
   /**
-   * p（足元）が今の攻撃に当たっているか。grounded：地面にいるか（衝撃波はジャンプでよけられる）。
-   * ふりおろしは onImpact のときに一度だけ判定するので、ここでは衝撃波だけ
+   * p（足元）が衝撃波の輪に当たっているか。当たっていれば、その輪の中心（飛ばされる向きの元）、でなければ null。
+   * grounded：地面にいるか（衝撃波はジャンプでよけられる）。ふりおろし・足ぶみは onImpact のときに一度だけ判定する
    */
-  waveHits(p: THREE.Vector3, grounded: boolean, playerY = p.y): boolean {
-    if (this.waveR < 0) return false
-    const d = Math.hypot(p.x - this.waveCenter.x, p.z - this.waveCenter.z)
-    if (Math.abs(d - this.waveR) > BELL_WAVE.width * 0.5) return false
-    return grounded || playerY - this.waveCenter.y < BELL_WAVE.height * 0.6
+  waveHit(p: THREE.Vector3, grounded: boolean, playerY = p.y): THREE.Vector3 | null {
+    for (const w of this.waves) {
+      if (w.r < 0) continue
+      const d = Math.hypot(p.x - w.center.x, p.z - w.center.z)
+      if (Math.abs(d - w.r) > BELL_WAVE.width * 0.5) continue
+      if (grounded || playerY - w.center.y < BELL_WAVE.height * 0.6) return w.center
+    }
+    return null
+  }
+
+  /** 衝撃波を 1 つ出す（足もとから） */
+  private startWave(): void {
+    const w = this.waves.find((x) => x.r < 0) ?? this.waves[0]
+    w.center.set(this.root.position.x, Math.max(0, this.root.position.y), this.root.position.z)
+    w.r = 1.5 * this.scale
+    this.onImpact?.({ kind: 'bell', pos: w.center.clone(), radius: w.r })
+  }
+
+  /** 衝撃波・予告を全部消す */
+  private clearAttackFx(): void {
+    this.warn.set(0, 0, 0)
+    this.stompWarn.set(0, 0, 0)
+    this.pendingWave = -1
+    for (const w of this.waves) {
+      w.r = -1
+      w.fx.set(w.center, 0, 0)
+    }
   }
 
   /** 体の中に入りこんだ点を外へ押し出す（足元の円）。押し出したら新しい位置、そうでなければ null */
@@ -1140,20 +1303,37 @@ export class TimeBellDoll {
   /** 止まって、影がはがれる（胸の歯車を止めたあと）。終わると resolve */
   collapse(): Promise<void> {
     this.walkTarget = null
-    this.warn.set(0, 0, 0)
-    this.waveR = -1
+    this.held = false
+    this.clearAttackFx()
     this.enter('collapse')
     return this.waitState()
   }
 
-  /** 攻撃を打ち切る（歯車をつかまれて、あばれ始めたとき）。衝撃波も消える */
-  interrupt(): void {
+  /**
+   * 歯車をつかまれた（on）・はなされた（off）。つかまれている間は、攻撃（予告・衝撃波）を消して、すきの姿勢のまま止まる
+   * （すきの時間も進まない）。大技のためでつかまれたら、そこでつかれた姿に。すきでない所でつかまれたら、立ったまま
+   */
+  grabbed(on: boolean): void {
+    this.held = on
+    if (!on) return
     this.walkTarget = null
     this.struck = true
-    this.warn.set(0, 0, 0)
-    this.waveR = -1
-    this.wave.set(this.waveCenter, 0, 0)
+    this.clearAttackFx()
+    if (this.state === 'chargeUp') this.enter('tired')
+    else if (this.opening === null && (this.attacking || this.state === 'walk')) this.enter('stand')
+  }
+
+  /** 引っぱられて、すきが終わる（よろけて立ち直る）。ふりほどいたときも */
+  stagger(): void {
+    this.held = false
+    this.stuckSec = 0
+    this.clearAttackFx()
     if (this.attacking || this.state === 'walk') this.enter('stand')
+  }
+
+  /** 歯車を引っぱった回数（見た目：少しずつ外へとび出て、かたむく） */
+  setGearHits(i: number, n: number): void {
+    this.gearHits[i] = n
   }
 
   /** 戦いをやり直す（体力 0 から戻ったとき）：攻撃と衝撃波を消し、台座の前に立たせる。止めた歯車はそのまま */
@@ -1161,9 +1341,9 @@ export class TimeBellDoll {
     this.walkTarget = null
     this.struck = true
     this.faceTarget = null
-    this.warn.set(0, 0, 0)
-    this.waveR = -1
-    this.wave.set(this.waveCenter, 0, 0)
+    this.held = false
+    this.stuckSec = 0
+    this.clearAttackFx()
     this.gearStrain.fill(0)
     this.onPedestal = false
     const g = this.groundFront(this.tmp2)
@@ -1181,9 +1361,9 @@ export class TimeBellDoll {
     this.gearStopped.fill(true)
     this.gearStrain.fill(0)
     this.highlight = null
-    this.warn.set(0, 0, 0)
-    this.waveR = -1
-    this.wave.set(this.waveCenter, 0, 0)
+    this.held = false
+    this.clearAttackFx()
+    this.doorK = 1
     this.root.position.copy(this.groundFront(this.tmp2))
     this.kneeling = 1
     this.enter('down')
@@ -1218,7 +1398,8 @@ export class TimeBellDoll {
 
   update(dt: number, _camera?: THREE.Camera): void {
     this.t += dt
-    this.st += dt
+    // つかまれている間は、すきの時間を進めない
+    if (!this.held) this.st += dt
     this.step(dt)
     // 姿勢を目標へ寄せる（たたきつけは速く）
     const fast = this.state === 'slam' || this.state === 'bellHit'
@@ -1233,14 +1414,21 @@ export class TimeBellDoll {
     this.applyPose(sh)
     // 歯車の回転・光
     const speed = this.state === 'down' ? 0 : this.possessed ? 2.6 * this.rage : 0.7
+    const open = this.opening
     this.gears.forEach((g, i) => {
       if (!this.gearStopped[i]) g.rotation.z += dt * speed * (i % 2 ? -1 : 1) * (1 - this.gearStrain[i] * 0.85)
       else g.rotation.z += (Math.round(g.rotation.z / 0.4) * 0.4 - g.rotation.z) * Math.min(1, dt * 8)
-      // 次につかむ 1 個（highlight）をいちばん明るく。止めた歯車は青くひかえめに（今の 1 個と競わない）
-      const hl = this.highlight === i && !this.gearStopped[i] ? 0.8 + 0.2 * Math.sin(this.t * 6) : 0
+      // 引っぱった回数だけ、外へとび出て、かたむく
+      const out = this.gearStopped[i] ? 0 : this.gearHits[i]
+      g.position.z += (-0.13 * out - g.position.z) * Math.min(1, dt * 10)
+      g.rotation.x += (0.22 * out - g.rotation.x) * Math.min(1, dt * 10)
+      // すき（つかめる）の 1 個をいちばん明るく。次の 1 個はうすい輪だけ（まだつかめない）。止めた歯車は青くひかえめに
+      const isNext = this.highlight === i && !this.gearStopped[i]
+      const hl = isNext && open === i ? 0.85 + 0.15 * Math.sin(this.t * 9) : 0
+      const dim = isNext && open !== i ? 0.22 : 0
       const stopped = this.gearStopped[i] ? 1 : 0
       const rm = this.gearRings[i].material as THREE.MeshBasicMaterial
-      rm.opacity = Math.max(hl, stopped * 0.4, this.gearStrain[i] * 0.9)
+      rm.opacity = Math.max(hl, dim, stopped * 0.4, this.gearStrain[i] * 0.9)
       rm.color.setRGB(stopped ? 0.3 : 2.6, stopped ? 0.75 : 2.0 - this.gearStrain[i] * 0.8, stopped ? 1.6 : 0.6)
       this.gearRings[i].rotation.z = this.t * (stopped ? 0 : 1.5)
       ;(this.gearGlow[i].material as THREE.SpriteMaterial).opacity = hl * 0.8 + this.gearStrain[i] * 0.5
@@ -1250,6 +1438,15 @@ export class TimeBellDoll {
       gm.color.copy(GEAR_BRASS).multiplyScalar(stopped ? 0.45 : 1)
       if (stopped) gm.emissive.setRGB(0.06, 0.12, 0.26)
     })
+    // 胸の戸：胸がすきのとき・止めたあとはひらく
+    const doorWant = this.gearStopped[2] || open === 2 ? 1 : 0
+    this.doorK += (doorWant - this.doorK) * Math.min(1, dt * 5)
+    this.doors.forEach((d, k) => (d.rotation.y = (k === 0 ? 1 : -1) * DOOR_OPEN * ease(clamp01(this.doorK))))
+    // 大技のためで光る鐘
+    const cg = this.state === 'chargeUp' ? clamp01((this.st * this.rage) / T.chargeUp) : 0
+    this.chargeGlow += (cg - this.chargeGlow) * Math.min(1, dt * 8)
+    ;(this.bellGlow.material as THREE.SpriteMaterial).opacity = this.chargeGlow * (0.7 + 0.3 * Math.sin(this.t * 18))
+    this.bellGlow.scale.setScalar(2.4 + this.chargeGlow * 2.4)
     this.key.rotation.z += dt * (this.state === 'down' ? 0 : this.possessed ? 3.2 : 0.8)
     this.pedestalGears.forEach((g, i) => (g.rotation.x += dt * (i ? -0.5 : 0.5)))
     // のりうつり：色を少し沈め、ひびをすみれ色に、目を光らせる、もや。
@@ -1274,14 +1471,19 @@ export class TimeBellDoll {
     for (const g of this.eyeGlow) (g.material as THREE.SpriteMaterial).opacity = Math.max(0, pk - 0.3) * (0.7 + 0.3 * pulse)
     this.mist.amount = pk * (this.state === 'collapse' || this.state === 'down' ? Math.max(0, 1 - this.st / T.collapse) : 1)
     this.mist.update(dt, this.root.position, this.height, 1.9 * this.scale)
-    // 衝撃波
-    if (this.waveR >= 0) {
-      this.waveR += dt * BELL_WAVE.speed * this.rage
-      const a = this.waveR > BELL_WAVE.maxR - 3 ? Math.max(0, (BELL_WAVE.maxR - this.waveR) / 3) : 1
-      this.wave.set(this.waveCenter, this.waveR, a)
-      if (this.waveR >= BELL_WAVE.maxR) {
-        this.waveR = -1
-        this.wave.set(this.waveCenter, 0, 0)
+    // 衝撃波（大技の 2 つ目は少しあとから）
+    if (this.pendingWave >= 0 && !this.held) {
+      this.pendingWave -= dt
+      if (this.pendingWave < 0) this.startWave()
+    }
+    for (const w of this.waves) {
+      if (w.r < 0) continue
+      w.r += dt * BELL_WAVE.speed * this.rage
+      const a = w.r > BELL_WAVE.maxR - 3 ? Math.max(0, (BELL_WAVE.maxR - w.r) / 3) : 1
+      w.fx.set(w.center, w.r, a)
+      if (w.r >= BELL_WAVE.maxR) {
+        w.r = -1
+        w.fx.set(w.center, 0, 0)
       }
     }
     this.root.scale.setScalar(this.scale)
@@ -1298,12 +1500,12 @@ export class TimeBellDoll {
 
   /** ふりおろし：見えている頭が地面にとどいた瞬間に onImpact（たたいた所＝頭の真下） */
   private hitGround(): void {
-    if (this.struck || (this.state !== 'slam' && this.state !== 'recover')) return
+    if (this.struck || (this.state !== 'slam' && this.state !== 'recover' && this.state !== 'stuck')) return
     const p = this.strikeWorld(this.strikeAt)
     const ground = Math.max(0, this.root.position.y)
     const c = STRIKE_Y[this.side] * (this.scale / POSSESSED_SCALE)
     // ふつうは頭が地面にふれたとき。とどかないまま腕を下ろしきったら、そこで（保険）
-    if (p.y > ground + c + 0.3 && !(this.state === 'recover' && this.st > 0.3)) return
+    if (p.y > ground + c + 0.3 && !((this.state === 'recover' || this.state === 'stuck') && this.st > 0.3)) return
     this.struck = true
     const at = p.clone().setY(ground)
     this.onImpact?.({ kind: 'swing', side: this.side, pos: at, radius: SWING_RADIUS })
@@ -1347,8 +1549,9 @@ export class TimeBellDoll {
     const W = this.want
     Object.assign(W, REST)
     const s = this.st
-    const kneel = this.gearStopped[1]
-    this.kneeling += ((kneel ? 1 : 0) - this.kneeling) * Math.min(1, dt * 3)
+    // 左ひざ：止めたら、ずっとつく。足ぶみのあとのロックの間も、ガクッとつく
+    const kneel = this.gearStopped[1] || this.state === 'kneeLock'
+    this.kneeling += ((kneel ? 1 : 0) - this.kneeling) * Math.min(1, dt * (this.state === 'kneeLock' ? 7 : 3))
     // 向きを変える
     if (this.faceTarget !== null && this.canTurn()) {
       let d = this.faceTarget - this.root.rotation.y
@@ -1473,14 +1676,29 @@ export class TimeBellDoll {
         this.standPose(W)
         this.armSlam(W, this.side, k)
         this.warn.set(1, 1, this.t)
-        // 地面をたたくのは、見えている頭が地面にとどいたとき（update の hitGround）
-        if (k >= 1) this.enter('recover')
+        // 地面をたたくのは、見えている頭が地面にとどいたとき（update の hitGround）。木槌はそのまま地面にささる
+        if (k >= 1) this.enter(this.stuckSec > 0 ? 'stuck' : 'recover')
+        break
+      }
+      case 'stuck': {
+        // 木槌が地面にささって、ぬけない：ぐいぐい引っぱる（肩の歯車が見える）
+        this.standPose(W)
+        this.armSlam(W, this.side, 1)
+        const tug = Math.max(0, Math.sin(this.t * 6.5)) * (this.held ? 0 : 1)
+        W.lean += 0.06 * tug
+        W.twist -= 0.08 * tug
+        W.headX += 0.1
+        this.warn.set(1, Math.max(0, 1 - s * 2.5), this.t)
+        if (s >= this.stuckSec) {
+          this.stuckSec = 0
+          this.enter('recover')
+        }
         break
       }
       case 'recover': {
         const k = clamp01((s * this.rage) / T.recover)
         this.standPose(W)
-        // 腕を地面に置いたまま少し休む（歯車をねらうすき）→ 戻す
+        // 腕を地面に置いたまま少し休む → 戻す
         if (k < 0.6) this.armSlam(W, this.side, 1)
         this.warn.set(1, Math.max(0, 1 - k * 3), this.t)
         if (k >= 1) this.enter('stand')
@@ -1518,12 +1736,86 @@ export class TimeBellDoll {
           W.lean = 0.35 * k
         }
         if (k >= 1) {
-          this.waveCenter.set(this.root.position.x, Math.max(0, this.root.position.y), this.root.position.z)
-          this.waveR = 1.5 * this.scale
-          this.onImpact?.({ kind: 'bell', pos: this.waveCenter.clone(), radius: this.waveR })
+          this.startWave()
           this.enter('recover')
           this.side = 'left'
         }
+        break
+      }
+      case 'stompUp': {
+        // 左足を高く上げて、両うでを広げる（足もとに赤い輪）
+        const k = clamp01((s * this.rage) / T.stompUp)
+        const kk = ease(Math.min(1, k * 1.4))
+        this.standPose(W)
+        W.hipL = 1.25 * kk
+        W.kneeL = -1.35 * kk
+        W.lean = -0.12 * kk
+        W.armLZ = -0.25 - 0.75 * kk
+        if (!this.gearStopped[0]) W.armRZ = 0.35 + 0.7 * kk
+        W.roll = -0.06 * kk
+        this.stompWarn.set(k, Math.min(1, k * 4), this.t)
+        if (k >= 1) this.enter('stompHit')
+        break
+      }
+      case 'stompHit': {
+        const k = clamp01((s * this.rage) / T.stompHit)
+        this.standPose(W)
+        W.hipL = 1.25 * (1 - k)
+        W.kneeL = -1.35 * (1 - k)
+        W.lean = 0.12 * k
+        this.stompWarn.set(1, 1, this.t)
+        if (k >= 1) {
+          const at = this.root.position.clone().setY(Math.max(0, this.root.position.y))
+          this.onImpact?.({ kind: 'stomp', pos: at, radius: STOMP_RADIUS })
+          this.onStep?.(at)
+          this.enter('kneeLock')
+        }
+        break
+      }
+      case 'kneeLock': {
+        // 左ひざがロックして、ガクッとひざをつく（ひざの歯車が見える）。ぬこうとして、ゆれる
+        this.standPose(W)
+        W.lean = 0.15
+        W.headX = 0.2
+        W.roll = this.held ? 0 : Math.sin(this.t * 5) * 0.03
+        this.stompWarn.set(1, Math.max(0, 1 - s * 2), this.t)
+        if (s >= T.kneeLock) this.enter('stand')
+        break
+      }
+      case 'chargeUp': {
+        // 大技：鐘を高くかかげて、ぶるぶると力をためる（胸の戸がひらく）
+        const k = clamp01((s * this.rage) / T.chargeUp)
+        const kk = ease(Math.min(1, k * 1.8))
+        this.standPose(W)
+        W.armLX = 0.6 + 2.6 * kk
+        W.armLZ = -0.3
+        W.elbowL = 0.2
+        if (!this.gearStopped[0]) {
+          W.armRX = 0.8 + 2.0 * kk
+          W.armRZ = 0.5
+        }
+        W.lean = -0.22 * kk
+        W.headX = -0.3 * kk
+        W.roll += Math.sin(this.t * 38) * 0.025 * k
+        if (k >= 1) {
+          // 1 つ目の輪、少しあとに 2 つ目
+          this.startWave()
+          this.pendingWave = T.wave2 / this.rage
+          this.side = 'left'
+          this.enter('tired')
+        }
+        break
+      }
+      case 'tired': {
+        // つかれて、うなだれる（胸の戸はひらいたまま）
+        this.standPose(W)
+        const br = Math.sin(this.t * 2.2) * 0.04
+        W.lean = 0.32 + br
+        W.headX = 0.45
+        W.armLX = 0.2
+        W.elbowL = 0.25
+        if (!this.gearStopped[0]) W.armRX = 0.15
+        if (s >= T.tired) this.enter('stand')
         break
       }
       case 'collapse': {

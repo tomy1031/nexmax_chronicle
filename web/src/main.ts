@@ -11,6 +11,7 @@ import { Pwa, isStandalone } from './pwa/pwa'
 import { MusicPlayer } from './audio/music'
 import { loadSavedPrefs, parsePrefs } from './render/quality'
 import { INSTALL_DISMISSED_KEY, detectInstallPlatform, shouldAutoShowInstall, shouldOfferInstall, shouldShowTitle, summarizeSave, type TitleChoice } from './ui/title/titleLogic'
+import { preloadTitleArt } from './ui/title/titleArt'
 
 const app = document.getElementById('app') as HTMLDivElement
 const ui = document.getElementById('ui') as HTMLDivElement
@@ -54,6 +55,8 @@ async function main(): Promise<void> {
     await startGame(app, ui)
     return
   }
+  // タイトルの一枚絵は、Service Worker の確認と並べて先に読み込み始める
+  preloadTitleArt()
   // 新しい版の準備ができていれば、タイトルを出す前に切り替える（遊んでいる途中では切り替えない）
   if ((await pwa.register(true)) === 'reloading') return
   // 公開した直後は、Service Worker がまず前の版を出す。新しい版が出ていないか確かめて、

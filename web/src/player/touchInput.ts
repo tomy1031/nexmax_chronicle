@@ -1,6 +1,6 @@
 // スマホのタッチ操作の層：画面の左側をなぞるとスティック（移動・大きく倒すとダッシュ）、右側をなぞるとカメラ。
 // 「つかむ」は HUD の右下の右腕の輪をそのまま使う（game.ts が bindButton でつなぐ）。この層が出すのは、
-// 輪の左上に「ジャンプ」と、使えるときだけ「切替」「話す（調べる・次へ・決定）」、左上の状態表示の下に「一時停止」「装備・記録」。
+// 輪の左上に「ジャンプ」と、使えるときだけ「パンチ」（戦いのある場面）「切替」「話す（調べる・次へ・決定）」、左上の状態表示の下に「一時停止」「装備・記録」。
 // 押した内容は input.ts と同じ状態（down/pressed/analog/mouseDX）へ 'touch:…' の control として書き込むだけで、
 // ゲーム処理は inputActions.ts の TOUCH_BINDINGS を通したアクションしか見ない。
 import './touchInput.css'
@@ -13,9 +13,10 @@ const STICK_REF_U = 390 / 900
 import type { Hint } from '../ui/hud'
 
 /** この層が出すボタン（つかむは HUD の右腕の輪） */
-type LayerButton = 'jump' | 'interact' | 'lock'
+type LayerButton = 'jump' | 'attack' | 'interact' | 'lock'
 const BUTTONS: Array<{ id: LayerButton; control: string }> = [
   { id: 'jump', control: 'touch:jump' },
+  { id: 'attack', control: 'touch:attack' },
   { id: 'interact', control: 'touch:interact' },
   { id: 'lock', control: 'touch:lock' },
 ]
@@ -60,6 +61,7 @@ export class TouchControls {
       <div class="touch-stick"><div class="touch-knob"></div></div>
       <div class="touch-actions">
         <button class="tbtn tbtn-jump" type="button"><span class="tbtn-label"></span></button>
+        <button class="tbtn tbtn-attack" type="button" hidden><span class="tbtn-label"></span></button>
         <button class="tbtn tbtn-lock" type="button" hidden><span class="tbtn-label"></span></button>
         <button class="tbtn tbtn-interact" type="button" hidden><span class="tbtn-label"></span></button>
       </div>
@@ -95,7 +97,7 @@ export class TouchControls {
     })
     window.addEventListener('resize', () => this.placeStick(null))
     this.placeStick(null)
-    this.applyHints([], { interact: null, canSwitch: false })
+    this.applyHints([], { interact: null, canSwitch: false, attack: false })
   }
 
   /** 要素を押している間だけ control を down にする（離す・指がそれる・取り消しで up） */

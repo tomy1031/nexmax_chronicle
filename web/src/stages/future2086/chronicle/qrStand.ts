@@ -16,7 +16,7 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 export type QrRecord = { era: string; title: string; seed: number; gold?: boolean }
 
 export const QR_RECORDS = {
-  idle: { era: 'イドーのかんばん', title: 'QR をよみこんでね', seed: 2086 },
+  idle: { era: 'IDOのかんばん', title: 'QR をよみこんでね', seed: 2086 },
   edo1726: { era: '300年前（1726年）', title: '大坂・瓦屋根の路地', seed: 1726 },
   nextmake2026: { era: '60年前（2026年）', title: 'NEXTMAKE のビルの前', seed: 2026, gold: true },
   ruins1186: { era: '1186年', title: 'カンボジアの遺跡のかんばん', seed: 1186, gold: true },
@@ -82,7 +82,7 @@ function paintBoard(rec: QrRecord) {
     g.textBaseline = 'middle'
     g.fillStyle = '#bfefff'
     g.font = font(800, 40)
-    g.fillText('イドーのかんばん　QR', w / 2, 62)
+    g.fillText('IDOのかんばん　QR', w / 2, 62)
     const s = w * 0.66
     drawQr(g, (w - s) / 2, 112, s, rec.seed)
     g.fillStyle = rec.gold ? '#ffe9a0' : '#ffffff'

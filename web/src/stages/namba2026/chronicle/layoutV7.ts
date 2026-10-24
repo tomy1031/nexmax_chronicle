@@ -39,7 +39,7 @@ export const SHRINE = {
   front: v(14.55, 0, 23.6),
 }
 
-/** 石標（イドーのかんばん）。A は NEXTMAKE の前（もとのまま。立てたばかり）、B は橋のたもと（時計屋の看板のとなり）、
+/** 石標（IDOのかんばん）。A は NEXTMAKE の前（もとのまま。立てたばかり）、B は橋のたもと（時計屋の看板のとなり）、
  *  C は路地の西の塀ぎわ（v7 で移す）、D は北岸の駅の大時計の前（v7 で足す） */
 export const KANBAN = {
   a: { pos: N.IDO.clone(), yaw: 0 },

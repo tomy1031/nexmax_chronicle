@@ -101,7 +101,7 @@ describe("inputActions: タッチの割り当て", () => {
 });
 
 describe("touchLogic: キー案内 → タッチ", () => {
-  const none = { interact: null, canSwitch: false };
+  const none = { interact: null, canSwitch: false, attack: false };
   const START = [
     { key: "WASD", label: "移動" },
     { key: "↑↓←→", label: "カメラ" },
@@ -134,10 +134,27 @@ describe("touchLogic: キー案内 → タッチ", () => {
     expect(touchHintView([], none).labels.interact).toBeNull();
     expect(touchHintView([], none).labels.lock).toBeNull();
     // 照準の案内が優先されて F が無くても、その場で反応するものがあれば出す
-    const v = touchHintView([{ key: "J", label: "つかむ" }, { key: "R", label: "対象を切替" }], { interact: "話す", canSwitch: true });
+    const v = touchHintView([{ key: "J", label: "つかむ" }, { key: "R", label: "対象を切替" }], { interact: "話す", canSwitch: true, attack: false });
     expect(v.labels.interact).toBe("話す");
     expect(v.labels.lock).toBe("対象を切替");
     expect(v.hud).toEqual([]);
+  });
+
+  it("戦いのある場面では「パンチ」ボタンを出す（K の案内が無くても）。ふだんは出さない", () => {
+    expect(touchHintView([], none).labels.attack).toBeNull();
+    expect(touchHintView([], { ...none, attack: true }).labels.attack).toBe("パンチ");
+    expect(touchHintView([{ key: "K", label: "攻撃" }, { key: "Shift", label: "回避" }], { ...none, attack: true }).hud).toEqual([{ key: "大きく倒す", label: "回避" }]);
+  });
+
+  it("目的の「K でパンチ！」「K：攻撃」をタッチの言い方にする", () => {
+    expect(toTouchText("よろいがなくなった！ K でパンチ！")).toBe("よろいがなくなった！ 「パンチ」をタップ！");
+    expect(toTouchText("近づいて K：攻撃")).toBe("近づいて 「パンチ」で攻撃");
+    expect(toTouchText("↑ キーで見上げてから J")).toBe("画面の右側を上へなぞって見上げてから 「つかむ」");
+    expect(toTouchText("光っているときだけ J。")).toBe("光っているときだけ 「つかむ」。");
+    expect(toTouchText("横へよける（Shift でダッシュ）")).toBe("横へよける（スティックを大きく倒してダッシュ）");
+    expect(toTouchText("輪にぶら下がったら、WASD で前へこいで、向こう岸の上で Space！")).toBe("輪にぶら下がったら、スティックで前へこいで、向こう岸の上で 「ジャンプ」！");
+    expect(toTouchText("← → でダイヤルを回して")).toBe("スティックを左右に倒してダイヤルを回して");
+    expect(touchHintView([{ key: "← →", label: "回す" }], none).hud).toEqual([{ key: "スティック左右", label: "回す" }]);
   });
 
   it("話すボタンの言葉は案内（会話の「次へ」・選択肢の「決定」・ステージの言葉）に従う", () => {

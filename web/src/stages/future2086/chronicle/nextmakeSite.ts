@@ -87,7 +87,7 @@ function paintPlate(g: CanvasRenderingContext2D, w: number, h: number): void {
   g.font = font(800, 64)
   g.fillText('IDO', w / 2, 70)
   g.font = font(700, 24)
-  g.fillText('イドーのかんばん', w / 2, 118)
+  g.fillText('IDOのかんばん', w / 2, 118)
   // 古い QR
   const s = 150
   const x0 = (w - s) / 2

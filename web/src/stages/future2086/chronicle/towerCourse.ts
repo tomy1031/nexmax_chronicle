@@ -1,5 +1,6 @@
 // 4 章の時計台のぼり（物語 v7.1：「ひたすらクローを押すだけ」をやめて、ジャンプ・タイミング・よける・クローのまぜあわせにする）。
 // 配置は layoutChronicle.ts の COURSE。ここは形（足場・大歯車・大きな針・回る歯車の金具・予告の帯・がれき）と、動き。
+// 通りの両側のビルとつなぐ足場と、ぶら下がりの光る輪は towerSwings.ts（ここから組み立てる）。
 // ・大歯車（水平に回る 3 枚）：当たり判定は動かない円柱（回っても形は同じ）。乗っている間は carry() で一緒に回す
 // ・大きな針：軸（C の北の端）のまわりを、北（B へかかる橋）⇔ 西（通りの上）に行き来して、両はしで止まる（板の当たり判定は回すたびに置き直す。乗ると一緒に回る）
 // ・回る歯車の金具：壁の面で回る歯車のふちの金具。上に回ってきた時だけ金色に光って、ねらえる（ステージが enabled を決める）
@@ -15,6 +16,7 @@ import type { PlayerController } from '../../../player/controller'
 import { NEON, fbox, glowRailing, neon, type FCtx } from '../kit2086'
 import { COURSE, type GearHookSpec, type GearSpec, type Ledge } from './layoutChronicle'
 import { additive, softDotTexture } from './kitChronicle'
+import { buildTowerSwings, type TowerSwingParts } from './towerSwings'
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
@@ -94,6 +96,8 @@ export type TowerCourseParts = {
   group: THREE.Group
   /** 回る歯車の金具（つかめる対象。fs.claw.targets にも入れる） */
   gearHooks: GearHookRuntime[]
+  /** 通りの両側のビルの足場と、ぶら下がりの光る輪（輪は fs.claw.targets にも入れる） */
+  swings: TowerSwingParts
   /** 大きな針のいまの角度と状態 */
   readonly hand: ReturnType<typeof handAt>
   /** 時間を進めて、形と当たり判定を動かす（ステージの update で毎フレーム） */
@@ -182,7 +186,7 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
   for (const p of [v(3.2, C.A.y, -31.0), v(5.4, C.B.y, -32.4)]) c.b.add(new THREE.RingGeometry(0.3, 0.37, 28), c.fm.glow, M(p.x, p.y + 0.012, p.z, -Math.PI / 2, 0, 0), { tint: new THREE.Color(0.25, 0.7, 1.0), cast: false, receive: false })
 
   // ---- 夜のコースの明かり（シェルが近いものから点光源を割り当てる）。足場と歯車が夜でも読めるように
-  for (const p of [v(2.6, 3.2, -24.8), v(3.6, 5.8, -30.4), v(4.1, 9.8, -30.2), v(3.6, 9.6, -25.6), v(3.9, 13.4, -21.8), v(3.6, 18.6, -21.8)]) {
+  for (const p of [v(2.6, 3.2, -24.8), v(3.6, 5.8, -30.4), v(4.1, 9.8, -30.2), v(3.6, 9.6, -25.6), v(3.6, 18.6, -21.8)]) {
     c.lights.push({ pos: p, color: '#ffe2b0', intensity: 2.4, dist: 7.5 })
   }
 
@@ -288,6 +292,9 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
     gearHooks.push({ spec: s, def, angle: 0, inWindow: false })
   }
 
+  // ---- 通りの両側のビルの足場・光る輪・道すじ
+  const swings = buildTowerSwings(c, group)
+
   // ---- 黒い手がはらう予告（B の壁の帯と、床の赤い線）
   const sweepMat = new THREE.ShaderMaterial({ vertexShader: warnVert, fragmentShader: warnFrag, uniforms: { uK: { value: 0 }, uTime }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide })
   const SW = C.sweep
@@ -350,6 +357,7 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
   const parts: TowerCourseParts = {
     group,
     gearHooks,
+    swings,
     get hand() {
       return hand
     },
@@ -363,6 +371,7 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
         gearMeshes[i].rotation.y = -gearAngles[i]
       })
       const now = uTime.value
+      swings.update(dt)
       gearHooks.forEach((h, i) => {
         h.angle = gearHookAngle(t, h.spec)
         h.inWindow = gearHookInWindow(h.angle, h.spec)
@@ -457,6 +466,7 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
     },
     setNight(on: boolean) {
       night = on
+      swings.setNight(on)
     },
     attachPhysics(ph: Physics) {
       const R = ph.R
@@ -477,6 +487,7 @@ export function buildTowerCourse(c: FCtx, root: THREE.Group): TowerCourseParts {
       handBody = null
       rockGeo.dispose()
       rockMat.dispose()
+      swings.dispose()
     },
   }
   return parts

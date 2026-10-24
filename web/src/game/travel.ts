@@ -5,7 +5,7 @@
 //      → loading：読み込み画面の裏で古いステージを解放し、新しいステージを組み立ててシェーダを事前コンパイル
 //      → intro：裂け目が閉じて新しい時代が見える（時代カードを出す）→ idle
 // 移動は自由ではない：IDO（2086年の展示・2026年の QR・中盤はソラの羅針盤）か、鉱石に残った出発地点への帰還だけ。
-// 物語 v7（docs/ステージ設計_v1.md §8.3）：ソラのイドーのわっか（ido_ring）・2026年の路地のかんばん（ido_kanban）・夜明けの帰還（return）。
+// 物語 v7（docs/ステージ設計_v1.md §8.3）：ソラのIDOのわっか（ido_ring）・2026年の路地のかんばん（ido_kanban）・夜明けの帰還（return）。
 
 export type StageKey = '1186' | '1726' | '1970' | '2026' | '2086'
 
@@ -28,7 +28,7 @@ export function eraStage(era: number): StageKey | null {
  * 移動のきっかけ。
  * ido_exhibit：2086年のソラの IDO 展示（VR）／ido_qr：2026年の IDO の QR／
  * ido_compass：2086年のソラの IDO の羅針盤（針が振れた記録の石標の QR。中盤）／return：鉱石に残った出発地点へ帰る／
- * ido_ring：v7 のソラのイドーのわっか（記録をうつすと、背中の石が道をひらく）／ido_kanban：v7 の 2026年の路地のかんばんに手をあてる／
+ * ido_ring：v7 のソラのIDOのわっか（記録をうつすと、背中の石が道をひらく）／ido_kanban：v7 の 2026年の路地のかんばんに手をあてる／
  * debug：開発用（URL の ?stage= や検証）／load：セーブから再開
  */
 export type TravelCause = 'ido_exhibit' | 'ido_qr' | 'ido_compass' | 'ido_ring' | 'ido_kanban' | 'return' | 'debug' | 'load'

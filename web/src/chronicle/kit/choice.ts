@@ -79,6 +79,6 @@ export class ChoiceBox {
 
   private render(): void {
     if (!this.el) return
-    this.el.innerHTML = `<div class="gc-title">${this.prompt}</div>${this.opts.map((o, i) => `<div class="gc-opt${i === this.sel ? ' on' : ''}" data-i="${i}">${i === this.sel ? '▶ ' : ''}${o.label}</div>`).join('')}<div class="gc-foot">W／S：選ぶ　F：決定</div>`
+    this.el.innerHTML = `<div class="gc-title">${this.prompt}</div>${this.opts.map((o, i) => `<div class="gc-opt${i === this.sel ? ' on' : ''}" data-i="${i}">${i === this.sel ? '▶ ' : ''}${o.label}</div>`).join('')}<div class="gc-foot">W／S：選ぶ　F：決定</div><div class="gc-foot-touch">えらんでタップ</div>`
   }
 }

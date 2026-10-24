@@ -16,6 +16,7 @@ import { ATTACK_STEPS, AttackCombo, COMBAT_TUNING, Dodge, EnemyBrain, PlayerHeal
 /** やられて戻ったあと、敵が襲ってこない時間（秒） */
 const RESPAWN_GRACE = 2.2
 import { EnemyModel, type EnemyStyle } from './enemyModels'
+import { AttackTelegraph } from './telegraph'
 import './combat.css'
 
 const v3 = () => new THREE.Vector3()
@@ -126,6 +127,10 @@ type Enemy = EnemyHandle & {
   onPlateHit: (() => void) | null
   /** よろいがなくなった：ワイヤーが離れたら、クローの的の種類を変える */
   retype: boolean
+  /** 攻撃の予告（地面の赤い扇。はじめて構えたときに作る） */
+  tele: AttackTelegraph | null
+  /** この構えは「よけて！」の案内を出したので、ゆっくり */
+  slowWindup: boolean
 }
 
 /** 手に持った・投げたよろいの板 */
@@ -139,6 +144,9 @@ const HURT_HOP = 4.2
 
 /** 投げた板の速さ（m/s）と、まわりの敵へ向きを寄せる角度（ラジアン） */
 const THROW_SPEED = 17
+/** 「よけて！」の案内を出す回数（ステージごと）と、そのときの構えの速さ */
+const COACH_TIMES = 2
+const COACH_SLOW = 0.5
 const THROW_HOMING = 0.45
 
 /** 小さな破片・火花（使い回し） */
@@ -260,6 +268,8 @@ export class CombatSystem {
   private impactFired = false
   /** 当たった瞬間の止まり（実時間の秒） */
   private hitstop = 0
+  /** 「よけて！」の案内の残りの回数 */
+  private coachLeft = COACH_TIMES
   /** はがして手に持ったよろいの板・投げて飛んでいる板 */
   private held: HeldPlate | null = null
   private readonly thrown: ThrownPlate[] = []
@@ -373,11 +383,24 @@ export class CombatSystem {
       onPlateLocked: o.onPlateLocked ?? null,
       onPlateHit: o.onPlateHit ?? null,
       retype: false,
+      tele: null,
+      slowWindup: false,
     }
     this.enemies.push(e)
     this.byDef.set(def, e)
     this.host.claw.targets.push(def)
     return e
+  }
+
+  /**
+   * 「よけて！」の案内（はじめの数回だけ。ステージが自分で作る攻撃の予告からも呼べる）。出したら true。
+   * 文字の「Shift で」などは、スマホではタッチの言い方に読みかわる
+   */
+  coach(text: string, seconds = 2.8): boolean {
+    if (this.coachLeft <= 0) return false
+    this.coachLeft--
+    this.host.hud.toast(text, seconds)
+    return true
   }
 
   /** よろいの板を sec 秒だけゆるめる（その間だけ J ではがせる）。ステージが「柱にぶつかった」などで呼ぶ。0 で締め直す */
@@ -860,6 +883,37 @@ export class CombatSystem {
     if (hit) this.hitstop = Math.max(this.hitstop, 0.08)
   }
 
+  /** 攻撃の予告の半径（m）：跳びかかる敵は跳べるいちばん先まで、ほかは当たる距離。プレイヤーの体の太さを足す */
+  private dangerRadius(e: Enemy): number {
+    const st = e.brain.stats
+    const reach = st.hitRange * e.scale
+    return (st.leap > 0 ? st.leap * 1.4 * 0.22 + reach * 0.4 : reach) + PLAYER_R
+  }
+
+  /** いま、その敵の攻撃の当たる範囲にいるか */
+  private inDanger(e: Enemy): boolean {
+    const P = this.host.player.position
+    if (Math.abs(P.y - e.pos.y) > 1.6 * e.scale || e.brain.stats.hitRange * e.scale < 0.3) return false
+    return inArc(e.pos.x, e.pos.z, e.yaw, P.x, P.z, this.dangerRadius(e) - PLAYER_R, e.brain.stats.hitArc, PLAYER_R)
+  }
+
+  /** 構えている間は、当たる範囲を地面に赤い扇で出し、たたく瞬間に向かって満ちていく。たたいた瞬間は光る */
+  private updateTelegraph(e: Enemy): void {
+    const s = e.brain.state
+    // ステージが自分で動かす攻撃（hitRange 0 にしている影獣の突進など）は、ステージの予告にまかせる
+    if ((s !== 'windup' && s !== 'attack') || e.brain.stats.hitRange * e.scale < 0.3) {
+      e.tele?.hide()
+      return
+    }
+    if (!e.tele) {
+      e.tele = new AttackTelegraph(e.brain.stats.hitArc)
+      this.group.add(e.tele.root)
+    }
+    const r = this.dangerRadius(e)
+    if (s === 'windup') e.tele.show(e.pos, e.yaw, r, e.brain.t / Math.max(0.01, e.brain.stats.windup))
+    else e.tele.show(e.pos, e.yaw, r, 1, true)
+  }
+
   /** 手に持った板（体の前）と、投げた板（まっすぐ飛んで、敵に当たるか、壁・地面で落ちる） */
   private updatePlates(dt: number): void {
     const pl = this.host.player
@@ -1010,6 +1064,7 @@ export class CombatSystem {
     if (e.hidden) return
     // 倒れていく
     if (e.dyingT >= 0) {
+      e.tele?.hide()
       e.dyingT += dt
       e.pos.addScaledVector(e.knock, dt)
       e.knock.multiplyScalar(Math.exp(-5 * dt))
@@ -1018,6 +1073,8 @@ export class CombatSystem {
         this.sparks.burst(this.tmp.copy(e.pos).setY(e.pos.y + 0.4), '#7a3cff', 12, 3)
         e.model.root.removeFromParent()
         e.model.dispose()
+        e.tele?.dispose()
+        e.tele = null
         const i = this.host.claw.targets.indexOf(e.def)
         if (i >= 0) this.host.claw.targets.splice(i, 1)
         this.byDef.delete(e.def)
@@ -1042,8 +1099,16 @@ export class CombatSystem {
     const dist = Math.hypot(dx, dz)
     if (dist > FAR_HIDE && e.brain.state === 'idle' && !e.yank && e.knock.lengthSq() < 1e-4) return
     const leashed = e.pos.distanceTo(e.home) < e.leash
-    const out = e.brain.update(dt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown || this.graceT > 0 })
-    if (e.brain.state === 'windup' && e.brain.t <= dt + 1e-6) e.struck = false
+    // 「よけて！」の案内を出した構えは、ゆっくり（にげる時間をあげる）
+    if (e.brain.state !== 'windup') e.slowWindup = false
+    const bdt = e.slowWindup ? dt * COACH_SLOW : dt
+    const out = e.brain.update(bdt, { dist: Math.abs(P.y - e.pos.y) > 3 ? 99 : dist, leashed, passive: !this.enabled || this.passive || playerDown || this.graceT > 0 })
+    if (e.brain.state === 'windup' && e.brain.t <= bdt + 1e-6) {
+      e.struck = false
+      // 構えはじめ：当たる範囲にいたら、はじめの数回は案内を出して、構えをゆっくりにする
+      if (this.inDanger(e)) e.slowWindup = this.coach('赤い所から はなれて！（Shift でよける）')
+    }
+    this.updateTelegraph(e)
     if (out.face && dist > 0.05) this.turn(e, dx, dz, dt, st.mass === 'heavy' ? 4 : 9)
     // 動き
     let vx = 0
@@ -1241,6 +1306,7 @@ export class CombatSystem {
     this.fade.remove()
     for (const e of this.enemies) {
       e.model.dispose()
+      e.tele?.dispose()
       const i = this.host.claw.targets.indexOf(e.def)
       if (i >= 0) this.host.claw.targets.splice(i, 1)
     }

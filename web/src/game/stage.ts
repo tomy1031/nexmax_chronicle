@@ -147,6 +147,8 @@ export type StageRuntime = {
    */
   chapter(n?: number): Promise<void>
   readonly playTime: number
+  /** スマホのタッチ操作で遊んでいる（画面の中の案内をタッチの言い方にするときに。player/touchLogic.ts の toTouchText） */
+  readonly touch: boolean
 }
 
 /** 固定カメラの撮影用ショット（?shot=、P キーで切替） */

@@ -55,13 +55,16 @@ html.touch-ui body { overscroll-behavior: none; -webkit-user-select: none; user-
 }
 /* 丸いボタン（HUD の腕の輪と同じガラスと光る線） */
 .tbtn-jump,
+.tbtn-attack,
 .tbtn-lock {
   border-radius: 50%; background: var(--t-glass);
   box-shadow: inset 0 0 0 2px var(--t-line), inset 0 0 12px rgba(63, 220, 255, 0.45), 0 0 12px rgba(63, 220, 255, 0.5);
 }
 .tbtn-jump::after,
+.tbtn-attack::after,
 .tbtn-lock::after { content: ''; position: absolute; inset: calc(-14 * var(--u)); border-radius: 50%; border: 1.5px solid rgba(96, 222, 255, 0.35); border-left-color: transparent; border-bottom-color: transparent; transform: rotate(-20deg); }
 .tbtn-jump { width: calc(148 * var(--u)); height: calc(148 * var(--u)); font-size: calc(32 * var(--u)); }
+.tbtn-attack { width: calc(140 * var(--u)); height: calc(140 * var(--u)); font-size: calc(32 * var(--u)); background: rgba(120, 22, 40, 0.55); box-shadow: inset 0 0 0 2px #ff8fa6, inset 0 0 12px rgba(255, 90, 120, 0.55), 0 0 14px rgba(255, 90, 120, 0.6); }
 .tbtn-lock { width: calc(115 * var(--u)); height: calc(115 * var(--u)); font-size: calc(28 * var(--u)); margin-bottom: calc(16 * var(--u)); }
 .tbtn.long { font-size: calc(25 * var(--u)); }
 /* 話す・調べる・次へ・決定：言葉が長いことがあるので横長の札（HUD のキー案内の札と同じ六角） */
@@ -93,6 +96,7 @@ html.touch-ui body { overscroll-behavior: none; -webkit-user-select: none; user-
 .touch-layer.idle .touch-stick,
 .touch-layer.idle .touch-actions { display: none; }
 .touch-layer.locked .tbtn-jump,
+.touch-layer.locked .tbtn-attack,
 .touch-layer.locked .tbtn-lock { display: none; }
 /* 一時停止・メニューの画面は、画面のタップで閉じる（ボタンは操作一覧の上に重なるので隠す） */
 .touch-layer.overlay .touch-sys { display: none; }
@@ -112,6 +116,8 @@ html.touch-ui body { overscroll-behavior: none; -webkit-user-select: none; user-
 @media (orientation: portrait) { .touch-rotate { display: grid; } }
 
 /* ---------------------------------------------------------------- 2086 年の選択肢：タップで選んで決める（キーの案内は出さない） */
-html.touch-ui .game-choice { pointer-events: auto; touch-action: none; z-index: 7; }
+/* 左下のスティック・右下のボタンにかからないよう、まん中の上よりに、せまく */
+html.touch-ui .game-choice { pointer-events: auto; touch-action: none; z-index: 7; top: 24vh; min-width: 0; width: min(460px, 54vw); }
 html.touch-ui .gc-opt { padding: 10px 14px; }
 html.touch-ui .gc-foot { display: none; }
+html.touch-ui .gc-foot-touch { display: block; }

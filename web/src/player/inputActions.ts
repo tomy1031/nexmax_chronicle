@@ -69,6 +69,7 @@ export const TOUCH_BINDINGS: readonly Binding[] = [
   btn('dash', 'touch:dash'),
   btn('jump', 'touch:jump'),
   btn('claw_fire', 'touch:claw'),
+  btn('attack', 'touch:attack'),
   btn('interact', 'touch:interact'),
   btn('lock_switch', 'touch:lock'),
   btn('select_left', 'touch:armL'),

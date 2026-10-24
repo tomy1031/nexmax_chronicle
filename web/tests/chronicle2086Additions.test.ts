@@ -6,7 +6,7 @@ import { DEBRIS_WARN, HAND_NORTH, HAND_AWAY, gearHookAngle, gearHookInWindow, ge
 import { B_SOUTH_Z, E_SOUTH_Z, SECTION, SWING_ASSIST, WALL_HAND, climbPhase, nearWall, sectionAt, swingAssist, swingOf, swingTarget } from '../src/stages/future2086/chronicle/towerClimb'
 import { swingGuidePath } from '../src/stages/future2086/chronicle/towerSwings'
 import * as THREE from 'three'
-import { YearDialLogic } from '../src/stages/future2086/chronicle/yearDialLogic'
+import { DIAL_ANCHORS, DIAL_SNAP_DEG, YearDialLogic, angleToYear, yearToAngle } from '../src/stages/future2086/chronicle/yearDialLogic'
 import { F } from '../src/stages/future2086/layout'
 
 /** プレイヤーの跳べる高さ（player/controller.ts の jump 5.6・gravity 17 → 約 0.92m） */
@@ -320,11 +320,12 @@ describe('年代ダイヤル', () => {
     expect(d.year).toBe(2026)
     expect(d.locked).toBe(true)
     expect(d.match).toBe(1)
-    expect(d.detune).toBe(0)
+    expect(d.near).toBe(1)
   })
-  it('ずれるほど、そろい具合が下がる', () => {
+  it('ずれるほど、そろい具合と近さが下がる', () => {
     const d = new YearDialLogic({ start: 2026, target: 2026 })
     const m0 = d.match
+    const n0 = d.near
     d.step(1)
     const m1 = d.match
     for (let i = 0; i < 9; i++) d.step(1)
@@ -332,23 +333,80 @@ describe('年代ダイヤル', () => {
     expect(m0).toBeGreaterThan(m1)
     expect(m1).toBeGreaterThan(m10)
     expect(m10).toBeLessThan(0.1)
+    expect(d.near).toBeLessThan(n0)
+    // 遠い年（1186 年から見た 2086 年）は、近さ 0
+    expect(new YearDialLogic({ start: 2086, target: 1186 }).near).toBe(0)
   })
-  it('押し続けると速くなり、2086 年から 1186 年まで 15 秒以内に届く。目当ての近くでは速くならない', () => {
+  it('押し続けると速くなり、2086 年から 1186 年まで 7 秒以内。通りこさずに、ぴたりと止まる', () => {
     const d = new YearDialLogic({ start: 2086, target: 1186 })
     let t = 0
-    while (d.year > 1186 + 30 && t < 30) {
+    while (!d.locked && t < 30) {
+      d.hold(-1, 1 / 30)
+      t += 1 / 30
+      expect(d.year).toBeGreaterThanOrEqual(1186)
+    }
+    expect(d.locked).toBe(true)
+    expect(t).toBeLessThan(7)
+    // 押したままでは、そこから動かない
+    for (let i = 0; i < 60; i++) d.hold(-1, 1 / 30)
+    expect(d.year).toBe(1186)
+    // 離して、もう一度押すと動く（はじめは 1 年）
+    d.hold(0, 1 / 30)
+    d.hold(-1, 1 / 30)
+    expect(d.year).toBe(1185)
+  })
+  it('2086 年から 2026 年へは、押しっぱなしで 3 秒以内に合う', () => {
+    const d = new YearDialLogic({ start: 2086, target: 2026 })
+    let t = 0
+    while (!d.locked && t < 30) {
       d.hold(-1, 1 / 30)
       t += 1 / 30
     }
-    expect(t).toBeLessThan(15)
-    const y0 = d.year
-    for (let i = 0; i < 30; i++) d.hold(-1, 1 / 30)
-    expect(y0 - d.year).toBeLessThanOrEqual(9)
-    d.hold(0, 1 / 30)
+    expect(d.locked).toBe(true)
+    expect(t).toBeLessThan(3)
+  })
+  it('目当ての年に近づくと、ゆっくりになる', () => {
+    const d = new YearDialLogic({ start: 2086, target: 1186 })
+    // 2 秒押して、いちばん速い所の 1 フレームの歩み
+    for (let i = 0; i < 60; i++) d.hold(-1, 1 / 30)
+    let y = d.year
+    d.hold(-1, 1 / 30)
+    const farStep = y - d.year
+    // 目当ての 12 年手前の 1 フレームの歩み
+    d.year = 1186 + 12
+    y = d.year
+    d.hold(-1, 1 / 30)
+    const nearStep = y - d.year
+    expect(nearStep).toBeGreaterThan(0)
+    expect(nearStep).toBeLessThan(farStep / 4)
   })
   it('範囲の外へは回らない', () => {
     const d = new YearDialLogic({ start: 2086, target: 2026 })
     d.step(1)
     expect(d.year).toBe(2086)
+  })
+  it('指でなぞると、目当ての年の近くでは、すいつく', () => {
+    const d = new YearDialLogic({ start: 2086, target: 1186 })
+    d.setYear(angleToYear(yearToAngle(1186) + DIAL_SNAP_DEG - 1))
+    expect(d.year).toBe(1186)
+    d.setYear(1500)
+    expect(d.year).toBe(1500)
+    d.setYear(1190, false)
+    expect(d.year).toBe(1190)
+  })
+  it('目もりの角度：昔が左（-）・今が右（+）。年と角度は行き来できる', () => {
+    expect(yearToAngle(2086)).toBeGreaterThan(yearToAngle(2026))
+    expect(yearToAngle(2026)).toBeGreaterThan(yearToAngle(1726))
+    expect(yearToAngle(1726)).toBeGreaterThan(yearToAngle(1186))
+    expect(yearToAngle(1186)).toBeLessThan(0)
+    expect(yearToAngle(2026)).toBeGreaterThan(0)
+    for (const [y, a] of DIAL_ANCHORS) {
+      expect(yearToAngle(y)).toBeCloseTo(a, 6)
+      expect(angleToYear(a)).toBe(y)
+    }
+    for (let y = 1100; y <= 2086; y += 7) expect(Math.abs(angleToYear(yearToAngle(y)) - y)).toBeLessThanOrEqual(1)
+    // 行ける年どうしは、ダイヤルの上で 40° 以上はなれている（指で押しやすい）
+    const ys = [1186, 1726, 2026, 2086]
+    for (let i = 1; i < ys.length; i++) expect(yearToAngle(ys[i]) - yearToAngle(ys[i - 1])).toBeGreaterThanOrEqual(40)
   })
 })

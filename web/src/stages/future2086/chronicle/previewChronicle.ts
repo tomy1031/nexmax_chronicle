@@ -3,7 +3,7 @@
 //   variant=building|courtyard   ghost=1（変わる瞬間の重ね：building → courtyard）   box=1（箱が開く）
 //   clock=20:40（文字盤）  sweep=0..4（黒い手の予告の帯）  hook=0..5（次につかむ金具。climb の既定は 2）  skyseam=1（12 章の空のゆらぎ）
 //   loop=2（街頭ビジョンの何度目）
-//   ura=1（裏側の足場）  freeze=1（大歯車を止める）  toolbox=drop|freeze  dial=1&year=2026&match=0..1&panel=1（年代ダイヤル）
+//   ura=1（裏側の足場）  freeze=1（大歯車を止める）  toolbox=drop|freeze  dial=1&year=2026&target=2026&match=0..1&panel=1&touch=1（年代ダイヤル）
 import * as THREE from 'three'
 import type { Hud } from '../../../ui/hud'
 import type { NexmaxCharacter } from '../../../world/nexmax/nexmaxModel'
@@ -226,9 +226,9 @@ export function setupChroniclePreview(x: ChroniclePreviewCtx): { update(dt: numb
     ch.dial.setMatch(m)
     if (urlp.get('panel') !== '0') {
       panel = new YearDialPanel(x.ui)
-      panel.show({ year: logic.year, sub: 'NEXTMAKE 前のかんばんの記録' })
-      panel.setMatch(m)
-      panel.setDetune(urlp.has('match') ? (1 - m) * 0.6 : logic.detune)
+      const marks = [2086, 2026, 1726, 1186].map((y) => ({ year: y, sub: y === 2086 ? '' : `${2086 - y}年前`, open: y === logic.target }))
+      panel.show({ year: logic.year, sub: 'NEXTMAKE 前のかんばんの記録', marks, touch: urlp.has('touch') })
+      panel.setState({ year: logic.year, locked: logic.locked, near: logic.near })
     }
   }
   let t = 0

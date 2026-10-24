@@ -65,12 +65,12 @@ import {
   zone,
   type KCtx,
 } from './kitKhmer'
-import { KhmerBodies, PlatformRider, type KinematicBox } from './physKhmer'
+import { KhmerBodies, PlatformRider, ToggleBox, type KinematicBox } from './physKhmer'
 import { Arun } from './arun'
 import { MirrorStand, Turntable, type Freezable } from './mirrors'
 import { BigStairs, FallingStone, STONE_REST, buildFlight, stonePath } from './stairs'
 import { StoneFallLogic, PingPongWalker } from './khmerLogic'
-import { ElephantHerd, type Elephant } from './elephant'
+import { ELEPHANT_DECK_HALF_X, ELEPHANT_DECK_Y, ElephantHerd, type Elephant } from './elephant'
 import { Burst, Drift, Moon, SkyCrack, Torches } from './fxKhmer'
 import { PlaceholderPerson, Villagers } from './people'
 import { SUN_AFTERNOON, SUN_DAWN } from './environment'
@@ -96,6 +96,8 @@ export type KhmerScene = {
   swallow: SwallowTargets
   /** 池をわたる象（北の塔への道の足場）と、象の道の象 */
   elephant: { baray: Elephant; road: Elephant }
+  /** 象のりばから象の背中への渡し板（象が乗り場で待っている間だけ出す。跳ばなくても歩いて乗れる） */
+  dockPlank: { set(on: boolean): void; readonly on: boolean }
   // ---------------------------------------------------------------- 物理（後から足す当たり判定）
   bodies: KhmerBodies
   rider: PlatformRider
@@ -119,8 +121,7 @@ export type KhmerScene = {
   setTimeOfDay(time: TimeOfDay): void
   /** 物理ができた後に 1 回（begin(rt) で rt.phys を渡す） */
   attachPhysics(phys: Physics): void
-  /** 動く足場にプレイヤーを乗せて運ぶ（ステージの update で、プレイヤーの更新の後に） */
-  /** 動く足場（象の背中）に乗っていたら運ぶ。moving：プレイヤーが歩く入力をしている（していなければ、足場の上の同じ所に置き直す） */
+  /** 動く足場（象の背中）に乗っていたら運ぶ（ステージの update で、プレイヤーの更新の後に）。moving：プレイヤーが歩く入力をしている（していなければ、足場の上の同じ所に置き直す） */
   carryPlayer(player: PlayerController, moving?: boolean): KinematicBox | null
   /** 「止める」で狙えるもの（回る鏡の台・落ちてくる石） */
   freezables(): Freezable[]
@@ -216,6 +217,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
   const herd = new ElephantHerd({ skin: m.clay, load: m.fabric })
   const road = herd.add(new PingPongWalker(ELEPHANT_PATHS.road.points, ELEPHANT_PATHS.road.speed, ELEPHANT_PATHS.road.wait, 30), bodies)
   const baray = herd.add(new PingPongWalker(ELEPHANT_PATHS.baray.points, ELEPHANT_PATHS.baray.speed, ELEPHANT_PATHS.baray.wait, 0), bodies)
+  const dockPlank = buildDockPlank(m, bodies)
   // 火・空
   const torches = new Torches(c.torches, 0.62)
   const embers = new Torches(c.embers, 0.34, '#ff6a20')
@@ -250,6 +252,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
   const far = c.bf.build('khmer_far')
   far.traverse((o) => (o.castShadow = false))
   root.add(far)
+  root.add(dockPlank.mesh)
   root.add(stairs.group, arun.group, turntable.group, herd.group, torches.mesh, embers.mesh, skyCrack.mesh, moon.group, scar.mist.points, fireflies.points, burst.points, sparks.points)
   for (const id of TOWER_IDS) root.add(mirrors[id].group)
   for (const s of towerStones) root.add(s.mesh)
@@ -274,6 +277,7 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
     towerStones,
     elephants: herd,
     elephant: { baray, road },
+    dockPlank,
     swallow,
     bodies,
     rider,
@@ -557,6 +561,44 @@ function buildRoute(c: KCtx, targets: ClawTargetDef[]): void {
   }
   collideRamp(c, sb, st, D.w - 0.4, 0.4)
   torchPost(c, D.x + 1.5, 0, D.z + D.d / 2 + 3.8)
+}
+
+/**
+ * 象のりばから、乗り場で待っている池の象の背中へ渡す板（坂）。乗り場の上面（ELEPHANT_DOCK.y）から背中の板の上面へ。
+ * 当たり判定は ToggleBox（象が出ていく間は切る）。見た目は 1 つのメッシュ
+ */
+function buildDockPlank(m: KhmerMaterials, bodies: KhmerBodies): { mesh: THREE.Mesh; set(on: boolean): void; readonly on: boolean } {
+  const D = ELEPHANT_DOCK
+  const start = ELEPHANT_PATHS.baray.points[0]
+  // 乗り場の西のはしから 0.25 m 内 → 象の背中の板の東のはしから 0.25 m 内（象は北＝池を向いて待つ）
+  const a = v(D.x - D.w / 2 + 0.25, D.y, start.z + 0.1)
+  const b = v(start.x + ELEPHANT_DECK_HALF_X - 0.25, start.y + ELEPHANT_DECK_Y, start.z + 0.1)
+  const len = Math.hypot(a.x - b.x, a.y - b.y)
+  const rotZ = -Math.atan2(b.y - a.y, a.x - b.x)
+  const thick = 0.08
+  const mid = a.clone().add(b).multiplyScalar(0.5)
+  // 上面が a→b の線になるよう、板の厚みの半分だけ下げる（板の法線の向きへ）
+  const center = mid.clone().add(v(Math.sin(rotZ) * thick * 0.5, -Math.cos(rotZ) * thick * 0.5, 0))
+  const box = bodies.addToggle(new ToggleBox(center, v(len + 0.1, thick, 0.8), 0, 0, rotZ, false))
+  const g = new THREE.BoxGeometry(len + 0.1, thick, 0.8)
+  const mesh = new THREE.Mesh(g, m.planks)
+  mesh.position.copy(center)
+  mesh.rotation.set(0, 0, rotZ)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  mesh.visible = false
+  mesh.name = 'khmer_dock_plank'
+  return {
+    mesh,
+    get on() {
+      return box.enabled
+    },
+    set(on: boolean) {
+      if (box.enabled === on) return
+      box.setEnabled(on)
+      mesh.visible = on
+    },
+  }
 }
 
 /** 小さなナーガの頭（柱の上の飾り） */

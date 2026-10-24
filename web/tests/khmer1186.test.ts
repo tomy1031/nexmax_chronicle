@@ -100,6 +100,14 @@ describe('象の往復', () => {
     const edgeX = h2.x + h2.w / 2 + h2.porch
     expect(Math.abs(end.x - edgeX)).toBeLessThan(2.2)
   })
+  it('象のりばから、待っている象の背中へは、渡し板の坂を歩いてのぼれる', () => {
+    const start = ELEPHANT_PATHS.baray.points[0]
+    const rise = start.y + 2.75 - ELEPHANT_DOCK.y
+    const run = ELEPHANT_DOCK.x - ELEPHANT_DOCK.w / 2 - (start.x + 0.6)
+    expect(run).toBeGreaterThan(0)
+    // プレイヤーがのぼれる坂は 52° まで（player/controller.ts の setMaxSlopeClimbAngle）。板は乗り場と背中に 0.25 m ずつかかる
+    expect(Math.atan2(rise, run + 0.5)).toBeLessThan((40 * Math.PI) / 180)
+  })
   it('象のりばは、待っている象の背中のすぐ横', () => {
     const start = ELEPHANT_PATHS.baray.points[0]
     const back = start.y + 2.75

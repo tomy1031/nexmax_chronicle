@@ -826,6 +826,14 @@ export class KhmerStage implements Stage {
     // 池の象：乗るまで乗り場で待ち、乗っていなければ先へ行かない
     const baray = this.sc.elephant.baray
     this.ferry.update(dt, baray.walker, this.sc.rider.riding === baray.deck)
+    // 渡し板：象が乗り場で池の方を向いて待っている間だけ
+    {
+      const h = baray.walker.heading
+      let dy = Math.atan2(-h.x, -h.z) - baray.group.rotation.y
+      while (dy > Math.PI) dy -= Math.PI * 2
+      while (dy < -Math.PI) dy += Math.PI * 2
+      this.sc.dockPlank.set(this.ferry.state === 'dock' && Math.abs(dy) < 0.06)
+    }
     this.sc.update(dt, rt.playTime, rt.camera)
     const riding = this.sc.carryPlayer(rt.player, Math.hypot(frame.move.x, frame.move.y) > 0.1)
     this.fallGuard(rt, riding)

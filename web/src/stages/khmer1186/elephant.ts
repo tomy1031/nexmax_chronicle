@@ -11,6 +11,9 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 /** 背中の板の上面の高さ（足もとから） */
 export const ELEPHANT_DECK_Y = 2.75
+/** 背中の板（乗れる足場）の半分の幅・半分の長さ */
+export const ELEPHANT_DECK_HALF_X = 0.6
+export const ELEPHANT_DECK_HALF_Z = 0.925
 /** 足の付け根（左右・前後）と長さ */
 const HIPS: Array<[number, number]> = [
   [-0.5, -0.85],
@@ -171,7 +174,7 @@ export class Elephant {
     this.group.add(skin, load, this.trunk)
     this.group.name = 'khmer_elephant'
     this.yaw = Math.atan2(-walker.heading.x, -walker.heading.z)
-    this.deck = bodies.addKinematic(new KinematicBox(v(1.2, 0.3, 1.85)))
+    this.deck = bodies.addKinematic(new KinematicBox(v(ELEPHANT_DECK_HALF_X * 2, 0.3, ELEPHANT_DECK_HALF_Z * 2)))
     this.place(true)
   }
 

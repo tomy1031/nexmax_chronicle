@@ -13,9 +13,10 @@ title/*.webp (タイトルの一枚絵「時の輪のとびら」):
 portraits/*.webp (会話の顔。全員分・ネクマックスの 4 つの表情):
   made for this game with OpenAI image generation (via Codex CLI), 2026-10-20 and 2026-10-24
   (nexmax*, sora, sora_child, matsui, saeki, genbei, oharu, unit, towa_mother は 2026-10-24。
-  ネクマックスは brand/nexmax_official_sketch.webp とゲームの 3D モデルに合わせた)。
+  ネクマックスは brand/nexmax_official_sketch.webp とゲームの 3D モデルに合わせた。
+  ネクマックスの 4 枚（nexmax・nexmax_happy・nexmax_surprised・nexmax_worried）は 2026-11-02 に、公式の絵だけを参考に描き直した)。
 story/v7/mem_mother_lamp.webp・mem_please.webp: 2026-10-24 にネクマックスを公式の絵に合わせて描き直した（OpenAI image generation via Codex CLI）。
 ../favicon.svg・../icons/*.png (ファビコン・ホーム画面のアプリのアイコン):
-  made for this game with OpenAI image generation (via Codex CLI), 2026-10-24（ネクマックスの顔。公式の絵に合わせた）。
+  made for this game with OpenAI image generation (via Codex CLI), 2026-11-02（ネクマックスとソラの二人。ネクマックスは公式の絵に合わせた）。
 - brand/nextmake_logo.png, nextmake_logo_white.png, nextmake_mark.png/.svg: NEXTMAKE のロゴ（オーナーが示した参考の画像から作った。印は三つの三角で描き直した）
 - brand/nexmax_official_sketch.webp: ネクマックスの公式の絵（https://nextmake.site/nexmax/ 。2026 年の社長の絵に使う）

@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { configurePbrTextures } from '../render/pbrTextures'
 import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs, savePrefs, type GraphicsPrefs, type QualitySettings } from '../render/quality'
 import { createRenderer, AdaptiveResolution, hideUnseenFromCompile } from '../render/renderer'
+import { NexmaxBodyBatch } from '../world/nexmax/bodyBatch'
 import { createPost, type PostChain } from '../render/post'
 import { uTime } from '../render/materials'
 import { createPhysics, type Physics } from '../player/physics'
@@ -353,6 +354,9 @@ export class Game {
     window.addEventListener('resize', () => this.resize())
     this.nexmax = await nexP
     this.scene.add(this.nexmax.root)
+    // 体の部品（同じ材質の 13 個）は 1 回で描く（画面と影で、それぞれ 13 回 → 1 回。world/nexmax/bodyBatch.ts）
+    const body = NexmaxBodyBatch.create(this.nexmax.root)
+    if (body) this.scene.add(body.mesh)
     this.travel.start(null, { to: stageKey, cause: 'load', spawn: spawn ?? undefined }, (n) => this.story.get(n), true)
     this.travel.tick(0)
     await this.loadStage(stageKey, spawn, null, (p, msg) => this.step(0.1 + p * 0.9, msg), true)

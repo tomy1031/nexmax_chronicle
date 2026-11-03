@@ -558,7 +558,13 @@ export class Game {
     const riftWasShown = this.rift.visible
     if (!riftWasShown) this.rift.warm(true, sp.pos)
     this.cineMarker.warm(true, sp.pos)
+    // 後処理の途中の画像（リニアの HalfFloat）に描く版のシェーダを作る。描く先を決めずに作ると「画面へ直接」の版（sRGB）ができ、
+    // 実際に描くときにリニアの版をもう一度作ることになる（2086 年で 213 本のうち、およそ半分がむだだった）
+    const target = (this.post.composer as unknown as { inputBuffer?: THREE.WebGLRenderTarget }).inputBuffer ?? null
+    const prevTarget = this.renderer.getRenderTarget()
+    this.renderer.setRenderTarget(target)
     await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 6000))])
+    this.renderer.setRenderTarget(prevTarget)
     if (!riftWasShown) this.rift.warm(false, sp.pos)
     this.cineMarker.warm(false, sp.pos)
     claw.beam.setActive(beamWasActive)

@@ -7,6 +7,7 @@
 // チャンダは、話している間はその場で止まってネクマックスを向く（talk）。ついてこなければ、近くで待って呼ぶ。
 // 池の象は、乗るまで乗り場で待ち、乗っていなければ先へ行かない（FerryLogic）。水に落ちたら、すぐ象の背中か、最後に立っていた所へ（fallGuard）。
 import * as THREE from 'three'
+import { anisotropyFor } from '../../render/quality'
 import { ERA_KHMER, eraTintHex } from '../../core/eras'
 import { DialogueDB } from '../../core/dialogue'
 import type { DialogueLine } from '../../game/dialogueQueue'
@@ -148,7 +149,7 @@ export class KhmerStage implements Stage {
     this.environment = KHMER_ENVIRONMENTS[this.time]
     ctx.progress(0.1, '900年前のカンボジアへ…')
     await ctx.yieldFrame()
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     this.sc = await buildKhmerScene(ctx.quality, aniso, ctx.progress, ctx.yieldFrame)
     const root = this.sc.root
     ctx.progress(0.62, '裏側の空間を組み立て中…')

@@ -24,6 +24,14 @@ export function skyEnvironment(renderer: THREE.WebGLRenderer, pal: SkyPalette, s
   return { texture: rt.texture, dispose: () => rt.dispose() }
 }
 
+/**
+ * 画質に合わせた HDRI：高画質は 1024×512（_1k.hdr）、標準・省電力は 512×256（_512.hdr。光の向きと色は同じで、ダウンロードは 1/4、
+ * 環境マップのメモリも 1/4。空は手続きのドームで描くので、HDRI は IBL にだけ使う）
+ */
+export function hdriFor(url: string, q: Pick<QualitySettings, 'level'>): string {
+  return q.level === 'high' ? url : url.replace(/_1k\.hdr$/, '_512.hdr')
+}
+
 /** HDRI から IBL 用の環境マップ（失敗時は null） */
 export async function hdriEnvironment(renderer: THREE.WebGLRenderer, url: string): Promise<EnvTexture | null> {
   try {
@@ -87,7 +95,7 @@ export async function applyEnvironment(renderer: THREE.WebGLRenderer, scene: THR
   scene.fog = env.fog ? new THREE.FogExp2(new THREE.Color(env.fog.color), env.fog.density) : null
   const sky = createSkyDome(env.sky, sunDir)
   scene.add(sky)
-  const ibl = (env.hdri ? await hdriEnvironment(renderer, env.hdri) : null) ?? skyEnvironment(renderer, env.sky, sunDir)
+  const ibl = (env.hdri ? await hdriEnvironment(renderer, hdriFor(env.hdri, q)) : null) ?? skyEnvironment(renderer, env.sky, sunDir)
   scene.environment = ibl.texture
   scene.environmentIntensity = env.envIntensity ?? 0.75
   const sun = createSunRig(scene, q, sunDir)

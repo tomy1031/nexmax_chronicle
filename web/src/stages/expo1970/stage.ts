@@ -7,6 +7,7 @@
 // 敵「欠け」は可能性を吸われたものの抜け殻。倒すと吸われていたものが光になって持ち主へ帰る（ReturnLights）。
 // 錨をほどくと、忘れられていた先輩・北條が戻り、展示案内の設計者の名前も戻る（§1.5・§3.2）。
 import * as THREE from 'three'
+import { anisotropyFor } from '../../render/quality'
 import type { SkyPalette } from '../../render/sky'
 import type { WireEvent } from '../../player/clawLogic'
 import type { ActionFrame } from '../../player/inputActions'
@@ -142,7 +143,7 @@ export class ExpoStage implements Stage {
     this.startStep = expoStep((n) => ctx.story.get(n))
     ctx.progress(0.12, '1970年の会場を準備中…')
     await ctx.yieldFrame()
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     this.sc = await buildExpoScene(ctx.quality, aniso, ctx.progress, ctx.yieldFrame)
     ctx.progress(0.7, '来場者を案内中…')
     await ctx.yieldFrame()

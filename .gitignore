@@ -12,3 +12,7 @@ web/node_modules/
 web/dist/
 assets_src/tripo/
 web/.vitest/
+
+# tools/ktx2 の作業用（npm install した物）
+tools/ktx2/node_modules/
+tools/ktx2/package*.json

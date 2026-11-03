@@ -1,5 +1,6 @@
 // レンダラ・太陽光（影はプレイヤー／注目点に追従）・半球光・適応ピクセル比。
 import * as THREE from 'three'
+import { SHADOW_ONLY_LAYER } from './batch'
 import type { QualitySettings } from './quality'
 
 export function createRenderer(container: HTMLElement, q: QualitySettings): THREE.WebGLRenderer {
@@ -46,6 +47,8 @@ export function createSunRig(scene: THREE.Scene, q: QualitySettings, sunDir: THR
   sun.shadow.bias = -0.0004
   sun.shadow.normalBias = 0.03
   sun.shadow.radius = q.shadowRadius
+  // 影用の形（render/batch.ts の SHADOW_ONLY_LAYER。区画ごとに分けた、位置だけの形）も影のカメラに見せる
+  cam.layers.enable(SHADOW_ONLY_LAYER)
   scene.add(sun, sun.target)
 
   const hemi = new THREE.HemisphereLight('#a9cdf5', '#a5744a', 0.4)
@@ -90,6 +93,9 @@ export function createSunRig(scene: THREE.Scene, q: QualitySettings, sunDir: THR
  * フレーム時間に応じてピクセル比を上下させる。目標はフレームレートの上限（30 か 60）。
  * 上限で間引いているときは「速すぎる」は測れないので、上限どおりに描けている状態が続いたら少しずつ戻す
  */
+/** 適応解像度のはじめの比（上限がこれより高いときは、余裕を見て上げていく） */
+export const ADAPTIVE_START = 1.0
+
 export class AdaptiveResolution {
   private acc = 0
   private frames = 0
@@ -107,7 +113,8 @@ export class AdaptiveResolution {
     this.min = min
     this.max = max
     this.apply = apply
-    this.ratio = max
+    // はじめは 1.0 まで（上限が高いときに、弱い GPU で最初の数秒が重くならないように）。余裕があれば 0.1 ずつ上限まで上げる
+    this.ratio = Math.min(max, ADAPTIVE_START)
     this.target = targetFps
   }
 
@@ -124,7 +131,7 @@ export class AdaptiveResolution {
     this.acc = 0
     this.frames = 0
     this.cooldown = 2
-    const next = Math.round(max * 100) / 100
+    const next = Math.round(Math.min(max, Math.max(min, this.ratio)) * 100) / 100
     if (next !== this.ratio) {
       this.ratio = next
       this.apply(next)

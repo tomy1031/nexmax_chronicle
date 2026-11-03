@@ -9,6 +9,7 @@
 //   dawn     朝：時を裂く爪・針の目もり・ネクマックスの思いつき → からくりの箱を J で持ってほこらへ → 錠前・おはるの約束 → v7_claw_stored
 //   leave    石が引っぱる → 光の輪（F）→ 2086年（return・v7_from_1726）
 import * as THREE from 'three'
+import { anisotropyFor } from '../../../render/quality'
 import { createMaterialLibrary } from '../../../render/materials'
 import { EDO_SKY } from '../../../render/sky'
 import { ERA_EDO, eraTintHex } from '../../../core/eras'
@@ -160,7 +161,7 @@ export class ChronicleEdoStage implements Stage {
     const chars = Promise.all([ctx.loadNpc('genbei', 1.6), ctx.loadNpc('oharu', 1.32)])
     ctx.progress(0.1, 'テクスチャを生成中…')
     await ctx.yieldFrame()
-    const mats = await createMaterialLibrary(Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy()))
+    const mats = await createMaterialLibrary(anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy()))
     ctx.progress(0.4, '仕掛け横丁を組み立て中…')
     await ctx.yieldFrame()
     this.w = await buildChronicleEdo(mats, ctx.quality)

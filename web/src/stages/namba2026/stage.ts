@@ -6,6 +6,7 @@
 //   石標 A・B は昔の町を見るだけ、C（古い路地の奥・江戸のからくりのうわさ）で鉱石が反応して 1726年へ。
 // 帰還：石標 A の前へ戻る → 社長に源兵衛の話 → ラボで佐伯が固定具を試作 → 石標 A の光から 2086年へ。
 import * as THREE from 'three'
+import { anisotropyFor } from '../../render/quality'
 import { ERA_PRESENT, eraTintHex } from '../../core/eras'
 import { presentObjective, idoMarkersLeft } from '../../core/storyDirector'
 import { DialogueDB } from '../../core/dialogue'
@@ -195,7 +196,7 @@ export class NambaStage implements Stage {
     const npcs = Promise.all([ctx.loadNpc('matsui', 1.72), ctx.loadNpc('saeki', 1.6, () => createSaekiPlaceholder(1.6))])
     ctx.progress(0.1, 'テクスチャを読み込み中…')
     await ctx.yieldFrame()
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     this.scene = await buildNambaScene(ctx.quality, aniso, ctx.progress, ctx.yieldFrame)
     ctx.progress(0.66, 'マツイ社長と佐伯さんを読み込み中…')
     await ctx.yieldFrame()

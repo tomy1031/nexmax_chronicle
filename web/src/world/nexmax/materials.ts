@@ -73,7 +73,8 @@ export function withOutlineShader<T extends THREE.Material>(mat: T, key: string)
         `#include <project_vertex>
   vOutline = aOutline;
   if (aOutline > 0.5) {
-    vec3 nV = normalize(normalMatrix * objectNormal);
+    // transformedNormal：normalMatrix をかけた後の法線（BatchedMesh・InstancedMesh で描くときの 1 つ 1 つの向きも入る）
+    vec3 nV = normalize(transformedNormal);
     // 画面上でほぼ一定の太さ（距離 × 画角で換算）。近いときは最小の太さ、低い解像度でも最小の画素数を保つ
     float wv = nxOutlineWidth(-mvPosition.z, uOutlineMin);
     mvPosition.xyz += nV * wv;

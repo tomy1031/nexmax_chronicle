@@ -30,13 +30,23 @@ export type QualitySettings = {
 }
 
 export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = {
-  // Retina でも描画解像度は 1.25 倍まで・AO は半分の解像度（M1 実機で 25fps 前後しか出なかったため）
-  high: { level: 'high', shadowMapSize: 2048, shadowRadius: 3, maxPixelRatio: 1.25, minPixelRatio: 0.7, ao: true, aoHalfRes: true, bloom: true, smaa: 'high', fxaa: false, petals: 600, pointLights: 6, portraitFps: 20 },
+  // 描画解像度は 1.5 倍まで（Retina・4K でくっきり）。はじめは 1.0 で、フレームに余裕が続いたときだけ上げる（render/renderer.ts の
+  // AdaptiveResolution。M1 実機で 1.25 固定のとき 25fps 前後だったので、遅ければすぐ下がる）・AO は半分の解像度
+  high: { level: 'high', shadowMapSize: 2048, shadowRadius: 3, maxPixelRatio: 1.5, minPixelRatio: 0.7, ao: true, aoHalfRes: true, bloom: true, smaa: 'high', fxaa: false, petals: 600, pointLights: 6, portraitFps: 20 },
   // AO を切り、影と解像度を 1 段下げる（見た目の差は小さく、重さは半分ほど）。
   // スマホは描画解像度が低い（CSS の画素以下まで下がる）ので、ふちのギザギザが目立ちやすい。SMAA は低い解像度ほど安いので HIGH にする
   medium: { level: 'medium', shadowMapSize: 1024, shadowRadius: 2, maxPixelRatio: 1.0, minPixelRatio: 0.65, ao: false, aoHalfRes: true, bloom: true, smaa: 'high', fxaa: false, petals: 250, pointLights: 4, portraitFps: 12 },
   // 後処理はかすみと色調と軽いアンチエイリアス（FXAA）だけ（ブルームなし）。解像度も少し下げる
   low: { level: 'low', shadowMapSize: 1024, shadowRadius: 1, maxPixelRatio: 0.85, minPixelRatio: 0.6, ao: false, aoHalfRes: true, bloom: false, smaa: null, fxaa: true, petals: 120, pointLights: 2, portraitFps: 8 },
+}
+
+/**
+ * 斜めに見た地面・壁のくっきりさ（テクスチャの異方性フィルタ）。高画質は GPU の上限（16 まで）、標準 4、省電力 2。
+ * 高い値は遠くの石だたみや床の模様がにじまない（画質）。スマホは 1 画素あたりのテクスチャの読みが増えるので低めに（軽さ）
+ */
+export function anisotropyFor(level: QualityLevel, max: number): number {
+  const want = level === 'high' ? 16 : level === 'medium' ? 4 : 2
+  return Math.max(1, Math.min(want, max))
 }
 
 export const QUALITY_LABELS: Readonly<Record<QualityLevel, string>> = { low: '省電力', medium: '標準', high: '高画質' }

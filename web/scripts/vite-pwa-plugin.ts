@@ -24,7 +24,7 @@ const TEXT_RE = /\.(js|css|html|json|webmanifest|svg|txt|hdr)$/i
 const EXCLUDE: RegExp[] = [/^sw\.js$/, /^\.nojekyll$/, /^\.vite\//, /^dev\//]
 
 /** 最初に要る、公開フォルダ（public/）のファイル */
-const PRECACHE_STATIC: RegExp[] = [/^index\.html$/, /^manifest\.webmanifest$/, /^favicon\.svg$/, /^icons\//]
+const PRECACHE_STATIC: RegExp[] = [/^index\.html$/, /^manifest\.webmanifest$/, /^favicon\.svg$/, /^icons\//, /^assets\/rapier3d-[\w-]+\.wasm$/]
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 

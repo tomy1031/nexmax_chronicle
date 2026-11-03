@@ -564,8 +564,12 @@ export class Game {
     const prevTarget = this.renderer.getRenderTarget()
     this.renderer.setRenderTarget(target)
     const restore = hideUnseenFromCompile(this.scene, this.camera)
-    const compiled = this.renderer.compileAsync(this.scene, this.camera)
-    restore()
+    let compiled: Promise<unknown>
+    try {
+      compiled = this.renderer.compileAsync(this.scene, this.camera)
+    } finally {
+      restore()
+    }
     await Promise.race([compiled, new Promise((r) => setTimeout(r, 6000))])
     this.renderer.setRenderTarget(prevTarget)
     if (!riftWasShown) this.rift.warm(false, sp.pos)

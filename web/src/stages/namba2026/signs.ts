@@ -2,6 +2,7 @@
 // 実在の商標・ロゴは描かない（「たこ焼」「串カツ」「うどん」「お好み焼」「大阪」「なんば」などの一般的な文字だけ）。
 // NEXTMAKE / NEXMAX / IDO はこのゲームの作者のもの。現代の看板は左→右の横書き（setLettering の江戸の規則は使わない）。
 import * as THREE from 'three'
+import { canvasTextureScale } from '../../render/pbrTextures'
 import { makeCanvas, tex } from '../../render/textures'
 import { MARK_DARK, MARK_LIGHT, drawMark, drawMarkWhite } from './chronicle/brandArt'
 
@@ -285,9 +286,29 @@ export class SignAtlas {
     return { u0: (x + 0.5) / S, u1: (x + w - 0.5) / S, v1: 1 - (y + 0.5) / S, v0: 1 - (y + h - 0.5) / S }
   }
 
-  texture(aniso: number): THREE.CanvasTexture {
-    const t = tex(this.canvas, true, aniso)
+  /**
+   * テクスチャにする。描いた所（上から usedHeight）だけを切り出し（下の空きはメモリのむだ）、標準・省電力は半分の大きさに
+   * （canvasTextureScale）。UV は add のときに正方形のアトラスで決めてあるので、テクスチャの repeat・offset で切り出しに合わせる
+   */
+  texture(aniso: number, scale = canvasTextureScale()): THREE.CanvasTexture {
+    const S = this.size
+    const used = Math.min(S, Math.ceil((this.usedHeight + 4) / 4) * 4)
+    let src = this.canvas
+    if (used < S || scale < 1) {
+      src = document.createElement('canvas')
+      src.width = Math.max(1, Math.round(S * scale))
+      src.height = Math.max(1, Math.round(used * scale))
+      const g = src.getContext('2d')!
+      g.imageSmoothingQuality = 'high'
+      g.drawImage(this.canvas, 0, 0, S, used, 0, 0, src.width, src.height)
+    }
+    const t = tex(src, true, aniso)
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping
+    // 正方形での v（上 = 1）→ 切り出した画像での v：v' = (v − (1 − used/S)) · S/used
+    if (used < S) {
+      t.repeat.set(1, S / used)
+      t.offset.set(0, -(S - used) / used)
+    }
     return t
   }
 }

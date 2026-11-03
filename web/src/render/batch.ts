@@ -30,6 +30,14 @@ const tmpColor = new THREE.Color()
  * 広い場所を歩き回るステージで build(name, 区画) と指定して使う
  */
 export const BATCH_CELL = 0
+/**
+ * 影だけを区画に分ける（m）。画面に描く物は 1 つに結合したまま（描く回数はふえない）にして、影を落とす物（castShadow）は
+ * 位置だけの「影用の形」を区画ごとに別に作り、影のカメラ（プレイヤーのまわり ±17 m）にだけ見せる（SHADOW_ONLY_LAYER）。
+ * 影のカメラの外の区画は描かないので、影を作る三角形が大きくへる
+ */
+export const SHADOW_CELL = 24
+/** 影用の形を置く層（メインのカメラは層 0 だけを見る。太陽の影のカメラは、この層も見る：render/renderer.ts） */
+export const SHADOW_ONLY_LAYER = 2
 /** これより頂点の多い組だけ、区画に分ける */
 const SPLIT_MIN_VERTS = 12000
 
@@ -76,11 +84,17 @@ export class Batch {
     this.count++
   }
 
-  /** 結合したメッシュ群を返す（大きい組は、区画 cell m ごとに分けて結合する。0 なら分けない） */
-  build(name = 'batch', cell = BATCH_CELL): THREE.Group {
+  /**
+   * 結合したメッシュ群を返す（大きい組は、区画 cell m ごとに分けて結合する。0 なら分けない）。
+   * 影を落とす大きい組は、影用の形を shadowCell m ごとに別に作る（0 なら作らず、結合した物がそのまま影を落とす）
+   */
+  build(name = 'batch', cell = BATCH_CELL, shadowCell = SHADOW_CELL): THREE.Group {
     const group = new THREE.Group()
     group.name = name
     for (const e of this.entries.values()) {
+      const shadowParts = e.cast && shadowCell > 0 ? splitByCell(e.geos, shadowCell) : []
+      const shadowSplit = shadowParts.length > 1
+      if (shadowSplit) for (const geos of shadowParts) addShadowCaster(group, geos, e.mat)
       for (const geos of splitByCell(e.geos, cell)) {
         // index の型を揃える
         const total = geos.reduce((s, g) => s + g.attributes.position.count, 0)
@@ -95,7 +109,7 @@ export class Batch {
         merged.computeBoundingSphere()
         merged.computeBoundingBox()
         const mesh = new THREE.Mesh(merged, e.mat)
-        mesh.castShadow = e.cast
+        mesh.castShadow = e.cast && !shadowSplit
         mesh.receiveShadow = e.receive
         mesh.matrixAutoUpdate = false
         mesh.updateMatrix()
@@ -106,6 +120,31 @@ export class Batch {
     this.entries.clear()
     return group
   }
+}
+
+/** 影用の形（位置だけ。透かしのある材質は uv も）を 1 つ作って、影のカメラだけが見る層に置く */
+function addShadowCaster(group: THREE.Group, geos: THREE.BufferGeometry[], mat: THREE.Material): void {
+  const keepUv = (mat as THREE.MeshStandardMaterial).alphaTest > 0 || mat.transparent
+  const slim = geos.map((g) => {
+    const out = new THREE.BufferGeometry()
+    out.setAttribute('position', g.attributes.position)
+    if (keepUv && g.attributes.uv) out.setAttribute('uv', g.attributes.uv)
+    out.setIndex(g.index)
+    return out
+  })
+  const total = slim.reduce((s, g) => s + g.attributes.position.count, 0)
+  if (total > 65535) for (const g of slim) if (!(g.index!.array instanceof Uint32Array)) g.setIndex(new THREE.BufferAttribute(new Uint32Array(g.index!.array), 1))
+  const merged = mergeGeometries(slim, false)
+  if (!merged) return
+  merged.computeBoundingSphere()
+  const m = new THREE.Mesh(merged, mat)
+  m.name = 'shadowCaster'
+  m.castShadow = true
+  m.receiveShadow = false
+  m.layers.set(SHADOW_ONLY_LAYER)
+  m.matrixAutoUpdate = false
+  m.updateMatrix()
+  group.add(m)
 }
 
 const tmpBox = new THREE.Box3()

@@ -1,5 +1,6 @@
 // レンダラ・太陽光（影はプレイヤー／注目点に追従）・半球光・適応ピクセル比。
 import * as THREE from 'three'
+import { SHADOW_ONLY_LAYER } from './batch'
 import type { QualitySettings } from './quality'
 
 export function createRenderer(container: HTMLElement, q: QualitySettings): THREE.WebGLRenderer {
@@ -46,6 +47,8 @@ export function createSunRig(scene: THREE.Scene, q: QualitySettings, sunDir: THR
   sun.shadow.bias = -0.0004
   sun.shadow.normalBias = 0.03
   sun.shadow.radius = q.shadowRadius
+  // 影用の形（render/batch.ts の SHADOW_ONLY_LAYER。区画ごとに分けた、位置だけの形）も影のカメラに見せる
+  cam.layers.enable(SHADOW_ONLY_LAYER)
   scene.add(sun, sun.target)
 
   const hemi = new THREE.HemisphereLight('#a9cdf5', '#a5744a', 0.4)

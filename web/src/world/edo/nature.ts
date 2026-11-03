@@ -240,7 +240,8 @@ export class Foliage {
     }
   }
 
-  build(): THREE.Group {
+  /** shadows = false：影を落とさない（遠くの木々。影用のカードも作らない） */
+  build(shadows = true): THREE.Group {
     const g = new THREE.Group()
     g.name = 'foliage'
     for (const [buf, mat] of [
@@ -249,8 +250,9 @@ export class Foliage {
     ] as const) {
       if (!buf.idx.length) continue
       const mesh = bufToMesh(buf, mat)
+      if (!shadows) mesh.castShadow = false
       // 影は区画ごとの影用のカードが落とす（あれば）
-      const casters = shadowCards(buf, mat)
+      const casters = shadows ? shadowCards(buf, mat) : null
       if (casters) {
         mesh.castShadow = false
         g.add(...casters)

@@ -95,7 +95,7 @@ export async function buildNambaScene(q: QualitySettings, aniso: number, progres
   await yieldFrame()
   buildFar(c)
   root.add(c.b.build('namba_static'))
-  const far = c.bf.build('namba_far')
+  const far = c.bf.build('namba_far', undefined, 0)
   far.traverse((o) => (o.castShadow = false))
   root.add(far)
   const pedestrians = new Pedestrians([

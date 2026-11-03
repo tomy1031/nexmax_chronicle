@@ -87,11 +87,11 @@ export function buildEdoScene(m: MaterialLibrary, quality: QualitySettings, opts
   opts.extend?.(c, cf, foliage)
 
   root.add(c.b.build('static'))
-  const far = c.bf.build('far')
+  const far = c.bf.build('far', undefined, 0)
   far.traverse((o) => (o.castShadow = false))
   root.add(far)
   root.add(foliage.build())
-  const farF = farFoliage.build()
+  const farF = farFoliage.build(false)
   farF.traverse((o) => (o.castShadow = false))
   root.add(farF)
   root.add(

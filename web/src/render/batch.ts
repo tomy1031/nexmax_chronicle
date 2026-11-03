@@ -23,6 +23,16 @@ type Entry = { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean;
 
 const tmpColor = new THREE.Color()
 
+/**
+ * 結合するときの区画（m。0 なら分けない）。大きく結合しすぎると、画面の外の分や、影（プレイヤーのまわり ±17 m）の外の分まで
+ * 毎回描くことになるので、区画ごとに分けると見えない区画を描かずにすむ。ただし 2086 年の広場の始まりの所で測ると
+ * （32 m：描く回数 602 → 737・三角形 −6%、64 m：699・−5%）描く回数がふえる分のほうが大きかったので、既定では分けない。
+ * 広い場所を歩き回るステージで build(name, 区画) と指定して使う
+ */
+export const BATCH_CELL = 0
+/** これより頂点の多い組だけ、区画に分ける */
+const SPLIT_MIN_VERTS = 12000
+
 export class Batch {
   private entries = new Map<string, Entry>()
   count = 0
@@ -66,34 +76,61 @@ export class Batch {
     this.count++
   }
 
-  /** 結合したメッシュ群を返す。 */
-  build(name = 'batch'): THREE.Group {
+  /** 結合したメッシュ群を返す（大きい組は、区画 cell m ごとに分けて結合する。0 なら分けない） */
+  build(name = 'batch', cell = BATCH_CELL): THREE.Group {
     const group = new THREE.Group()
     group.name = name
     for (const e of this.entries.values()) {
-      // index の型を揃える
-      const total = e.geos.reduce((s, g) => s + g.attributes.position.count, 0)
-      if (total > 65535) {
-        for (const g of e.geos) {
-          const idx = g.index as THREE.BufferAttribute
-          if (!(idx.array instanceof Uint32Array)) g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx.array), 1))
+      for (const geos of splitByCell(e.geos, cell)) {
+        // index の型を揃える
+        const total = geos.reduce((s, g) => s + g.attributes.position.count, 0)
+        if (total > 65535) {
+          for (const g of geos) {
+            const idx = g.index as THREE.BufferAttribute
+            if (!(idx.array instanceof Uint32Array)) g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx.array), 1))
+          }
         }
+        const merged = mergeGeometries(geos, false)
+        if (!merged) continue
+        merged.computeBoundingSphere()
+        merged.computeBoundingBox()
+        const mesh = new THREE.Mesh(merged, e.mat)
+        mesh.castShadow = e.cast
+        mesh.receiveShadow = e.receive
+        mesh.matrixAutoUpdate = false
+        mesh.updateMatrix()
+        group.add(mesh)
       }
-      const merged = mergeGeometries(e.geos, false)
-      if (!merged) continue
-      merged.computeBoundingSphere()
-      merged.computeBoundingBox()
-      const mesh = new THREE.Mesh(merged, e.mat)
-      mesh.castShadow = e.cast
-      mesh.receiveShadow = e.receive
-      mesh.matrixAutoUpdate = false
-      mesh.updateMatrix()
-      group.add(mesh)
       for (const g of e.geos) g.dispose()
     }
     this.entries.clear()
     return group
   }
+}
+
+const tmpBox = new THREE.Box3()
+const tmpCenter = new THREE.Vector3()
+const tmpSize = new THREE.Vector3()
+
+/**
+ * ジオメトリを、XZ の区画ごとの組に分ける。区画より大きい物（長い道・広い床）は、別の 1 組にまとめる。
+ * 頂点の少ない組・区画が 1 つしかない組は、そのまま 1 組
+ */
+export function splitByCell(geos: THREE.BufferGeometry[], cell: number): THREE.BufferGeometry[][] {
+  const verts = geos.reduce((s, g) => s + g.attributes.position.count, 0)
+  if (cell <= 0 || verts < SPLIT_MIN_VERTS || geos.length < 2) return [geos]
+  const cells = new Map<string, THREE.BufferGeometry[]>()
+  for (const g of geos) {
+    if (!g.boundingBox) g.computeBoundingBox()
+    tmpBox.copy(g.boundingBox as THREE.Box3)
+    tmpBox.getSize(tmpSize)
+    tmpBox.getCenter(tmpCenter)
+    const key = Math.max(tmpSize.x, tmpSize.z) > cell * 1.5 ? 'big' : `${Math.floor(tmpCenter.x / cell)},${Math.floor(tmpCenter.z / cell)}`
+    const list = cells.get(key)
+    if (list) list.push(g)
+    else cells.set(key, [g])
+  }
+  return [...cells.values()]
 }
 
 /** ローカル空間で面の向きに応じて実寸 UV を投影。U は長い方の軸（木目が長手方向に流れる）。 */

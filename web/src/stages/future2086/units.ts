@@ -3,6 +3,7 @@
 import * as THREE from 'three'
 import { createNexmax, type NexmaxCharacter, type NexmaxPose } from '../../world/nexmax/nexmaxModel'
 import { F } from './layout'
+import { UnitBodyBatch } from './unitBatch'
 
 export type UnitSpec = {
   id: string
@@ -61,6 +62,13 @@ export function buildUnits(root: THREE.Group, specs: UnitSpec[] = UNIT_SPECS): U
     root.add(ch.root)
     return { spec, ch, t: spec.loop?.phase ?? spec.serial * 0.37 }
   })
+  // 体の部品は全員まとめて 1 回で描く（unitBatch.ts）
+  const chars = list.map((u) => u.ch)
+  const bodies = UnitBodyBatch.create(chars)
+  if (bodies) {
+    root.add(bodies.mesh)
+    bodies.sync(chars)
+  }
   let night = false
   return {
     list,
@@ -80,6 +88,7 @@ export function buildUnits(root: THREE.Group, specs: UnitSpec[] = UNIT_SPECS): U
         }
         u.ch.update(dt, speed)
       }
+      bodies?.sync(chars)
     },
     setNight(on: boolean) {
       night = on
@@ -89,6 +98,7 @@ export function buildUnits(root: THREE.Group, specs: UnitSpec[] = UNIT_SPECS): U
       }
     },
     dispose() {
+      bodies?.dispose()
       for (const u of list) u.ch.dispose()
     },
   }

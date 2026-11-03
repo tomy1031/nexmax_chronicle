@@ -73,6 +73,8 @@ export function buildHoloAds(c: FCtx, root: THREE.Group): void {
   root.add(group)
   const coneMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.9, 1.4), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })
   coneMat.name = 'f2086-holoCone'
+  // 足し算で重ねる光なので、描く順番で見た目は変わらない。裏→表の 2 回に分けずに 1 回で描く
+  coneMat.forceSinglePass = true
   const items: Array<{ mesh: THREE.Mesh; base: THREE.Vector3; def: AdDef; ph: number }> = []
   ADS.forEach((def, i) => {
     const tex = loader.load(`./textures/holo2086/${def.name}.webp`)

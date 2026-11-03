@@ -32,11 +32,12 @@ export class UnitBodyBatch {
   }
 
   private constructor(parts: THREE.Mesh[], mat: THREE.Material) {
+    // 量産型は全員で同じ形を使い回す（nexmaxModel）。BatchedMesh へ入れるのも、ちがう形 1 つにつき 1 回
     let verts = 0
     let index = 0
-    for (const p of parts) {
-      verts += p.geometry.attributes.position.count
-      index += p.geometry.index?.count ?? 0
+    for (const g of new Set(parts.map((p) => p.geometry))) {
+      verts += g.attributes.position.count
+      index += g.index?.count ?? 0
     }
     // 手は握る・開くの 2 つの形がある。あとから足すぶんの余り（手のぶんよりじゅうぶん多め）
     this.mesh = new THREE.BatchedMesh(parts.length, Math.ceil(verts * 1.6), Math.ceil(index * 1.6), mat)

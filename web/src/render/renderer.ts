@@ -180,3 +180,22 @@ export class AdaptiveResolution {
     }
   }
 }
+
+/**
+ * シェーダの事前の準備（renderer.compile）は、層に関係なく場面の全部の形の材質から作る。
+ * 影だけの形（SHADOW_ONLY_LAYER。法線を持たない）や描かない層へ移した部品は画面には描かないのに、
+ * 「法線なし」の版などが別に作られていた（2086 年で 8 本）。準備のあいだだけ、カメラに見えない形の材質を外す。
+ * 戻す関数を返す（compileAsync は呼んだその場で材質を集めるので、呼んだ直後に戻してよい）
+ */
+export function hideUnseenFromCompile(scene: THREE.Object3D, camera: THREE.Camera): () => void {
+  const held: [THREE.Mesh, THREE.Mesh['material']][] = []
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.material || m.layers.test(camera.layers)) return
+    held.push([m, m.material])
+    ;(m as { material: THREE.Mesh['material'] | null }).material = null
+  })
+  return () => {
+    for (const [m, mat] of held) m.material = mat
+  }
+}

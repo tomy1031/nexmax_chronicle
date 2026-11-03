@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import { configurePbrTextures } from '../render/pbrTextures'
 import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs, savePrefs, type GraphicsPrefs, type QualitySettings } from '../render/quality'
-import { createRenderer, AdaptiveResolution } from '../render/renderer'
+import { createRenderer, AdaptiveResolution, hideUnseenFromCompile } from '../render/renderer'
 import { createPost, type PostChain } from '../render/post'
 import { uTime } from '../render/materials'
 import { createPhysics, type Physics } from '../player/physics'
@@ -563,7 +563,10 @@ export class Game {
     const target = (this.post.composer as unknown as { inputBuffer?: THREE.WebGLRenderTarget }).inputBuffer ?? null
     const prevTarget = this.renderer.getRenderTarget()
     this.renderer.setRenderTarget(target)
-    await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 6000))])
+    const restore = hideUnseenFromCompile(this.scene, this.camera)
+    const compiled = this.renderer.compileAsync(this.scene, this.camera)
+    restore()
+    await Promise.race([compiled, new Promise((r) => setTimeout(r, 6000))])
     this.renderer.setRenderTarget(prevTarget)
     if (!riftWasShown) this.rift.warm(false, sp.pos)
     this.cineMarker.warm(false, sp.pos)

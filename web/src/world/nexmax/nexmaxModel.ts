@@ -139,8 +139,9 @@ function group(parent: THREE.Object3D, x: number, y: number, z: number, name: st
   return g
 }
 
+/** hull = 輪郭線（反転ハル）入りの形（呼ぶ側で withHull 済み）。影は輪郭線を除いて落とす */
 function solid(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, mats: NexmaxMaterials, hull: boolean, name: string): THREE.Mesh {
-  const m = new THREE.Mesh(hull ? withHull(geo) : geo, mat)
+  const m = new THREE.Mesh(geo, mat)
   m.name = name
   m.castShadow = true
   m.receiveShadow = true
@@ -149,9 +150,30 @@ function solid(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Mat
   return m
 }
 
+// 量産型は全員同じ形（色も同じ。ちがうのは胸の番号の絵だけ）。形は 1 回だけ作って全員で使い回す
+// （2086 年の広場の 8 体で、作る時間と形のメモリが 1 体ぶんに）。最後の 1 体を片づけたときに捨てる
+const prodGeos = { map: new Map<string, THREE.BufferGeometry>(), users: 0 }
+
+function releaseProductionGeos(): void {
+  if (--prodGeos.users > 0) return
+  prodGeos.users = 0
+  for (const g of prodGeos.map.values()) g.dispose()
+  prodGeos.map.clear()
+}
+
 export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxCharacter {
   const variant: NexmaxVariant = opts.variant ?? 'protagonist'
   const prod = variant === 'production'
+  if (prod) prodGeos.users++
+  /** 形を作る（量産型は名前ごとに 1 回だけ作って使い回す） */
+  const G = (key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry => {
+    if (!prod) return make()
+    let g = prodGeos.map.get(key)
+    if (!g) prodGeos.map.set(key, (g = make()))
+    return g
+  }
+  /** 輪郭線（反転ハル）入りの形 */
+  const H = (key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry => G(key, () => withHull(make()))
   const logo = torsoLogoUV()
   const logoSpec = { logoU: logo.u, logoV: logo.v, logoW: logo.w, logoH: logo.h }
   const torsoTex = prod ? makeProductionTorsoTexture(logoSpec, opts.serial ?? 86) : makeTorsoTexture(logoSpec)
@@ -172,36 +194,40 @@ export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxChar
   // --- 胴
   const hips = group(body, 0, J.hips, 0, 'hips', 'YXZ')
   const torso = group(hips, 0, J.torsoPivot - J.hips, 0, 'torso', 'YXZ')
-  solid(torso, buildTorso(), mats.torso, mats, true, 'torso')
-  const ore = prod ? solid(torso, buildHatch(), pm!.hatch, mats, false, 'hatch') : solid(torso, buildOre(), mats.ore, mats, false, 'ore')
+  solid(torso, H('torso', buildTorso), mats.torso, mats, true, 'torso')
+  const ore = prod ? solid(torso, G('hatch', buildHatch), pm!.hatch, mats, false, 'hatch') : solid(torso, buildOre(), mats.ore, mats, false, 'ore')
   ore.castShadow = false
   if (prod) torso.scale.copy(PROD_PROPORTIONS.torso)
 
   // --- 頭
   const head = group(torso, 0, HEAD_PIVOT_Y - J.torsoPivot, 0, 'head', 'YXZ')
-  const helmetBase = buildHelmet()
-  if (prod) paintProductionHelmet(helmetBase)
-  helmetBase.translate(0, -HEAD_PIVOT_Y, 0)
+  const helmetBase = () => {
+    const g = buildHelmet()
+    if (prod) paintProductionHelmet(g)
+    return g.translate(0, -HEAD_PIVOT_Y, 0)
+  }
   let antennaTip: THREE.Mesh | null = null
   if (prod) {
     head.scale.setScalar(PROD_PROPORTIONS.head)
-    const ant = buildAntenna()
-    solid(head, mergeParts([helmetBase, ant.body]), mats.body, mats, true, 'helmet')
-    antennaTip = solid(head, ant.tip, pm!.tip, mats, false, 'antennaTip')
+    let ant: ReturnType<typeof buildAntenna> | null = null
+    const antenna = () => (ant ??= buildAntenna())
+    solid(head, H('helmet', () => mergeParts([helmetBase(), antenna().body])), mats.body, mats, true, 'helmet')
+    antennaTip = solid(head, G('antennaTip', () => antenna().tip), pm!.tip, mats, false, 'antennaTip')
     antennaTip.castShadow = false
-  } else solid(head, helmetBase, mats.body, mats, true, 'helmet')
-  const plateGeo = buildPlate()
-  plateGeo.translate(0, -HEAD_PIVOT_Y, 0)
+  } else solid(head, withHull(helmetBase()), mats.body, mats, true, 'helmet')
+  const plateGeo = G('plate', () => buildPlate().translate(0, -HEAD_PIVOT_Y, 0))
   const plate = solid(head, plateGeo, prod ? pm!.visor : mats.plate, mats, false, 'plate')
   plate.castShadow = false
   const eyePivot = group(head, 0, EYE_CENTER_Y - HEAD_PIVOT_Y, 0, 'eyes')
   const eyeGeos = {} as Record<Expression, THREE.BufferGeometry>
   const featGeos = {} as Record<Expression, THREE.BufferGeometry>
   // 量産型は表情を変えない（LED の目だけ）。表情の切り替えで主人公の目に戻らないよう、全部同じ形にする
-  const led = prod ? buildLedEyes().translate(0, -EYE_CENTER_Y, 0) : null
+  // 量産型は顔の線（features）を出さないので、1 つだけ作る（表情ごとに作っても使わない）
+  const led = prod ? G('led', () => buildLedEyes().translate(0, -EYE_CENTER_Y, 0)) : null
+  const plainFeat = prod ? G('features', () => buildFeatures('happy', true).translate(0, -HEAD_PIVOT_Y, 0)) : null
   for (const e of EXPRESSIONS) {
     eyeGeos[e] = led ?? buildEyes(e).translate(0, -EYE_CENTER_Y, 0)
-    featGeos[e] = buildFeatures(e, true).translate(0, -HEAD_PIVOT_Y, 0)
+    featGeos[e] = plainFeat ?? buildFeatures(e, true).translate(0, -HEAD_PIVOT_Y, 0)
   }
   const eyes = solid(eyePivot, eyeGeos.happy, prod ? pm!.led : mats.eyes, mats, false, 'eyeballs')
   eyes.castShadow = false
@@ -214,27 +240,30 @@ export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxChar
   // 肩は「ひねり → 外へ開く → 前後に振る」の順（XZY）。腕を上げても外開きの向きが変わらない
   const shR = group(torso, J.shoulder.x, shY, 0, 'shoulderR', 'XZY')
   const shL = group(torso, -J.shoulder.x, shY, 0, 'shoulderL', 'XZY')
-  const upperGeo = tone(buildUpperArm(), PROD_COLORS.blue)
+  // 左右は同じ形（量産型は左右とも同じ 1 つを使う）
+  const upperGeo = H('upperArm', () => tone(buildUpperArm(), PROD_COLORS.blue))
   solid(shR, upperGeo, mats.body, mats, true, 'upperArmR')
-  solid(shL, upperGeo.clone(), mats.body, mats, true, 'upperArmL')
+  solid(shL, prod ? upperGeo : upperGeo.clone(), mats.body, mats, true, 'upperArmL')
   const elR = group(shR, 0, -J.upperLen, 0, 'elbowR')
   const elL = group(shL, 0, -J.upperLen, 0, 'elbowL')
   // 量産型の右腕にはワイヤー射出器が無い（両腕とも普通の前腕）
-  const foreR = buildForearm(!prod)
-  const foreL = buildForearm(false)
-  solid(elR, tone(foreR.geo, PROD_COLORS.white), mats.body, mats, true, 'forearmR')
-  solid(elL, tone(foreL.geo, PROD_COLORS.white), mats.body, mats, true, 'forearmL')
-  if (foreR.ring) {
+  // 量産型は左右とも同じ形（射出器なし）
+  const foreR = prod ? null : buildForearm(true)
+  const foreGeoR = foreR ? withHull(foreR.geo) : H('forearm', () => tone(buildForearm(false).geo, PROD_COLORS.white))
+  const foreGeoL = prod ? foreGeoR : withHull(buildForearm(false).geo)
+  solid(elR, foreGeoR, mats.body, mats, true, 'forearmR')
+  solid(elL, foreGeoL, mats.body, mats, true, 'forearmL')
+  if (foreR?.ring) {
     const ring = solid(elR, foreR.ring, mats.ring, mats, false, 'clawRing')
     ring.castShadow = false
   }
   const wrR = group(elR, 0, -J.lowerLen, 0, 'wristR')
   const wrL = group(elL, 0, -J.lowerLen, 0, 'wristL')
   const handGeo = {
-    rOpen: withHull(tone(buildHand(false, 0), PROD_COLORS.blue)),
-    rFist: withHull(tone(buildHand(false, 1), PROD_COLORS.blue)),
-    lOpen: withHull(tone(buildHand(true, 0), PROD_COLORS.blue)),
-    lFist: withHull(tone(buildHand(true, 1), PROD_COLORS.blue)),
+    rOpen: H('handROpen', () => tone(buildHand(false, 0), PROD_COLORS.blue)),
+    rFist: H('handRFist', () => tone(buildHand(false, 1), PROD_COLORS.blue)),
+    lOpen: H('handLOpen', () => tone(buildHand(true, 0), PROD_COLORS.blue)),
+    lFist: H('handLFist', () => tone(buildHand(true, 1), PROD_COLORS.blue)),
   }
   const handR = solid(wrR, handGeo.rOpen, mats.body, mats, false, 'handR')
   handR.customDepthMaterial = mats.hullDepth
@@ -251,10 +280,10 @@ export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxChar
   const claw = new THREE.Group()
   claw.name = 'nmclawHead'
   muzzle.add(claw)
-  const hub = new THREE.Mesh(buildClawHub(), mats.claw)
+  const hub = new THREE.Mesh(G('clawHub', buildClawHub), mats.claw)
   hub.castShadow = true
   claw.add(hub)
-  const prongs = new THREE.InstancedMesh(buildClawProng(), mats.claw, 3)
+  const prongs = new THREE.InstancedMesh(G('clawProng', buildClawProng), mats.claw, 3)
   prongs.castShadow = true
   prongs.frustumCulled = false
   claw.add(prongs)
@@ -264,23 +293,23 @@ export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxChar
   const hipYl = J.hip.y - J.hips
   const hipR = group(hips, J.hip.x, hipYl, 0, 'hipR', 'ZXY')
   const hipL = group(hips, -J.hip.x, hipYl, 0, 'hipL', 'ZXY')
-  const thighGeo = tone(buildThigh(), PROD_COLORS.white)
+  const thighGeo = H('thigh', () => tone(buildThigh(), PROD_COLORS.white))
   solid(hipR, thighGeo, mats.body, mats, true, 'thighR')
-  solid(hipL, thighGeo.clone(), mats.body, mats, true, 'thighL')
+  solid(hipL, prod ? thighGeo : thighGeo.clone(), mats.body, mats, true, 'thighL')
   if (prod) {
     hipR.scale.set(1, PROD_PROPORTIONS.leg, 1)
     hipL.scale.set(1, PROD_PROPORTIONS.leg, 1)
   }
   const knR = group(hipR, 0, -J.thighLen, 0, 'kneeR')
   const knL = group(hipL, 0, -J.thighLen, 0, 'kneeL')
-  const shinGeo = tone(buildShin(), PROD_COLORS.blue)
+  const shinGeo = H('shin', () => tone(buildShin(), PROD_COLORS.blue))
   solid(knR, shinGeo, mats.body, mats, true, 'shinR')
-  solid(knL, shinGeo.clone(), mats.body, mats, true, 'shinL')
+  solid(knL, prod ? shinGeo : shinGeo.clone(), mats.body, mats, true, 'shinL')
   const anR = group(knR, 0, -J.shinLen, 0, 'ankleR')
   const anL = group(knL, 0, -J.shinLen, 0, 'ankleL')
-  const footGeo = tone(buildFoot(), PROD_COLORS.white)
+  const footGeo = H('foot', () => tone(buildFoot(), PROD_COLORS.white))
   solid(anR, footGeo, mats.body, mats, true, 'footR')
-  solid(anL, footGeo.clone(), mats.body, mats, true, 'footL')
+  solid(anL, prod ? footGeo : footGeo.clone(), mats.body, mats, true, 'footL')
 
   const parts: Parts = {
     body,
@@ -470,11 +499,14 @@ function animate(root: THREE.Group, P: Parts, mats: NexmaxMaterials, height: num
       return { drawCalls: calls, triangles: Math.round(tris) }
     },
     dispose() {
-      root.traverse((o) => {
-        const m = o as THREE.Mesh
-        if (m.isMesh) m.geometry.dispose()
-      })
-      for (const g of [...Object.values(G.eyeGeos), ...Object.values(G.featGeos), ...Object.values(G.handGeo)]) g.dispose()
+      if (prod) releaseProductionGeos()
+      else {
+        root.traverse((o) => {
+          const m = o as THREE.Mesh
+          if (m.isMesh) m.geometry.dispose()
+        })
+        for (const g of [...Object.values(G.eyeGeos), ...Object.values(G.featGeos), ...Object.values(G.handGeo)]) g.dispose()
+      }
       mats.dispose()
       X.pm?.dispose()
       root.removeFromParent()

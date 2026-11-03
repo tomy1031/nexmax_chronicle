@@ -8,6 +8,7 @@
 // 7-6 水門の危機：おはるの知らせ、源兵衛「今ここにおる人を、先に助けるんや」→ 協力パズル（既存）→ 成功すると輪が薄くなる
 // 7-7 絵図とおはるの写し → 岸に帰りの光の輪（→ 2026年）
 import * as THREE from 'three'
+import { anisotropyFor } from '../../render/quality'
 import { createMaterialLibrary } from '../../render/materials'
 import { EDO_SKY, type SkyPalette } from '../../render/sky'
 import { buildEdoScene, type EdoScene } from '../../world/edo/scene'
@@ -142,7 +143,7 @@ export class EdoStage implements Stage {
     const charsPromise = Promise.all([ctx.loadNpc('genbei', 1.6), ctx.loadNpc('oharu', 1.32)])
     ctx.progress(0.12, 'テクスチャを生成中…')
     await ctx.yieldFrame()
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     const mats = await createMaterialLibrary(aniso)
     ctx.progress(0.4, '仕掛け横丁を組み立て中…')
     await ctx.yieldFrame()

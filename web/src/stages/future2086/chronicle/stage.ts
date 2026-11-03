@@ -5,6 +5,7 @@
 // ・人：ソラ（GLB）・トワ（visuals の createPerson('towa') ＋ Lamp）。黒い手は visuals の BlackHands、空のひびは SkyTear と orum
 // ・12 章の裏側は uraFinal.ts（visuals 担当の UraBattle が入るまでの仮）
 import * as THREE from 'three'
+import { anisotropyFor } from '../../../render/quality'
 import { createMaterialLibrary } from '../../../render/materials'
 import { ERA_FUTURE } from '../../../core/eras'
 import { DialogueDB } from '../../../core/dialogue'
@@ -208,7 +209,7 @@ export class ChronicleFutureStage implements Stage {
   // ================================================================== 読み込み
 
   async load(ctx: StageLoadContext): Promise<StageWorld> {
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     const soraP = ctx.loadNpc('sora', 1.58)
     ctx.progress(0.1, 'テクスチャとフォントを読み込み中…')
     await ctx.yieldFrame()

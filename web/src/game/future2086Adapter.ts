@@ -7,6 +7,7 @@
 // ・中盤 9章：ソラの羅針盤で 1970年へ：rt.travel({ to: '1970', cause: 'ido_compass' })
 // 読み込みに失敗したときは仮の広場（PlaceholderFutureStage）を使う。
 import * as THREE from 'three'
+import { anisotropyFor } from '../render/quality'
 import { EDO_SKY } from '../render/sky'
 import { createMaterialLibrary } from '../render/materials'
 import { ColliderList } from '../world/colliders'
@@ -198,7 +199,7 @@ class Future2086Stage implements Stage {
   }
 
   async load(ctx: StageLoadContext): Promise<StageWorld> {
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     const soraP = ctx.loadNpc('sora', 1.58)
     ctx.progress(0.1, 'テクスチャとフォントを読み込み中…')
     await ctx.yieldFrame()

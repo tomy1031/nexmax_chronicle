@@ -39,6 +39,15 @@ export const QUALITY_PRESETS: Readonly<Record<QualityLevel, QualitySettings>> = 
   low: { level: 'low', shadowMapSize: 1024, shadowRadius: 1, maxPixelRatio: 0.85, minPixelRatio: 0.6, ao: false, aoHalfRes: true, bloom: false, smaa: null, fxaa: true, petals: 120, pointLights: 2, portraitFps: 8 },
 }
 
+/**
+ * 斜めに見た地面・壁のくっきりさ（テクスチャの異方性フィルタ）。高画質は GPU の上限（16 まで）、標準 4、省電力 2。
+ * 高い値は遠くの石だたみや床の模様がにじまない（画質）。スマホは 1 画素あたりのテクスチャの読みが増えるので低めに（軽さ）
+ */
+export function anisotropyFor(level: QualityLevel, max: number): number {
+  const want = level === 'high' ? 16 : level === 'medium' ? 4 : 2
+  return Math.max(1, Math.min(want, max))
+}
+
 export const QUALITY_LABELS: Readonly<Record<QualityLevel, string>> = { low: '省電力', medium: '標準', high: '高画質' }
 export const QUALITY_LEVELS: readonly QualityLevel[] = ['low', 'medium', 'high']
 export const FPS_CAPS: readonly FpsCap[] = [30, 60]

@@ -12,6 +12,7 @@
 // 戦いの間は、戦う場所の外（ビルの中・遠くの通り・路地の外）へ行けない（chronicle/kit/arena.ts の柵）
 // 段階はフラグだけから決まる（storyNamba.ts）。場面は async runX(rt)（操作を止める → カメラ → 会話 → フラグ → セーブ）。
 import * as THREE from 'three'
+import { anisotropyFor } from '../../../render/quality'
 import { ERA_PRESENT, eraTintHex } from '../../../core/eras'
 import { DialogueDB } from '../../../core/dialogue'
 import type { ActionFrame } from '../../../player/inputActions'
@@ -145,7 +146,7 @@ export class ChronicleNambaStage implements Stage {
     const npcs = Promise.all([ctx.loadNpc('matsui', 1.72), ctx.loadNpc('saeki', 1.6, () => createSaekiPlaceholder(1.6)), ctx.loadNpc('ofuji', 1.42, () => createOfujiPlaceholder(1.42) as unknown as Character)])
     ctx.progress(0.08, 'テクスチャを読み込み中…')
     await ctx.yieldFrame()
-    const aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
+    const aniso = anisotropyFor(ctx.quality.level, ctx.renderer.capabilities.getMaxAnisotropy())
     this.ns = await buildChronicleNamba(ctx.quality, aniso, ctx.progress, ctx.yieldFrame)
     ctx.progress(0.7, 'マツイ社長・佐伯さん・おふじさんを読み込み中…')
     await ctx.yieldFrame()

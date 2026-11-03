@@ -58,6 +58,8 @@ export async function loadPbrTextures(name: string, aniso: number): Promise<PBRT
     t.anisotropy = aniso
   }
   map.colorSpace = THREE.SRGBColorSpace
+  // 色の絵を画素から作り直す所（2086 年の舗装・パネルの色がえ）のために、同じ絵の JPG の場所を覚えておく
+  map.userData.jpg = base + 'diff_1k.jpg'
   normalMap.colorSpace = THREE.NoColorSpace
   arm.colorSpace = THREE.NoColorSpace
   return { map, normalMap, arm }

@@ -57,8 +57,11 @@ function remapTexture(src: THREE.Texture, lo: number, hi: number, tint: [number,
     ctx.putImageData(d, 0, 0)
     out.needsUpdate = true
   }
+  // KTX2（GPU のまま縮んだ形式）は画素を読めないので、同じ絵の JPG を読んで作り直す（render/pbrTextures.ts が userData.jpg に入れる）
+  const jpgUrl = (src as THREE.Texture & { isCompressedTexture?: boolean }).isCompressedTexture ? (src.userData.jpg as string | undefined) : undefined
   const img = src.image as (CanvasImageSource & { width: number; height: number }) | undefined
-  if (img && img.width) run(img)
+  if (jpgUrl) new THREE.ImageLoader().load(jpgUrl, (im) => run(im))
+  else if (img && img.width) run(img)
   else {
     const cv = out.image as HTMLCanvasElement
     cv.width = cv.height = 4

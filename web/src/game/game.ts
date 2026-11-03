@@ -348,6 +348,8 @@ export class Game {
       },
       this.prefs.fps,
     )
+    // 適応解像度のはじめの比から（高画質は 1.0 から始めて、余裕があれば上限まで上げる）
+    if (!this.fixedRatio) this.renderer.setPixelRatio(this.adaptive.ratio)
     window.addEventListener('resize', () => this.resize())
     this.nexmax = await nexP
     this.scene.add(this.nexmax.root)

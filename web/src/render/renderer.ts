@@ -93,6 +93,9 @@ export function createSunRig(scene: THREE.Scene, q: QualitySettings, sunDir: THR
  * フレーム時間に応じてピクセル比を上下させる。目標はフレームレートの上限（30 か 60）。
  * 上限で間引いているときは「速すぎる」は測れないので、上限どおりに描けている状態が続いたら少しずつ戻す
  */
+/** 適応解像度のはじめの比（上限がこれより高いときは、余裕を見て上げていく） */
+export const ADAPTIVE_START = 1.0
+
 export class AdaptiveResolution {
   private acc = 0
   private frames = 0
@@ -110,7 +113,8 @@ export class AdaptiveResolution {
     this.min = min
     this.max = max
     this.apply = apply
-    this.ratio = max
+    // はじめは 1.0 まで（上限が高いときに、弱い GPU で最初の数秒が重くならないように）。余裕があれば 0.1 ずつ上限まで上げる
+    this.ratio = Math.min(max, ADAPTIVE_START)
     this.target = targetFps
   }
 
@@ -127,7 +131,7 @@ export class AdaptiveResolution {
     this.acc = 0
     this.frames = 0
     this.cooldown = 2
-    const next = Math.round(max * 100) / 100
+    const next = Math.round(Math.min(max, Math.max(min, this.ratio)) * 100) / 100
     if (next !== this.ratio) {
       this.ratio = next
       this.apply(next)

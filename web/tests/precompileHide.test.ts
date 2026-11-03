@@ -26,3 +26,18 @@ describe('シェーダの事前の準備で、カメラに見えない形を外�
     expect(hidden.material).toBe(hiddenMat)
   })
 })
+
+describe('影用の層の形も、影を描くときに入る', () => {
+  it('影を描くあいだだけ画面のカメラの層に SHADOW_ONLY_LAYER を足し、終わったら戻す', async () => {
+    const { includeShadowOnlyLayer } = await import('../src/render/renderer')
+    const { SHADOW_ONLY_LAYER } = await import('../src/render/batch')
+    const cam = new THREE.PerspectiveCamera()
+    const seen: boolean[] = []
+    const sm = { render: (_l: THREE.Light[], _s: THREE.Scene, c: THREE.Camera) => void seen.push(c.layers.isEnabled(SHADOW_ONLY_LAYER)) }
+    includeShadowOnlyLayer(sm as unknown as THREE.WebGLShadowMap)
+    sm.render([], new THREE.Scene(), cam)
+    expect(seen).toEqual([true])
+    expect(cam.layers.isEnabled(SHADOW_ONLY_LAYER)).toBe(false)
+    expect(cam.layers.isEnabled(0)).toBe(true)
+  })
+})

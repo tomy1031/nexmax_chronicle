@@ -42,6 +42,27 @@ describe('結合を区画に分ける', () => {
       expect(Object.keys(c.geometry.attributes)).toEqual(['position'])
     }
   })
+  it('透かしの無い材質の影は、材質に関係なく区画ごとに 1 つにまとめる（透かしのある材質は別）', () => {
+    const red = new THREE.MeshStandardMaterial({ color: 'red' })
+    const blue = new THREE.MeshStandardMaterial({ color: 'blue' })
+    const leaf = new THREE.MeshStandardMaterial({ alphaTest: 0.5 })
+    const b = new Batch()
+    for (const x of [0, 5, 40, 45, 80, 85]) {
+      b.add(new THREE.BoxGeometry(1, 1, 1, 24, 24, 24), red, new THREE.Matrix4().makeTranslation(x, 0, 0))
+      b.add(new THREE.BoxGeometry(1, 1, 1, 4, 4, 4), blue, new THREE.Matrix4().makeTranslation(x, 0, 2))
+    }
+    b.add(new THREE.PlaneGeometry(1, 1), leaf, new THREE.Matrix4().makeTranslation(0, 0, 4))
+    const g = b.build('t')
+    const main = g.children.filter((m) => m.name !== 'shadowCaster') as THREE.Mesh[]
+    const casters = g.children.filter((m) => m.name === 'shadowCaster') as THREE.Mesh[]
+    expect(main).toHaveLength(3)
+    // 赤と青は影を落とさず、区画（3 つ）ごとの影用の形が落とす。透かしのある葉は小さいので、自分で落とす
+    expect(main.filter((m) => m.castShadow).map((m) => m.material)).toEqual([leaf])
+    expect(casters).toHaveLength(3)
+    const verts = casters.reduce((s, c) => s + c.geometry.attributes.position.count, 0)
+    const one = new THREE.BoxGeometry(1, 1, 1, 24, 24, 24).attributes.position.count + new THREE.BoxGeometry(1, 1, 1, 4, 4, 4).attributes.position.count
+    expect(verts).toBe(one * 6)
+  })
   it('影を落とさない組・小さい組は、影用の形を作らない', () => {
     const mat = new THREE.MeshStandardMaterial()
     const b = new Batch()

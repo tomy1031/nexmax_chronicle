@@ -17,8 +17,27 @@ export function createRenderer(container: HTMLElement, q: QualitySettings): THRE
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio))
   renderer.setSize(container.clientWidth || window.innerWidth, container.clientHeight || window.innerHeight)
   renderer.info.autoReset = false
+  includeShadowOnlyLayer(renderer.shadowMap)
   container.appendChild(renderer.domElement)
   return renderer
+}
+
+/**
+ * three の影は、影のカメラではなく「画面のカメラ」の層で、影を落とす物を選ぶ（WebGLShadowMap の renderObject）。
+ * そのままでは影用の形（SHADOW_ONLY_LAYER。render/batch.ts の区画ごとの影の形・影用の葉のカード）が影に入らない。
+ * 影を描くあいだだけ、画面のカメラの層に SHADOW_ONLY_LAYER を足す（画面に描く物は、その前に選び終わっている）
+ */
+export function includeShadowOnlyLayer(sm: Pick<THREE.WebGLShadowMap, 'render'>): void {
+  const render = sm.render.bind(sm)
+  sm.render = (lights, scene, camera) => {
+    const mask = camera.layers.mask
+    camera.layers.enable(SHADOW_ONLY_LAYER)
+    try {
+      render(lights, scene, camera)
+    } finally {
+      camera.layers.mask = mask
+    }
+  }
 }
 
 export type SunRig = {
@@ -47,8 +66,6 @@ export function createSunRig(scene: THREE.Scene, q: QualitySettings, sunDir: THR
   sun.shadow.bias = -0.0004
   sun.shadow.normalBias = 0.03
   sun.shadow.radius = q.shadowRadius
-  // 影用の形（render/batch.ts の SHADOW_ONLY_LAYER。区画ごとに分けた、位置だけの形）も影のカメラに見せる
-  cam.layers.enable(SHADOW_ONLY_LAYER)
   scene.add(sun, sun.target)
 
   const hemi = new THREE.HemisphereLight('#a9cdf5', '#a5744a', 0.4)

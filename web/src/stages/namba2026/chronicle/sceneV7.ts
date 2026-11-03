@@ -140,7 +140,7 @@ export async function buildChronicleNamba(q: QualitySettings, aniso: number, pro
   await yieldFrame()
   buildFar(c)
   root.add(c.b.build('namba_v7_static'))
-  const far = c.bf.build('namba_v7_far')
+  const far = c.bf.build('namba_v7_far', undefined, 0)
   far.traverse((o) => (o.castShadow = false))
   root.add(far)
   const pedestrians = new Pedestrians([

@@ -1,10 +1,11 @@
 // 桜（幹・枝＋花のカード群＋内側のふくらみ）、植え込み、舞い散る花びら（GPU）、地面の花びら。
 import * as THREE from 'three'
-import { M } from '../../render/batch'
+import { M, SHADOW_CELL, SHADOW_ONLY_LAYER } from '../../render/batch'
 import { TEX_METERS, uTime } from '../../render/materials'
 import { mulberry32, range, type Rng } from '../../render/noise'
 import { paintPetal, tex } from '../../render/textures'
 import { orientAB, type Ctx } from './kit'
+import type { QualitySettings } from '../../render/quality'
 
 type CardBuf = { pos: number[]; nor: number[]; uv: number[]; col: number[]; idx: number[] }
 
@@ -74,13 +75,67 @@ function bufToMesh(buf: CardBuf, mat: THREE.Material): THREE.Mesh {
   return m
 }
 
+/**
+ * 影用のカード（位置と uv だけ）を、区画（SHADOW_CELL m）ごとに分けて作る。影のカメラ（プレイヤーのまわり）の外の区画は描かない。
+ * 画面に描くカードは 1 つのまま（描く回数はふやさない）。区画が 1 つしかなければ作らない（null）
+ */
+function shadowCards(buf: CardBuf, mat: THREE.Material): THREE.Mesh[] | null {
+  const cards = buf.pos.length / 12
+  const cells = new Map<string, number[]>()
+  for (let i = 0; i < cards; i++) {
+    const o = i * 12
+    const cx = (buf.pos[o] + buf.pos[o + 6]) / 2
+    const cz = (buf.pos[o + 2] + buf.pos[o + 8]) / 2
+    const k = `${Math.floor(cx / SHADOW_CELL)},${Math.floor(cz / SHADOW_CELL)}`
+    const list = cells.get(k)
+    if (list) list.push(i)
+    else cells.set(k, [i])
+  }
+  if (cells.size < 2) return null
+  const out: THREE.Mesh[] = []
+  for (const list of cells.values()) {
+    const pos = new Float32Array(list.length * 12)
+    const uv = new Float32Array(list.length * 8)
+    const idx = new Uint32Array(list.length * 6)
+    list.forEach((card, j) => {
+      pos.set(buf.pos.slice(card * 12, card * 12 + 12), j * 12)
+      uv.set(buf.uv.slice(card * 8, card * 8 + 8), j * 8)
+      const b = j * 4
+      idx.set([b, b + 1, b + 2, b, b + 2, b + 3], j * 6)
+    })
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+    g.setIndex(new THREE.BufferAttribute(idx, 1))
+    g.computeBoundingSphere()
+    const m = new THREE.Mesh(g, mat)
+    m.name = 'shadowCaster'
+    m.castShadow = true
+    m.receiveShadow = false
+    m.layers.set(SHADOW_ONLY_LAYER)
+    out.push(m)
+  }
+  return out
+}
+
+/**
+ * 画質ごとのカードの数（標準・省電力は少なく、そのぶん 1 枚を大きくして、房のふくらみは同じに見せる）。
+ * 2086 年・1726 年で植えこみと桜のカードだけで 12〜17 万三角形あった
+ */
+export function cardDensity(level: QualitySettings['level']): { count: number; size: number } {
+  const count = level === 'high' ? 1 : level === 'medium' ? 0.65 : 0.45
+  return { count, size: 1 / Math.sqrt(count) }
+}
+
 export class Foliage {
   private blossom = newBuf()
   private leaves = newBuf()
   private readonly c: Ctx
+  private readonly dens: { count: number; size: number }
 
   constructor(c: Ctx) {
     this.c = c
+    this.dens = cardDensity(c.quality?.level ?? 'high')
   }
 
   /** 桜の木。s=全体の大きさ（1 で高さ約 5.5m） */
@@ -145,7 +200,7 @@ export class Foliage {
     }
     for (const bl of blobs) {
       // 近くの木は小さなカードを多めに（房の輪郭が花の形に見える）、遠くは大きく少なく
-      const n = Math.round(bl.r * bl.r * (near ? 78 : 40) * cardCount)
+      const n = Math.round(bl.r * bl.r * (near ? 78 : 40) * cardCount * this.dens.count)
       for (let k = 0; k < n; k++) {
         const dir = new THREE.Vector3(range(rng, -1, 1), range(rng, -0.6, 1), range(rng, -1, 1)).normalize()
         const rr = bl.r * Math.cbrt(range(rng, 0.2, 1))
@@ -157,7 +212,7 @@ export class Foliage {
         const light = range(rng, 0, 1)
         const pink = range(rng, 0, 1) < 0.25 ? 0.08 : 0
         col.setRGB(1 - depth * 0.22, (0.93 + light * 0.07) * (1 - depth * 0.3) - pink, (0.95 + light * 0.05) * (1 - depth * 0.26) - pink * 0.5)
-        const size = near ? range(rng, 0.45, 0.74) * s : range(rng, 0.6, 0.95) * s * 1.4
+        const size = (near ? range(rng, 0.45, 0.74) * s : range(rng, 0.6, 0.95) * s * 1.4) * this.dens.size
         addCard(this.blossom, p, size, nrm, col, rng, near ? outward.clone().lerp(dir, 0.35).normalize() : undefined, Math.floor(rng() * 4))
       }
     }
@@ -175,12 +230,12 @@ export class Foliage {
       c.b.add(new THREE.IcosahedronGeometry(r * range(rng, 0.65, 0.85), 1), c.m.puffGreen, M(p.x, p.y, p.z, rng(), rng(), 0), {
         tint: new THREE.Color('#ffffff').multiplyScalar(range(rng, 0.8, 1.05)),
       })
-      const n = Math.round(r * r * 22)
+      const n = Math.round(r * r * 22 * this.dens.count)
       for (let k = 0; k < n; k++) {
         const dir = new THREE.Vector3(range(rng, -1, 1), range(rng, -0.3, 1), range(rng, -1, 1)).normalize()
         const q = p.clone().addScaledVector(dir, r * range(rng, 0.5, 0.95))
         col.setRGB(range(rng, 0.85, 1.1), range(rng, 0.9, 1.1), range(rng, 0.8, 1))
-        addCard(this.leaves, q, range(rng, 0.45, 0.75) * r, dir, col, rng)
+        addCard(this.leaves, q, range(rng, 0.45, 0.75) * r * this.dens.size, dir, col, rng)
       }
     }
   }
@@ -188,8 +243,20 @@ export class Foliage {
   build(): THREE.Group {
     const g = new THREE.Group()
     g.name = 'foliage'
-    if (this.blossom.idx.length) g.add(bufToMesh(this.blossom, this.c.m.blossom))
-    if (this.leaves.idx.length) g.add(bufToMesh(this.leaves, this.c.m.leaf))
+    for (const [buf, mat] of [
+      [this.blossom, this.c.m.blossom],
+      [this.leaves, this.c.m.leaf],
+    ] as const) {
+      if (!buf.idx.length) continue
+      const mesh = bufToMesh(buf, mat)
+      // 影は区画ごとの影用のカードが落とす（あれば）
+      const casters = shadowCards(buf, mat)
+      if (casters) {
+        mesh.castShadow = false
+        g.add(...casters)
+      }
+      g.add(mesh)
+    }
     return g
   }
 }

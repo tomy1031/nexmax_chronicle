@@ -4,6 +4,7 @@
 // ・ホログラムの看板も 1 枚のアトラス（昼夜とも表示する祭りの看板、夜だけの緊急表示）
 // ・IDO の展示画面（昔の大阪のホログラム）、提灯、窓、木箱の印刷
 import * as THREE from 'three'
+import { canvasTextureScale } from '../../render/pbrTextures'
 import { mulberry32, range } from '../../render/noise'
 
 export const ROUNDED = '"M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif'
@@ -70,8 +71,18 @@ export class CanvasAtlas {
     return r
   }
 
-  texture(aniso = 8): THREE.CanvasTexture {
-    const t = new THREE.CanvasTexture(this.canvas)
+  /** テクスチャにする（scale < 1 なら縮めた写しから。標準・省電力は render/pbrTextures.ts の canvasTextureScale で 0.5） */
+  texture(aniso = 8, scale = canvasTextureScale()): THREE.CanvasTexture {
+    let src = this.canvas
+    if (scale < 1) {
+      src = document.createElement('canvas')
+      src.width = Math.max(1, Math.round(this.W * scale))
+      src.height = Math.max(1, Math.round(this.H * scale))
+      const g = src.getContext('2d')!
+      g.imageSmoothingQuality = 'high'
+      g.drawImage(this.canvas, 0, 0, src.width, src.height)
+    }
+    const t = new THREE.CanvasTexture(src)
     t.colorSpace = THREE.SRGBColorSpace
     t.anisotropy = aniso
     t.generateMipmaps = true

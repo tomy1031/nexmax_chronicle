@@ -13,6 +13,14 @@ const jpg = new THREE.TextureLoader()
 let ktx2: Promise<KTX2Loader | null> | null = null
 let normal: '1k' | '512' = '1k'
 
+/**
+ * キャンバスで描いた大きな絵（2086 年の横断幕・ホロ看板のアトラスなど 2048 四方）を、テクスチャにするときの倍率。
+ * 高画質は 1、標準・省電力は 0.5（スマホの描画解像度は CSS の画素以下なので、半分でも見た目はほぼ同じ。メモリは 1/4）
+ */
+export function canvasTextureScale(): number {
+  return normal === '1k' ? 1 : 0.5
+}
+
 function wantsJpg(): boolean {
   try {
     return typeof location !== 'undefined' && new URLSearchParams(location.search).get('tex') === 'jpg'

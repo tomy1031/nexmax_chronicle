@@ -1,4 +1,6 @@
 Textures and HDRIs from Poly Haven (https://polyhaven.com/) — CC0 1.0 (public domain, commercial use OK, no attribution required).
+  *_1k.ktx2・nor_512.ktx2 は、同じ JPG を KTX2（Basis Universal。色・arm は ETC1S、法線は UASTC）にしたもの（2026-11-03。ktx2-encoder）。
+  public/basis/basis_transcoder.{js,wasm} は three.js（MIT）に入っている Basis Universal（Apache-2.0）の読み手。
 textures (1k JPG: diff / nor (OpenGL) / arm = AO+Rough+Metal):
   weathered_brown_planks, wood_floor_deck, rough_wood, white_plaster_02,
   japanese_stone_wall, grey_roof_tiles_02, cobblestone_floor_04,

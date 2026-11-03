@@ -3,6 +3,7 @@
 // 新しいステージを組み立て、シェーダを事前コンパイルしてから見せる。毎フレームの流れは 1726年の縦切り試作（slice.ts）と同じ。
 // スマホのときだけタッチ操作（player/touchInput.ts）を足す。PC の操作・表示は変えない。
 import * as THREE from 'three'
+import { configurePbrTextures } from '../render/pbrTextures'
 import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs, savePrefs, type GraphicsPrefs, type QualitySettings } from '../render/quality'
 import { createRenderer, AdaptiveResolution } from '../render/renderer'
 import { createPost, type PostChain } from '../render/post'
@@ -240,6 +241,8 @@ export class Game {
     }
     this.loading = new LoadingOverlay(ui)
     this.renderer = createRenderer(app, this.q)
+    // 写真のテクスチャは KTX2（GPU のまま縮んだ形式）。この GPU で使える形式を調べておく
+    configurePbrTextures(this.renderer, this.q.level)
     const { w, h } = this.size()
     this.camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 2500)
     this.post = createPost(this.renderer, this.scene, this.camera, this.q)
@@ -399,6 +402,7 @@ export class Game {
     savePrefs(this.prefs)
     this.music.setLevel(p.music)
     this.q = qualitySettings(p.quality)
+    configurePbrTextures(this.renderer, this.q.level)
     this.post.setQuality(this.q)
     this.active?.env.sun.setQuality(this.q)
     this.lanternLights.forEach((pl, i) => (pl.visible = i < this.q.pointLights))

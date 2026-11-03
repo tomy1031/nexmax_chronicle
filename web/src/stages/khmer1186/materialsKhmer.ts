@@ -1,6 +1,7 @@
 // 1186年 クメールの都のマテリアル。Poly Haven CC0（public/textures）を 3 組だけ読み、あとはキャンバスで描く（texturesKhmer.ts）。
 // 静的な物は Batch で頂点カラー（色の違い）付きに結合するので、多くは vertexColors=true（色はタイントで付ける）。
 import * as THREE from 'three'
+import { loadPbrTextures, type PBRTextures } from '../../render/pbrTextures'
 import { makeFoliage, uTime } from '../../render/materials'
 import { heightToNormal, paintBark, paintLeafCard, paintNoiseNormal, tex } from '../../render/textures'
 import { V7_ART, V7_TEXTURES } from '../../chronicle/art'
@@ -19,19 +20,12 @@ import {
   paintWeave,
 } from './texturesKhmer'
 
-type PBRSet = { map: THREE.Texture; normalMap: THREE.Texture; arm: THREE.Texture }
+type PBRSet = PBRTextures
 const loader = new THREE.TextureLoader()
 
 async function loadPBR(name: string, aniso: number): Promise<PBRSet | null> {
-  const base = `./textures/${name}/`
   try {
-    const [map, normalMap, arm] = await Promise.all([loader.loadAsync(base + 'diff_1k.jpg'), loader.loadAsync(base + 'nor_1k.jpg'), loader.loadAsync(base + 'arm_1k.jpg')])
-    for (const t of [map, normalMap, arm]) {
-      t.wrapS = t.wrapT = THREE.RepeatWrapping
-      t.anisotropy = aniso
-    }
-    map.colorSpace = THREE.SRGBColorSpace
-    return { map, normalMap, arm }
+    return await loadPbrTextures(name, aniso)
   } catch (e) {
     console.warn(`[khmer] ${name} を読めないので単色で代用します`, e)
     return null

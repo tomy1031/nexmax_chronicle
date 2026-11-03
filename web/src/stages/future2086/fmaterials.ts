@@ -5,6 +5,7 @@
 import * as THREE from 'three'
 import { uTime, type MaterialLibrary } from '../../render/materials'
 import { loadLetteringFonts } from '../../render/textures'
+import { loadPbrTextures } from '../../render/pbrTextures'
 import { FUTURE_TEXT, ROUNDED, paintChochin, paintDecalAtlas, paintFabricAtlas, paintHoloAtlas, paintWindows, type CanvasAtlas } from './textures2086'
 
 export type TimeOfDay = 'morning' | 'night'
@@ -98,10 +99,8 @@ export async function preloadFutureAssets(aniso = 8): Promise<void> {
   const tex = Promise.all(
     PBR_NAMES.map(async (name) => {
       if (pbrCache.has(name)) return
-      const base = `./textures/${name}/`
       try {
-        const [map, normalMap, arm] = await Promise.all([loader.loadAsync(base + 'diff_1k.jpg'), loader.loadAsync(base + 'nor_1k.jpg'), loader.loadAsync(base + 'arm_1k.jpg')])
-        pbrCache.set(name, setupPBR({ map, normalMap, arm }, aniso))
+        pbrCache.set(name, setupPBR(await loadPbrTextures(name, aniso), aniso))
       } catch (e) {
         console.warn(`[future2086] ${name} を読めませんでした`, e)
       }

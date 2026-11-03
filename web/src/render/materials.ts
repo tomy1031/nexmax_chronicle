@@ -1,6 +1,7 @@
 // 手続き的マテリアルライブラリ。起動時にキャンバスでテクスチャを作り、使い回す。
 // 静的ジオメトリは Batch で頂点カラー（色むら）付きに結合するため、多くは vertexColors=true。
 import * as THREE from 'three'
+import { loadPbrTextures, type PBRTextures } from './pbrTextures'
 import {
   paintPlanks,
   paintWoodGrain,
@@ -42,23 +43,11 @@ export const TEX_METERS = {
 export type MaterialLibrary = Awaited<ReturnType<typeof createMaterialLibrary>>
 
 /** Poly Haven CC0（public/textures/<name>/diff_1k.jpg, nor_1k.jpg, arm_1k.jpg） */
-type PBRSet = { map: THREE.Texture; normalMap: THREE.Texture; arm: THREE.Texture }
-const texLoader = new THREE.TextureLoader()
+type PBRSet = PBRTextures
 
 async function loadPBR(name: string, aniso: number): Promise<PBRSet | null> {
-  const base = `./textures/${name}/`
   try {
-    const [map, normalMap, arm] = await Promise.all([
-      texLoader.loadAsync(base + 'diff_1k.jpg'),
-      texLoader.loadAsync(base + 'nor_1k.jpg'),
-      texLoader.loadAsync(base + 'arm_1k.jpg'),
-    ])
-    for (const t of [map, normalMap, arm]) {
-      t.wrapS = t.wrapT = THREE.RepeatWrapping
-      t.anisotropy = aniso
-    }
-    map.colorSpace = THREE.SRGBColorSpace
-    return { map, normalMap, arm }
+    return await loadPbrTextures(name, aniso)
   } catch (e) {
     console.warn(`[materials] ${name} を読めないので手続きテクスチャを使います`, e)
     return null

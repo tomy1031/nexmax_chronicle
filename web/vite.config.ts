@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import { nexmaxPwa } from './scripts/vite-pwa-plugin.ts'
+import { rapierWasmFile } from './scripts/vite-rapier-wasm-plugin.ts'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
 
 // GitHub Pages（/nexmax_chronicle/）でも動くよう相対パスで書き出す
 export default defineConfig({
   base: './',
-  plugins: [nexmaxPwa()],
+  plugins: [rapierWasmFile(), nexmaxPwa()],
   define: {
     // タイトル画面の右下に出す版
     __APP_VERSION__: JSON.stringify(pkg.version),

@@ -51,3 +51,16 @@ describe('結合を区画に分ける', () => {
     expect(g.children.every((m) => m.name !== 'shadowCaster')).toBe(true)
   })
 })
+
+describe('遠い量産型NEXMAX を軽い形にする境目', () => {
+  it('FAR より遠くなったら軽く、NEAR より近づいたら戻す（あいだは今のまま）', async () => {
+    const { unitIsFar, UNIT_LOD_FAR, UNIT_LOD_NEAR } = await import('../src/stages/future2086/unitBatch')
+    expect(UNIT_LOD_NEAR).toBeLessThan(UNIT_LOD_FAR)
+    expect(unitIsFar(false, UNIT_LOD_FAR - 0.1)).toBe(false)
+    expect(unitIsFar(false, UNIT_LOD_FAR + 0.1)).toBe(true)
+    const mid = (UNIT_LOD_FAR + UNIT_LOD_NEAR) / 2
+    expect(unitIsFar(true, mid)).toBe(true)
+    expect(unitIsFar(false, mid)).toBe(false)
+    expect(unitIsFar(true, UNIT_LOD_NEAR - 0.1)).toBe(false)
+  })
+})

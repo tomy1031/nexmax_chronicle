@@ -34,7 +34,7 @@ import {
   J,
   torsoLogoUV,
 } from './body'
-import { merge as mergeGeos, withHull } from './geom'
+import { merge as mergeGeos, withDetail, withHull } from './geom'
 import { buildEyes, buildFeatures, buildHelmet, buildPlate, EXPRESSIONS, EYE_CENTER_Y, HEAD_PIVOT_Y, type Expression } from './head'
 import { createNexmaxMaterials, makeTorsoTexture, type NexmaxMaterials } from './materials'
 import {
@@ -152,13 +152,45 @@ function solid(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Mat
 
 // 量産型は全員同じ形（色も同じ。ちがうのは胸の番号の絵だけ）。形は 1 回だけ作って全員で使い回す
 // （2086 年の広場の 8 体で、作る時間と形のメモリが 1 体ぶんに）。最後の 1 体を片づけたときに捨てる
-const prodGeos = { map: new Map<string, THREE.BufferGeometry>(), users: 0 }
+const prodGeos = {
+  map: new Map<string, THREE.BufferGeometry>(),
+  /** 形 → その形の作り方（遠く用の軽い形を、同じ作り方で細かさだけ下げて作る） */
+  makers: new Map<THREE.BufferGeometry, { key: string; make: () => THREE.BufferGeometry }>(),
+  /** ふつうの形 → 遠く用の軽い形 */
+  lod: new Map<THREE.BufferGeometry, THREE.BufferGeometry>(),
+  users: 0,
+}
+
+/** 遠くの量産型に使う細かさ（分割がおよそ半分。三角形はおよそ 1/3〜1/4） */
+const PROD_LOD_DETAIL = 0.5
 
 function releaseProductionGeos(): void {
   if (--prodGeos.users > 0) return
   prodGeos.users = 0
   for (const g of prodGeos.map.values()) g.dispose()
   prodGeos.map.clear()
+  prodGeos.makers.clear()
+  prodGeos.lod.clear()
+}
+
+/**
+ * 量産型の形の、遠く用の軽い版（同じ形を細かさ PROD_LOD_DETAIL で作り直したもの。1 回だけ作って全員で使う）。
+ * 量産型の形でなければ null
+ */
+/** 量産型のすべての形の軽い版を、読みこみのうちに作っておく（遠ざかった最初の 1 回にかくっと止まらないように） */
+export function prepareProductionLods(): void {
+  for (const g of [...prodGeos.makers.keys()]) productionLod(g)
+}
+
+export function productionLod(g: THREE.BufferGeometry): THREE.BufferGeometry | null {
+  const hit = prodGeos.lod.get(g)
+  if (hit) return hit
+  const m = prodGeos.makers.get(g)
+  if (!m) return null
+  const lo = withDetail(PROD_LOD_DETAIL, m.make)
+  prodGeos.map.set(m.key + '@lo', lo)
+  prodGeos.lod.set(g, lo)
+  return lo
 }
 
 export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxCharacter {
@@ -169,7 +201,10 @@ export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxChar
   const G = (key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry => {
     if (!prod) return make()
     let g = prodGeos.map.get(key)
-    if (!g) prodGeos.map.set(key, (g = make()))
+    if (!g) {
+      prodGeos.map.set(key, (g = make()))
+      prodGeos.makers.set(g, { key, make })
+    }
     return g
   }
   /** 輪郭線（反転ハル）入りの形 */
@@ -209,10 +244,9 @@ export function createNexmax(height = 1.2, opts: NexmaxOptions = {}): NexmaxChar
   let antennaTip: THREE.Mesh | null = null
   if (prod) {
     head.scale.setScalar(PROD_PROPORTIONS.head)
-    let ant: ReturnType<typeof buildAntenna> | null = null
-    const antenna = () => (ant ??= buildAntenna())
-    solid(head, H('helmet', () => mergeParts([helmetBase(), antenna().body])), mats.body, mats, true, 'helmet')
-    antennaTip = solid(head, G('antennaTip', () => antenna().tip), pm!.tip, mats, false, 'antennaTip')
+    // アンテナの棒は頭に、先の玉は光る材質で別に（どちらも小さいので、それぞれの作り方で作る）
+    solid(head, H('helmet', () => mergeParts([helmetBase(), buildAntenna().body])), mats.body, mats, true, 'helmet')
+    antennaTip = solid(head, G('antennaTip', () => buildAntenna().tip), pm!.tip, mats, false, 'antennaTip')
     antennaTip.castShadow = false
   } else solid(head, withHull(helmetBase()), mats.body, mats, true, 'helmet')
   const plateGeo = G('plate', () => buildPlate().translate(0, -HEAD_PIVOT_Y, 0))

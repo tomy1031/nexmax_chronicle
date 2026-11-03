@@ -15,6 +15,26 @@ const _b = new THREE.Vector3()
 const _c = new THREE.Vector3()
 const _n = new THREE.Vector3()
 
+// ------------------------------------------------------------------ 細かさ（遠くの量産型用の軽い形）
+
+let detail = 1
+
+/** 形を細かさ d で作る（0.5 = 回転体・玉・超楕円体の分割がおよそ半分 → 三角形はおよそ 1/4）。遠くの量産型NEXMAX の軽い形に */
+export function withDetail<T>(d: number, make: () => T): T {
+  const prev = detail
+  detail = d
+  try {
+    return make()
+  } finally {
+    detail = prev
+  }
+}
+
+/** 分割の数に細かさを掛ける（min より少なくしない） */
+function segs(n: number, min: number): number {
+  return detail === 1 ? n : Math.max(Math.min(n, min), Math.round(n * detail))
+}
+
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
@@ -160,7 +180,8 @@ export function withHull(g: THREE.BufferGeometry): THREE.BufferGeometry {
  * 断面 [r, y]（上 → 下の順）を Y 軸まわりに回す。法線は断面の接線から解析的に求める。
  * phiStart: 継ぎ目の位置。uv の v は y の範囲で 0..1（上が 1）。
  */
-export function lathe(profile: V2[], seg: number, phiStart = 0): THREE.BufferGeometry {
+export function lathe(profile: V2[], segIn: number, phiStart = 0): THREE.BufferGeometry {
+  const seg = segs(segIn, 6)
   const n = profile.length
   const pos: number[] = []
   const nor: number[] = []
@@ -212,7 +233,8 @@ export function lathe(profile: V2[], seg: number, phiStart = 0): THREE.BufferGeo
 }
 
 /** 玉（ビーズ）の断面：上下の半径、長さ、角の丸さ p（2 = 楕円、大きいほど四角い）、ふくらみ */
-export function beadProfile(rTop: number, rBot: number, len: number, p = 2.4, n = 12, bulge = 0): V2[] {
+export function beadProfile(rTop: number, rBot: number, len: number, p = 2.4, nIn = 12, bulge = 0): V2[] {
+  const n = segs(nIn, 4)
   const out: V2[] = []
   for (let i = 0; i <= n; i++) {
     const th = (Math.PI * i) / n
@@ -228,7 +250,9 @@ export function beadProfile(rTop: number, rBot: number, len: number, p = 2.4, n 
 }
 
 /** 球（または楕円球） */
-export function ball(r: number, seg = 16, rings = 10, sy = 1): THREE.BufferGeometry {
+export function ball(r: number, seg = 16, ringsIn = 10, sy = 1): THREE.BufferGeometry {
+  // 回りの分割（seg）は lathe が細かさを掛ける
+  const rings = segs(ringsIn, 4)
   const prof: V2[] = []
   for (let i = 0; i <= rings; i++) {
     const th = (Math.PI * i) / rings
@@ -303,7 +327,7 @@ function blobRay(s: BlobSpec, dx: number, dy: number, dz: number): number {
 
 /** 超楕円体のメッシュ。deform で頂点を自由に変形できる（法線は変形後に作り直す） */
 export function blob(s: BlobSpec, wSeg: number, hSeg: number, deform?: (v: THREE.Vector3) => void): THREE.BufferGeometry {
-  const sph = new THREE.SphereGeometry(1, wSeg, hSeg)
+  const sph = new THREE.SphereGeometry(1, segs(wSeg, 8), segs(hSeg, 6))
   const pos = sph.attributes.position
   const v = new THREE.Vector3()
   for (let i = 0; i < pos.count; i++) {

@@ -5,7 +5,8 @@
 // ・指でなぞる（setYear）：目当ての年の近く（角度で 7° 以内）なら、すいつく
 // ・目もりの角度：ダイヤルは上が 0°、時計回りが +。昔が左、今が右（年の間かくは、行ける年が見やすいように区切りごとに変える）
 
-export type YearDialOptions = { start: number; target: number; min?: number; max?: number }
+/** targets：行ける年がいくつもあるとき（クリア後の思い出の旅）。そのときの「目当ての年」は、いまの年にいちばん近い年 */
+export type YearDialOptions = { start: number; target: number; targets?: readonly number[]; min?: number; max?: number }
 
 export const DIAL_SPEEDS = [
   { after: 0, rate: 1 },
@@ -52,7 +53,8 @@ export function angleToYear(deg: number): number {
 
 export class YearDialLogic {
   year: number
-  target: number
+  /** 行ける年（ふつうは 1 つ） */
+  readonly targets: readonly number[]
   readonly min: number
   readonly max: number
   private holdT = 0
@@ -65,7 +67,12 @@ export class YearDialLogic {
     this.min = o.min ?? 1100
     this.max = o.max ?? 2086
     this.year = clamp(Math.round(o.start), this.min, this.max)
-    this.target = o.target
+    this.targets = o.targets?.length ? [...o.targets] : [o.target]
+  }
+
+  /** 目当ての年（行ける年のうち、いまの年にダイヤルの角度でいちばん近い年） */
+  get target(): number {
+    return nearestTarget(this.targets, this.year)
   }
 
   /** 1 年だけ回す */
@@ -115,7 +122,8 @@ export class YearDialLogic {
   setYear(y: number, snap = true): boolean {
     const before = this.year
     let next = clamp(Math.round(y), this.min, this.max)
-    if (snap && Math.abs(yearToAngle(next) - yearToAngle(this.target)) <= DIAL_SNAP_DEG) next = this.target
+    const t = nearestTarget(this.targets, next)
+    if (snap && Math.abs(yearToAngle(next) - yearToAngle(t)) <= DIAL_SNAP_DEG) next = t
     this.year = next
     return this.year !== before
   }
@@ -143,18 +151,37 @@ export class YearDialLogic {
     return this.offset === 0
   }
 
-  /** dir の向きに n 年。目当ての年を通りこすなら、そこで止める */
+  /** dir の向きに n 年。行ける年を通りこすなら、いちばん手前の行ける年で止める */
   private moveBy(dir: -1 | 1, n: number): void {
     const from = this.year
     let to = clamp(from + dir * n, this.min, this.max)
-    const t = this.target
-    if (from !== t && (from - t) * (to - t) <= 0) {
-      to = t
+    let stop: number | null = null
+    for (const t of this.targets) {
+      if (from === t || (from - t) * (to - t) > 0) continue
+      if (stop === null || Math.abs(t - from) < Math.abs(stop - from)) stop = t
+    }
+    if (stop !== null) {
+      to = stop
       this.stopDir = dir
       this.frac = 0
     }
     this.year = to
   }
+}
+
+/** 行ける年のうち、year にダイヤルの角度でいちばん近い年 */
+function nearestTarget(targets: readonly number[], year: number): number {
+  let best = targets[0]
+  let bd = Infinity
+  const a = yearToAngle(year)
+  for (const t of targets) {
+    const d = Math.abs(yearToAngle(t) - a)
+    if (d < bd) {
+      bd = d
+      best = t
+    }
+  }
+  return best
 }
 
 function clamp(x: number, a: number, b: number): number {

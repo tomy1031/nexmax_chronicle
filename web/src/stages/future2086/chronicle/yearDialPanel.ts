@@ -261,6 +261,23 @@ export class YearDialPanel {
   /** いまの年・ぴったりか・目当ての年への近さ（0..1） */
   setState(s: { year: number; locked: boolean; near: number }): void {
     this.angle = yearToAngle(s.year)
+    // 行ける年がいくつもあるとき（クリア後）は、いまの年にいちばん近い光る年のまわりの目もりを光らせる
+    const open = this.marks.filter((m) => m.open)
+    if (open.length > 1) {
+      let best = this.target
+      let bd = Infinity
+      for (const m of open) {
+        const d = Math.abs(yearToAngle(m.year) - this.angle)
+        if (d < bd) {
+          bd = d
+          best = m.year
+        }
+      }
+      if (best !== this.target) {
+        this.target = best
+        this.nearDrawn = -1
+      }
+    }
     this.yearText.textContent = String(Math.round(s.year))
     if (s.locked !== this.locked) {
       this.locked = s.locked

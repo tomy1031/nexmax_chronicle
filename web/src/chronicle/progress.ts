@@ -62,6 +62,8 @@ export const V7_FLAGS = [
   'v7_orm_down', // 最後の光でオルムをたおした（光 1→0）
   'v7_ending', // 帰ってきた・結末
   'v7_epilogue', // おわりに（10月19日の朝）
+  // クリア後のおまけ（chronicle/postClear.ts）
+  'v7_free_intro', // ソラが、思い出の旅（IDO で石が覚えている時代を歩く）のことを話した
 ] as const
 
 export type V7Flag = (typeof V7_FLAGS)[number]

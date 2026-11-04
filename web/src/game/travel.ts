@@ -87,6 +87,8 @@ export function travelRule(from: StageKey | null, req: TravelRequest, f: TravelF
  * それ以外は null（旧版の道の判定へ）。時間を渡れるのは背中の石の力だけ：わっか・かんばんは行き先の記録をうつすだけ。
  */
 function travelRuleV7(route: string, req: TravelRequest, f: TravelFlags): TravelVerdict | null {
+  // クリア後のおまけ：思い出の旅（chronicle/postClear.ts）。わっかの年代ダイヤルから、石が覚えている時代の記録へ
+  if (f('v7_epilogue') && req.cause === 'ido_ring' && (route === '2086>2026' || route === '2086>1726' || route === '2086>1186')) return ok()
   switch (route) {
     case '2086>2026':
       if (req.cause !== 'ido_ring') return null

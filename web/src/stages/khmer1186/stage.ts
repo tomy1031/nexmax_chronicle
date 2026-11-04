@@ -33,6 +33,7 @@ import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerMobPhase
 import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
 import { createKhmerVillagers, batchKhmerVillagers, type KhmerVillager } from './people'
+import { bonusLines, bonusTalk, cleared } from '../../chronicle/postClear'
 import { MobTalkKhmer } from './mobTalkKhmer'
 import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
@@ -265,6 +266,10 @@ export class KhmerStage implements Stage {
         break
       case 'after':
         void this.runAfter(rt)
+        break
+      case 'return':
+        // クリア後のおまけ（思い出の旅）で来たときの、着いたときのひとこと
+        if (cleared(this.f(rt))) void this.talk(rt, bonusLines('1186', 'arrive'))
         break
       default:
         break
@@ -797,6 +802,19 @@ export class KhmerStage implements Stage {
   private leave(rt: StageRuntime): void {
     if (this.leaving) return
     this.leaving = true
+    // クリア後は、帰るときのひとことを言ってから
+    if (cleared(this.f(rt)) && !this.busy) {
+      this.busy = true
+      void this.talk(rt, bonusLines('1186', 'leave')).then(() => {
+        this.busy = false
+        this.travelHome(rt)
+      })
+      return
+    }
+    this.travelHome(rt)
+  }
+
+  private travelHome(rt: StageRuntime): void {
     const r = rt.travel({ to: '2086', cause: 'return', spawn: 'v7_from_1186' })
     if (!r.ok) {
       this.leaving = false
@@ -1127,6 +1145,21 @@ export class KhmerStage implements Stage {
       this.giveBall(rt, kid.ch)
       return true
     }
+    // クリア後のおまけ：チャンダ・おばあさんと話す（chronicle/postClear.ts）
+    if (step === 'return' && cleared(this.f(rt))) {
+      // 帰りの光の輪のそばに人が立っていても話せるように、輪より近い人をえらぶ
+      const ringD = this.ringOpen ? p.distanceTo(RETURN_RING) : Infinity
+      const dc = this.chanda.root.position.distanceTo(p)
+      const dg = this.grandma.root.position.distanceTo(p)
+      const inRing = ringD < 0.9
+      const who = inRing ? null : near(this.chanda.root, 2.6) && dc < ringD && dc <= dg ? 'chanda' : near(this.grandma.root, 2.6) && dg < ringD ? 'grandma' : null
+      const ls = who ? bonusTalk('1186', who) : null
+      if (who && ls) {
+        this.walker.face(who === 'chanda' ? this.chanda : this.grandma, p)
+        void this.talk(rt, ls)
+        return true
+      }
+    }
     // 村の人（話しかけた人は、ネクマックスの方を向く）
     if (this.mobs?.interact(rt, (vv) => this.walker.face(vv.ch, p))) return true
     if (this.ringOpen && rt.player.position.distanceTo(RETURN_RING) < 2.6) {
@@ -1181,6 +1214,7 @@ export class KhmerStage implements Stage {
     const u = this.ura.objective(rt)
     if (u) return u
     const step = this.step(rt)
+    if (step === 'return' && cleared(this.f(rt))) return { title: 'おまけ：思い出の旅', sub: 'チャンダ・おばあさんと話せる。光の輪から 2086年へ帰る' }
     const nr = step === 'mirrors' && this.nearTower === 'n' ? this.northRoute(rt) : null
     const northRide = nr === 'riding' ? (this.ferry.state === 'far' ? 'arrived' : 'riding') : nr === 'h2' || nr === 'h3' || nr === 'h4' ? 'houses' : nr === 'dock' ? 'dock' : undefined
     return khmerObjective(step, this.f(rt), { meet: this.meet, night: this.night, turntableSolved: this.sc.turntable.solved, near: this.nearTower, climbed: this.towerClimbed(rt), northRide })

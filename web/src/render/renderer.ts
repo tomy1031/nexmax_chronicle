@@ -17,6 +17,9 @@ export function createRenderer(container: HTMLElement, q: QualitySettings): THRE
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio))
   renderer.setSize(container.clientWidth || window.innerWidth, container.clientHeight || window.innerHeight)
   renderer.info.autoReset = false
+  // 公開版では、シェーダを作るたびのエラー確認（getShaderInfoLog など）をしない。確認の呼び出しは作り終わるまで待つので、
+  // 裏で並行して作る仕組み（KHR_parallel_shader_compile・compileAsync）が活きず、読みこみの CPU 時間の大半を占めていた
+  renderer.debug.checkShaderErrors = import.meta.env.DEV
   includeShadowOnlyLayer(renderer.shadowMap)
   container.appendChild(renderer.domElement)
   return renderer

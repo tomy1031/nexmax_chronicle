@@ -29,6 +29,8 @@ export class TitleNexmax {
   constructor(frame: TitleNexmaxFrame = 'full', opts: { preserve?: boolean } = {}) {
     this.frame = frame
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power', preserveDrawingBuffer: !!opts.preserve })
+    // 公開版ではシェーダのエラー確認をしない（作り終わるまで待たない）
+    this.renderer.debug.checkShaderErrors = import.meta.env.DEV
     this.canvas = this.renderer.domElement
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping

@@ -63,6 +63,23 @@ describe('結合を区画に分ける', () => {
     const one = new THREE.BoxGeometry(1, 1, 1, 24, 24, 24).attributes.position.count + new THREE.BoxGeometry(1, 1, 1, 4, 4, 4).attributes.position.count
     expect(verts).toBe(one * 6)
   })
+  it('同じ材質は「影を落とす・落とさない」に関係なく、画面に描く形を 1 つにまとめる（影は影用の形が落とす）', () => {
+    const mat = new THREE.MeshStandardMaterial()
+    const b = new Batch()
+    for (const x of [0, 5, 40, 45, 80, 85]) b.add(new THREE.BoxGeometry(1, 1, 1, 24, 24, 24), mat, new THREE.Matrix4().makeTranslation(x, 0, 0))
+    b.add(new THREE.BoxGeometry(1, 1, 1), mat, new THREE.Matrix4().makeTranslation(0, 0, 3), { cast: false })
+    const g = b.build('t')
+    const main = g.children.filter((m) => m.name !== 'shadowCaster') as THREE.Mesh[]
+    expect(main).toHaveLength(1)
+    expect(main[0].castShadow).toBe(false)
+    // shadows = false：影用の形も作らず、どれも影を落とさない
+    const b2 = new Batch()
+    b2.add(new THREE.BoxGeometry(1, 1, 1, 30, 30, 30), mat)
+    b2.add(new THREE.BoxGeometry(1, 1, 1), mat, undefined, { cast: false })
+    const g2 = b2.build('far', undefined, 0, false)
+    expect(g2.children).toHaveLength(1)
+    expect((g2.children[0] as THREE.Mesh).castShadow).toBe(false)
+  })
   it('影を落とさない組・小さい組は、影用の形を作らない', () => {
     const mat = new THREE.MeshStandardMaterial()
     const b = new Batch()

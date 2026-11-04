@@ -646,7 +646,7 @@ function buildRuins(bc: ViewBuildCtx): RecordView {
     const r = range(rng, 36, 52)
     b.add(new THREE.IcosahedronGeometry(range(rng, 2.2, 3.6), 1), m.puffGreen, M(Math.cos(a) * r, 1.8, Math.sin(a) * r - 10), { tint: '#cfe8b8', cast: false })
   }
-  const near = b.build('record_1186')
+  const near = b.build('record_1186', undefined, 0, false)
   near.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = false
   })

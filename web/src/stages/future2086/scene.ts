@@ -152,7 +152,7 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
   const stat = c.b.build('static')
   root.add(stat)
   // 遠くの町は影を落とさないので、影用の形（区画ごとの位置だけの形）も作らない
-  const far = c.bf.build('far', undefined, 0)
+  const far = c.bf.build('far', undefined, 0, false)
   far.traverse((o) => {
     o.castShadow = false
   })

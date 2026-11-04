@@ -44,7 +44,7 @@ export function makeCtx(src: CtxSource, root: THREE.Group, quality: QualitySetti
 export function finishCtx(c: FCtx, group: THREE.Group, name: string): { holoNight: THREE.Mesh | null } {
   const stat = c.b.build(name)
   group.add(stat)
-  const far = c.bf.build(name + '_far', undefined, 0)
+  const far = c.bf.build(name + '_far', undefined, 0, false)
   far.traverse((o) => (o.castShadow = false))
   if (far.children.length) group.add(far)
   const fol = c.foliage.build()

@@ -213,7 +213,7 @@ export async function buildExpoScene(q: QualitySettings, aniso: number, progress
   buildFar(c)
   buildFlags(c)
   root.add(c.b.build('expo_static'))
-  const far = c.bf.build('expo_far', undefined, 0)
+  const far = c.bf.build('expo_far', undefined, 0, false)
   far.traverse((o) => (o.castShadow = false))
   root.add(far)
   return {

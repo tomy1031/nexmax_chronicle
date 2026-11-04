@@ -243,13 +243,13 @@ export async function buildKhmerScene(q: QualitySettings, aniso: number, progres
     const g = b.build(`khmer_${id}`)
     root.add(g)
   }
-  const groundMesh = ground.build('khmer_ground')
+  const groundMesh = ground.build('khmer_ground', undefined, 0, false)
   groundMesh.traverse((o) => {
     o.castShadow = false
     o.receiveShadow = true
   })
   root.add(groundMesh)
-  const far = c.bf.build('khmer_far', undefined, 0)
+  const far = c.bf.build('khmer_far', undefined, 0, false)
   far.traverse((o) => (o.castShadow = false))
   root.add(far)
   root.add(dockPlank.mesh)

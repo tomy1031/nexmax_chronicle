@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { hdriFor } from '../src/game/env'
 
 describe('画質に合わせた HDRI', () => {
-  it('高画質は 1k、標準・省電力は半分の 512', () => {
+  it('どの画質も 1k（512 にすると太陽の光が広くにじみ、画面全体が白くかすむ）', () => {
     const u = './hdri/kloofendal_48d_partly_cloudy_puresky_1k.hdr'
-    expect(hdriFor(u, { level: 'high' })).toBe(u)
-    expect(hdriFor(u, { level: 'medium' })).toBe('./hdri/kloofendal_48d_partly_cloudy_puresky_512.hdr')
-    expect(hdriFor(u, { level: 'low' })).toBe('./hdri/kloofendal_48d_partly_cloudy_puresky_512.hdr')
+    for (const level of ['high', 'medium', 'low'] as const) expect(hdriFor(u, { level })).toBe(u)
   })
 })
 

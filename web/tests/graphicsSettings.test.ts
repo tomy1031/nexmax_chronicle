@@ -97,6 +97,28 @@ describe('適応解像度', () => {
     expect(a.ratio).toBeLessThanOrEqual(0.95)
   })
 
+  it('ときどきの引っかかり（シェーダを作るなど）では下げない（区間の中央値で見る）', () => {
+    const got: number[] = []
+    const a = new AdaptiveResolution(0.6, 1, (r) => got.push(r), 30)
+    // 1.5 秒の区間ごとに、0.25 秒の止まりが 3 回ずつ
+    for (let w = 0; w < 6; w++) {
+      for (let i = 0; i < 3; i++) a.sample(0.25)
+      feed(a, 1 / 30, 1.0)
+    }
+    expect(got).toEqual([])
+    expect(a.ratio).toBe(1)
+  })
+
+  it('読みこんだ直後は、しばらく解像度を変えない（hold）', () => {
+    const a = new AdaptiveResolution(0.6, 1, () => {}, 30)
+    a.hold(2.5)
+    feed(a, 1 / 15, 2.2)
+    expect(a.ratio).toBe(1)
+    // ずっと重いままなら、そのあとで下げる
+    feed(a, 1 / 15, 3)
+    expect(a.ratio).toBeLessThan(1)
+  })
+
   it('設定を変えたら上限の解像度から始め直す', () => {
     const got: number[] = []
     const a = new AdaptiveResolution(0.7, 1.25, (r) => got.push(r), 60)

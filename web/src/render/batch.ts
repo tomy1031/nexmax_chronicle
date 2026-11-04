@@ -86,15 +86,41 @@ export class Batch {
 
   /**
    * 結合したメッシュ群を返す（大きい組は、区画 cell m ごとに分けて結合する。0 なら分けない）。
-   * 影を落とす大きい組は、影用の形を shadowCell m ごとに別に作る（0 なら作らず、結合した物がそのまま影を落とす）
+   * 影を落とす大きい組は、影用の形を shadowCell m ごとに別に作る（0 なら作らず、結合した物がそのまま影を落とす）。
+   * shadows = false：どれも影を落とさない（遠くの町など。影を落とす・落とさないの区別なく、材質ごとに 1 つにまとめる）
    */
-  build(name = 'batch', cell = BATCH_CELL, shadowCell = SHADOW_CELL): THREE.Group {
+  build(name = 'batch', cell = BATCH_CELL, shadowCell = SHADOW_CELL, shadows = true): THREE.Group {
     const group = new THREE.Group()
     group.name = name
+    // 透かし・切り抜きの無い材質の影は形だけで決まるので、材質に関係なく区画ごとに 1 つの影用の形にまとめる
+    // （2086 年の広場で、影の描く回数が材質 × 区画ぶんあった）。小さい組（動かす小物など）は今までどおり
+    const cast = (e: Entry) => shadows && e.cast
+    const plain = shadowCell > 0 ? [...this.entries.values()].filter((e) => cast(e) && plainCaster(e.mat)) : []
+    const plainVerts = plain.reduce((s, e) => s + e.geos.reduce((t, g) => t + g.attributes.position.count, 0), 0)
+    const merged = new Set<Entry>(plainVerts >= SPLIT_MIN_VERTS ? plain : [])
+    if (merged.size) {
+      const bySide = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>()
+      for (const e of merged) {
+        const k = `${e.mat.side}|${e.mat.shadowSide}`
+        const b = bySide.get(k) ?? { mat: casterMaterial(e.mat), geos: [] }
+        b.geos.push(...e.geos)
+        bySide.set(k, b)
+      }
+      for (const b of bySide.values()) for (const geos of splitByCell(b.geos, shadowCell)) addShadowCaster(group, geos, b.mat)
+    }
+    // 画面に描く形：同じ材質・同じ receive で、自分では影を落とさない物（影を落とさない物・影用の形が影を落とす物）は 1 つにまとめる
+    // （今までは「影を落とす・落とさない」で別々に描いていた）
+    const mains = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean; receive: boolean }>()
     for (const e of this.entries.values()) {
-      const shadowParts = e.cast && shadowCell > 0 ? splitByCell(e.geos, shadowCell) : []
-      const shadowSplit = shadowParts.length > 1
-      if (shadowSplit) for (const geos of shadowParts) addShadowCaster(group, geos, e.mat)
+      const shadowParts = cast(e) && shadowCell > 0 && !merged.has(e) ? splitByCell(e.geos, shadowCell) : []
+      if (shadowParts.length > 1) for (const geos of shadowParts) addShadowCaster(group, geos, e.mat)
+      const ownCast = cast(e) && !merged.has(e) && shadowParts.length <= 1
+      const k = `${e.mat.uuid}|${e.receive ? 1 : 0}${ownCast ? 1 : 0}`
+      const m = mains.get(k) ?? { mat: e.mat, geos: [], cast: ownCast, receive: e.receive }
+      m.geos.push(...e.geos)
+      mains.set(k, m)
+    }
+    for (const e of mains.values()) {
       for (const geos of splitByCell(e.geos, cell)) {
         // index の型を揃える
         const total = geos.reduce((s, g) => s + g.attributes.position.count, 0)
@@ -104,12 +130,12 @@ export class Batch {
             if (!(idx.array instanceof Uint32Array)) g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx.array), 1))
           }
         }
-        const merged = mergeGeometries(geos, false)
-        if (!merged) continue
-        merged.computeBoundingSphere()
-        merged.computeBoundingBox()
-        const mesh = new THREE.Mesh(merged, e.mat)
-        mesh.castShadow = e.cast && !shadowSplit
+        const geo = mergeGeometries(geos, false)
+        if (!geo) continue
+        geo.computeBoundingSphere()
+        geo.computeBoundingBox()
+        const mesh = new THREE.Mesh(geo, e.mat)
+        mesh.castShadow = e.cast
         mesh.receiveShadow = e.receive
         mesh.matrixAutoUpdate = false
         mesh.updateMatrix()
@@ -120,6 +146,26 @@ export class Batch {
     this.entries.clear()
     return group
   }
+}
+
+/** 影が形だけで決まる材質（透かし・切り抜き・変位が無い） */
+export function plainCaster(mat: THREE.Material): boolean {
+  const m = mat as THREE.MeshStandardMaterial
+  return !(m.alphaTest > 0) && !m.transparent && !m.alphaHash && !m.alphaMap && !m.displacementMap && !mat.clippingPlanes?.length
+}
+
+/** まとめた影用の形の材質（影を描くときの面の向きだけを元の材質から写す。画面には描かない） */
+const casterMats = new Map<string, THREE.MeshBasicMaterial>()
+function casterMaterial(src: THREE.Material): THREE.MeshBasicMaterial {
+  const k = `${src.side}|${src.shadowSide}`
+  let m = casterMats.get(k)
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ side: src.side })
+    m.shadowSide = src.shadowSide
+    m.name = 'shadowCasterMerged'
+    casterMats.set(k, m)
+  }
+  return m
 }
 
 /** 影用の形（位置だけ。透かしのある材質は uv も）を 1 つ作って、影のカメラだけが見る層に置く */

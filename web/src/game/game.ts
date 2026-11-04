@@ -5,7 +5,8 @@
 import * as THREE from 'three'
 import { configurePbrTextures } from '../render/pbrTextures'
 import { FrameLimiter, loadSavedPrefs, qualitySettings, readParams, resolvePrefs, savePrefs, type GraphicsPrefs, type QualitySettings } from '../render/quality'
-import { createRenderer, AdaptiveResolution } from '../render/renderer'
+import { createRenderer, AdaptiveResolution, hideUnseenFromCompile } from '../render/renderer'
+import { NexmaxBodyBatch } from '../world/nexmax/bodyBatch'
 import { createPost, type PostChain } from '../render/post'
 import { uTime } from '../render/materials'
 import { createPhysics, type Physics } from '../player/physics'
@@ -353,6 +354,9 @@ export class Game {
     window.addEventListener('resize', () => this.resize())
     this.nexmax = await nexP
     this.scene.add(this.nexmax.root)
+    // 体の部品（同じ材質の 13 個）は 1 回で描く（画面と影で、それぞれ 13 回 → 1 回。world/nexmax/bodyBatch.ts）
+    const body = NexmaxBodyBatch.create(this.nexmax.root)
+    if (body) this.scene.add(body.mesh)
     this.travel.start(null, { to: stageKey, cause: 'load', spawn: spawn ?? undefined }, (n) => this.story.get(n), true)
     this.travel.tick(0)
     await this.loadStage(stageKey, spawn, null, (p, msg) => this.step(0.1 + p * 0.9, msg), true)
@@ -558,7 +562,20 @@ export class Game {
     const riftWasShown = this.rift.visible
     if (!riftWasShown) this.rift.warm(true, sp.pos)
     this.cineMarker.warm(true, sp.pos)
-    await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 6000))])
+    // 後処理の途中の画像（リニアの HalfFloat）に描く版のシェーダを作る。描く先を決めずに作ると「画面へ直接」の版（sRGB）ができ、
+    // 実際に描くときにリニアの版をもう一度作ることになる（2086 年で 213 本のうち、およそ半分がむだだった）
+    const target = (this.post.composer as unknown as { inputBuffer?: THREE.WebGLRenderTarget }).inputBuffer ?? null
+    const prevTarget = this.renderer.getRenderTarget()
+    this.renderer.setRenderTarget(target)
+    const restore = hideUnseenFromCompile(this.scene, this.camera)
+    let compiled: Promise<unknown>
+    try {
+      compiled = this.renderer.compileAsync(this.scene, this.camera)
+    } finally {
+      restore()
+    }
+    await Promise.race([compiled, new Promise((r) => setTimeout(r, 6000))])
+    this.renderer.setRenderTarget(prevTarget)
     if (!riftWasShown) this.rift.warm(false, sp.pos)
     this.cineMarker.warm(false, sp.pos)
     claw.beam.setActive(beamWasActive)
@@ -568,6 +585,8 @@ export class Game {
       this.post.render(1 / 60)
     }
     this.active = a
+    // 読みこんだ直後の数秒は一度きりの引っかかりが多いので、解像度はしばらく変えない
+    this.adaptive?.hold(2.5)
     progress(1, '完了')
   }
 

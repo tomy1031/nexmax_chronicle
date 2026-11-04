@@ -22,6 +22,7 @@ export class MiniRenderer {
     this.renderer = renderer
     this.canvas = renderer.domElement
     this.size = size
+    renderer.debug.checkShaderErrors = import.meta.env.DEV
     renderer.setPixelRatio(1)
     renderer.setSize(size, size, false)
     renderer.outputColorSpace = THREE.SRGBColorSpace

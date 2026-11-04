@@ -342,6 +342,8 @@ function lanternDrone(c: FCtx, x: number, y: number, z: number, light: boolean):
 export function buildStalls2086(c: FCtx): void {
   const signMat = new THREE.MeshBasicMaterial({ map: paintStallSigns(), transparent: true, depthWrite: false, side: THREE.DoubleSide, color: new THREE.Color(1.35, 1.35, 1.35) })
   signMat.name = 'f2086-stallSigns'
+  // 平らな板なので、裏→表の 2 回に分けて描かなくても重なり方は同じ（描く回数とシェーダが 1 つずつ減る）
+  signMat.forceSinglePass = true
   const fish: THREE.Object3D[] = []
   F.STALLS.zs.forEach((z, i) => stall(c, z, i, signMat, fish))
   // 屋台の前の通りに浮かぶ提灯ドローンの列（柱と綱は無し）

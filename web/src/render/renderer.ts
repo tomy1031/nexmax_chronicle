@@ -17,8 +17,30 @@ export function createRenderer(container: HTMLElement, q: QualitySettings): THRE
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio))
   renderer.setSize(container.clientWidth || window.innerWidth, container.clientHeight || window.innerHeight)
   renderer.info.autoReset = false
+  // 公開版では、シェーダを作るたびのエラー確認（getShaderInfoLog など）をしない。確認の呼び出しは作り終わるまで待つので、
+  // 裏で並行して作る仕組み（KHR_parallel_shader_compile・compileAsync）が活きず、読みこみの CPU 時間の大半を占めていた
+  renderer.debug.checkShaderErrors = import.meta.env.DEV
+  includeShadowOnlyLayer(renderer.shadowMap)
   container.appendChild(renderer.domElement)
   return renderer
+}
+
+/**
+ * three の影は、影のカメラではなく「画面のカメラ」の層で、影を落とす物を選ぶ（WebGLShadowMap の renderObject）。
+ * そのままでは影用の形（SHADOW_ONLY_LAYER。render/batch.ts の区画ごとの影の形・影用の葉のカード）が影に入らない。
+ * 影を描くあいだだけ、画面のカメラの層に SHADOW_ONLY_LAYER を足す（画面に描く物は、その前に選び終わっている）
+ */
+export function includeShadowOnlyLayer(sm: Pick<THREE.WebGLShadowMap, 'render'>): void {
+  const render = sm.render.bind(sm)
+  sm.render = (lights, scene, camera) => {
+    const mask = camera.layers.mask
+    camera.layers.enable(SHADOW_ONLY_LAYER)
+    try {
+      render(lights, scene, camera)
+    } finally {
+      camera.layers.mask = mask
+    }
+  }
 }
 
 export type SunRig = {
@@ -47,8 +69,6 @@ export function createSunRig(scene: THREE.Scene, q: QualitySettings, sunDir: THR
   sun.shadow.bias = -0.0004
   sun.shadow.normalBias = 0.03
   sun.shadow.radius = q.shadowRadius
-  // 影用の形（render/batch.ts の SHADOW_ONLY_LAYER。区画ごとに分けた、位置だけの形）も影のカメラに見せる
-  cam.layers.enable(SHADOW_ONLY_LAYER)
   scene.add(sun, sun.target)
 
   const hemi = new THREE.HemisphereLight('#a9cdf5', '#a5744a', 0.4)
@@ -98,7 +118,8 @@ export const ADAPTIVE_START = 1.0
 
 export class AdaptiveResolution {
   private acc = 0
-  private frames = 0
+  /** この区間の 1 フレームごとの時間（中央値をとる） */
+  private readonly times: number[] = []
   private cooldown = 0
   ratio: number
   private min: number
@@ -128,9 +149,7 @@ export class AdaptiveResolution {
     this.ceiling = Infinity
     this.ceilingT = 0
     this.fastWindows = 0
-    this.acc = 0
-    this.frames = 0
-    this.cooldown = 2
+    this.hold(2)
     const next = Math.round(Math.min(max, Math.max(min, this.ratio)) * 100) / 100
     if (next !== this.ratio) {
       this.ratio = next
@@ -139,18 +158,30 @@ export class AdaptiveResolution {
   }
 
   /**
-   * 1.5 秒ごとの平均で解像度を上下させる。解像度を変えるとレンダーターゲットを作り直すため一瞬止まる。
-   * 何度も上げ下げして引っかからないよう、下げるのは素早く（大きく）、上げるのは「余裕のある状態が続いたとき」だけにする。
+   * しばらく判断しない（ステージを読みこんだ直後など。最初の数秒はシェーダを作る・画像を送るなどの一度きりの引っかかりが多く、
+   * それを「重い」と見て解像度を下げると、上限まで戻るのに 45 秒以上かかっていた）
+   */
+  hold(seconds: number): void {
+    this.cooldown = Math.max(this.cooldown, seconds)
+    this.acc = 0
+    this.times.length = 0
+  }
+
+  /**
+   * 1.5 秒ごとの、1 フレームの時間の中央値で解像度を上下させる（平均だと、数回の引っかかりで下げてしまう）。
+   * 解像度を変えるとレンダーターゲットを作り直すため一瞬止まる。何度も上げ下げして引っかからないよう、
+   * 下げるのは素早く（大きく）、上げるのは「余裕のある状態が続いたとき」だけにする。
    */
   sample(dt: number): void {
     this.acc += dt
-    this.frames++
+    this.times.push(dt)
     this.cooldown -= dt
     this.ceilingT -= dt
     if (this.acc < 1.5) return
-    const avg = this.acc / this.frames
+    const sorted = this.times.slice().sort((a, b) => a - b)
+    const avg = sorted[sorted.length >> 1]
     this.acc = 0
-    this.frames = 0
+    this.times.length = 0
     if (this.cooldown > 0) return
     const iv = 1 / this.target
     let next = this.ratio
@@ -178,5 +209,24 @@ export class AdaptiveResolution {
       this.cooldown = 4
       this.apply(next)
     }
+  }
+}
+
+/**
+ * シェーダの事前の準備（renderer.compile）は、層に関係なく場面の全部の形の材質から作る。
+ * 影だけの形（SHADOW_ONLY_LAYER。法線を持たない）や描かない層へ移した部品は画面には描かないのに、
+ * 「法線なし」の版などが別に作られていた（2086 年で 8 本）。準備のあいだだけ、カメラに見えない形の材質を外す。
+ * 戻す関数を返す（compileAsync は呼んだその場で材質を集めるので、呼んだ直後に戻してよい）
+ */
+export function hideUnseenFromCompile(scene: THREE.Object3D, camera: THREE.Camera): () => void {
+  const held: [THREE.Mesh, THREE.Mesh['material']][] = []
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.material || m.layers.test(camera.layers)) return
+    held.push([m, m.material])
+    ;(m as { material: THREE.Mesh['material'] | null }).material = null
+  })
+  return () => {
+    for (const [m, mat] of held) m.material = mat
   }
 }

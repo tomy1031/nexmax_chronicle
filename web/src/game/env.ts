@@ -25,11 +25,12 @@ export function skyEnvironment(renderer: THREE.WebGLRenderer, pal: SkyPalette, s
 }
 
 /**
- * 画質に合わせた HDRI：高画質は 1024×512（_1k.hdr）、標準・省電力は 512×256（_512.hdr。光の向きと色は同じで、ダウンロードは 1/4、
- * 環境マップのメモリも 1/4。空は手続きのドームで描くので、HDRI は IBL にだけ使う）
+ * 画質に合わせた HDRI。どの画質も 1024×512（_1k.hdr）を使う。
+ * #12 で標準・省電力を 512×256 にしたら、IBL の立方体の解像度も半分になって太陽の強い光が広くにじみ、床や壁の照り返しで
+ * 画面全体が白くかすんだ（スマホの既定の「標準」で目立った）。光の平均の明るさは同じでも、太陽の光の広がりが変わる
  */
-export function hdriFor(url: string, q: Pick<QualitySettings, 'level'>): string {
-  return q.level === 'high' ? url : url.replace(/_1k\.hdr$/, '_512.hdr')
+export function hdriFor(url: string, _q: Pick<QualitySettings, 'level'>): string {
+  return url
 }
 
 /** HDRI から IBL 用の環境マップ（失敗時は null） */

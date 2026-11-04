@@ -51,6 +51,7 @@ import { YearDialPanel, type DialMark } from './yearDialPanel'
 import { ARENAS_2086, type Arena2086 } from './arenas2086'
 import { createStarKeychain } from './plazaProps'
 import { UraBattle } from '../../../chronicle/uraBattle'
+import { FREE_INTRO_FLAG, MEMORY_TRIPS, bonusLines, bonusTalk } from '../../../chronicle/postClear'
 import { SkyEvent, TimeBadge, groundY } from './stageKit'
 import linesJson from './lines_v7.json'
 import {
@@ -678,8 +679,7 @@ export class ChronicleFutureStage implements Stage {
       case 'epilogue':
         return this.sceneEpilogue(rt)
       default:
-        this.setPhase('done')
-        return Promise.resolve()
+        return this.sceneFree(rt)
     }
   }
 
@@ -1136,31 +1136,41 @@ export class ChronicleFutureStage implements Stage {
    * phase：QR を読む間の目標（OBJECTIVES のキー）。o.lines：石が鳴ったあとの会話、o.go：落ちる前の会話（ソラ「待って――！」など）、
    * o.flag：時代を移る前に立てるフラグ。セーブは 'exhibit'（ブースの前）
    */
-  private async diveIntoRecord(rt: StageRuntime, rec: QrRecord, phase: string, o: { lines?: string; go?: string; flag?: string; to: '2026' | '1186'; spawn: string }): Promise<void> {
+  private async diveIntoRecord(
+    rt: StageRuntime,
+    rec: QrRecord,
+    phase: string,
+    o: { lines?: string; go?: string; flag?: string; to: '2026' | '1726' | '1186'; spawn: string; memory?: boolean },
+  ): Promise<void> {
     await this.readQr(rt, rec, phase)
     if (!this.alive) return
     this.lock(rt, true)
     // わっかには、ネクマックスの見ている景色がうつる（ソラが見る）
     if (rec.seed === 1186) this.ring.showUrl(V7_ART.relief1186, 2.2)
+    else if (rec.seed === 1726) this.ring.show('edo1726', 2.2)
     else this.ring.showUrl(V7_ART.recordNextmake, 2.2)
     await this.enterVr(rt, rec)
     this.setPhase('vr_dive')
     // いつものように、少し見回せる
-    await this.wait(2.4)
-    // 石が、コチ、コチ、コチと大きく鳴って、強く光る
+    await this.wait(o.memory ? 1.4 : 2.4)
+    // 石が、コチ、コチ、コチと大きく鳴って、強く光る（クリア後の思い出の旅は、石はもう光らないので、IDO の音だけ）
     for (let i = 0; i < 6 && this.alive; i++) {
-      rt.oreGlow(1.2 + i * 0.2)
-      rt.shake(0.06 + i * 0.015)
+      if (!o.memory) {
+        rt.oreGlow(1.2 + i * 0.2)
+        rt.shake(0.06 + i * 0.015)
+      }
       this.vr.tick(0.8 + i * 0.15)
-      await this.wait(0.42)
+      await this.wait(o.memory ? 0.25 : 0.42)
     }
     if (o.lines) await this.talk(rt, o.lines)
     if (!this.alive) return
     // 見ているだけだった景色が、本物になる（ブースのわっかも、本物の扉に）
     this.vr.setReal()
     this.vrFalling = true
-    rt.oreGlow(2.6)
-    rt.shake(0.25)
+    if (!o.memory) {
+      rt.oreGlow(2.6)
+      rt.shake(0.25)
+    }
     for (let k = 0; k <= 10; k++) {
       this.fs.openRift(k / 10)
       this.ring.setRift(k / 10)
@@ -1179,7 +1189,7 @@ export class ChronicleFutureStage implements Stage {
     rt.claw.reset()
     rt.player.teleport(start, Math.atan2(-fwd.x, -fwd.z))
     this.vr.watch(rt.player.position)
-    rt.oreGlow(2.2)
+    if (!o.memory) rt.oreGlow(2.2)
     const t0 = this.clock.time
     await this.until(() => (rt.player.grounded && this.clock.time - t0 > 0.3) || this.clock.time - t0 > 2.2)
     if (!this.alive) return
@@ -1975,7 +1985,7 @@ export class ChronicleFutureStage implements Stage {
     await this.diveIntoRecord(rt, QR_RECORDS.nextmake2026, 'qr_door', { lines: 'ch5_record', go: 'ch5_go', flag: 'v7_door1', to: '2026', spawn: 'v7_nextmake' })
   }
 
-  private travel(rt: StageRuntime, to: '2026' | '1186', spawn: string): void {
+  private travel(rt: StageRuntime, to: '2026' | '1726' | '1186', spawn: string): void {
     const r = rt.travel({ to, cause: 'ido_ring', spawn })
     if (!r.ok) rt.hud.toast(r.reason)
   }
@@ -2048,7 +2058,7 @@ export class ChronicleFutureStage implements Stage {
    * 年代ダイヤル（画面の手前の大きなダイヤル）を開く。ネクマックスとカメラは止めて、入力はダイヤルだけ。
    * 「この年へ行く」で true、「もどる」で false
    */
-  private openDial(rt: StageRuntime, o: { target: number; sub: string; record: (year: number) => QrRecord }): Promise<boolean> {
+  private openDial(rt: StageRuntime, o: { target: number; targets?: readonly number[]; sub: string; record: (year: number) => QrRecord }): Promise<boolean> {
     this.lock(rt, true)
     const front = this.fs.markers.exhibit
     const ringC = v(F.PORTAL.x, F.PORTAL.y, F.PORTAL.z)
@@ -2062,12 +2072,13 @@ export class ChronicleFutureStage implements Stage {
     const shift = right.clone().multiplyScalar(-1.9)
     void this.cine(rt, { look: p.clone().add(v(0, 1.1, 0)).lerp(ringC, 0.55).add(shift), from: p.clone().addScaledVector(fw, -3.6).add(v(0, 1.9, 0)).add(shift), hold: Infinity, inSec: 0.7, fov: 50 })
     this.ch.dial.setDial(true)
-    const logic = new YearDialLogic({ start: 2086, target: o.target })
+    const logic = new YearDialLogic({ start: 2086, target: o.target, targets: o.targets })
     this.dialRecord = o.record
     this.ch.qr.setRecord(o.record(logic.year))
     this.ch.dial.setYear(logic.year)
     this.ch.dial.setMatch(logic.match)
-    const marks: DialMark[] = DIAL_MARKS.map((m) => ({ ...m, open: m.year === o.target }))
+    const open = o.targets ?? [o.target]
+    const marks: DialMark[] = DIAL_MARKS.map((m) => ({ ...m, open: open.includes(m.year) }))
     this.dialPanel?.show({ year: logic.year, sub: o.sub, marks, touch: rt.touch })
     this.setPhase('dial')
     return new Promise<boolean>((resolve) => {
@@ -2078,6 +2089,8 @@ export class ChronicleFutureStage implements Stage {
 
   /** ダイヤルの年の、台に出す QR */
   private dialRecord: (year: number) => QrRecord = dialRecord
+  /** 最後にダイヤルを閉じたときの年（「この年へ行く」で決めた年） */
+  private dialYear = 2086
 
   /** 毎フレーム：キー（← →・A D）・指（なぞる・印をタップ）でダイヤルを回す。F・J・ボタンで決める、Esc・ボタンでもどる */
   private updateDial(dt: number, frame: ActionFrame, rt: StageRuntime): void {
@@ -2137,6 +2150,7 @@ export class ChronicleFutureStage implements Stage {
     const d = this.dial
     if (!d || d.closing) return
     d.closing = true
+    this.dialYear = d.logic.year
     await this.dialPanel?.leave(go)
     this.dial = null
     d.resolve(go)
@@ -2823,6 +2837,50 @@ export class ChronicleFutureStage implements Stage {
 
   private balloonFree = -1
 
+  // ================================================================== クリア後：おまけ「思い出の旅」（chronicle/postClear.ts）
+
+  /**
+   * おわりにのあと。朝の広場を自由に歩ける。IDO のわっかの年代ダイヤルで、石が覚えている時代（2026・1726・1186 年）の記録へ行ける。
+   * ソラ（わっかの前）とトワ（中庭のほこら）に話すと、おまけの話
+   */
+  private async sceneFree(rt: StageRuntime): Promise<void> {
+    this.freeMode = true
+    this.placeSora('exhibit')
+    const shrine = this.ch.site.shrine
+    this.showTowa(shrine.front.clone().add(v(-0.5, 0, -0.3)), SITE.shrine.pos, 'idle', false)
+    this.lamp.root.visible = false
+    // はじめての 1 回だけ、ソラが思い出の旅のことを話す
+    if (!this.f(FREE_INTRO_FLAG)) {
+      this.lock(rt, true)
+      this.walker.face(this.sora, rt.player.position)
+      await rt.dialogue(bonusLines('2086', 'intro'))
+      if (!this.alive) return
+      this.set(rt, FREE_INTRO_FLAG)
+      this.lock(rt, false)
+    }
+    const ringMark = [{ pos: v(F.PORTAL.x, F.PORTAL.y + 2.6, F.PORTAL.z), label: 'IDOのわっか' }]
+    for (;;) {
+      this.setPhase('free', ringMark)
+      await this.waitF(this.fs.markers.exhibit, 2.8, '年代ダイヤル（思い出の旅）')
+      if (!this.alive) return
+      const years = MEMORY_TRIPS.map((t) => t.year)
+      const go = await this.openDial(rt, { target: years[0], targets: years, sub: '思い出の旅　光る年をえらんでね', record: memoryRecord })
+      rt.endCinematic(!go)
+      if (!this.alive) return
+      const trip = go ? MEMORY_TRIPS.find((t) => t.year === this.dialYear) : undefined
+      if (!trip) {
+        this.lock(rt, false)
+        continue
+      }
+      this.lock(rt, false)
+      await this.diveIntoRecord(rt, memoryRecord(trip.year), 'free_qr', { to: trip.to, spawn: trip.spawn, memory: true })
+      return
+    }
+  }
+
+  /** クリア後の思い出の旅か（ソラ・トワの話がおまけの話になる） */
+  private freeMode = false
+
   // ================================================================== キーホルダー（手に持って見せる）
 
   private showKeychain(rt: StageRuntime, on: boolean): void {
@@ -2995,6 +3053,17 @@ export class ChronicleFutureStage implements Stage {
       if (d <= w.reach) {
         this.fWait = null
         w.resolve()
+        return true
+      }
+    }
+    // クリア後：ソラ・トワのおまけの話
+    if (this.freeMode && !this.busy) {
+      const p = rt.player.position
+      const who = this.sora.root.visible && p.distanceTo(this.sora.root.position) < 2.4 ? 'sora' : this.towa.root.visible && p.distanceTo(this.towa.root.position) < 2.4 ? 'towa' : null
+      const ls = who ? bonusTalk('2086', who) : null
+      if (who && ls) {
+        this.walker.face(who === 'sora' ? this.sora : this.towa, p)
+        void rt.dialogue(ls)
         return true
       }
     }
@@ -3233,6 +3302,14 @@ const LAMP_HAND = 'lamp_hand'
 const TOWA_DECK = v(8.6, TOWER.deckY, -20.4)
 
 /** 10 章のあと：ダイヤルでえらんだ年の、カンボジアの遺跡のかんばんの記録 */
+/** 思い出の旅：ダイヤルの年の記録（行ける年は、その時代の記録。ほかの年は路地のかんばん） */
+function memoryRecord(year: number): QrRecord {
+  if (year === 1726) return QR_RECORDS.edo1726
+  if (year === 1186) return QR_RECORDS.ruins1186
+  if (year === 2026) return QR_RECORDS.nextmake2026
+  return dialRecord(year)
+}
+
 function ruinsRecord(year: number): QrRecord {
   return year === 1186 ? QR_RECORDS.ruins1186 : { era: `${year}年`, title: 'カンボジアの遺跡のかんばん', seed: year }
 }

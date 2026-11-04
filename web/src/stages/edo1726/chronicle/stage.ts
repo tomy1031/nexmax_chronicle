@@ -36,6 +36,7 @@ import { TimeClawProp, ResonanceWave } from './clawProp'
 import { GEAR_NAMES, STOMP_RADIUS, SWING_HIT, type DollImpact } from './bellDoll'
 import { GearPulls, dollAttack, edoObjective, edoSpawn, edoStep, edoTime, type EdoStep, type EdoSub } from './storyEdo7'
 import linesJson from './lines_v7.json'
+import { bonusLines, bonusTalk, cleared } from '../../../chronicle/postClear'
 
 const lines = new DialogueDB(linesJson)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
@@ -234,9 +235,15 @@ export class ChronicleEdoStage implements Stage {
         void this.runMorning(rt)
         break
       case 'leave':
-        void rt.dialogue(lines.lines('pull'))
+        // クリア後のおまけ（思い出の旅）で来たときは、着いたときのひとことだけ
+        void rt.dialogue(this.cleared(rt) ? bonusLines('1726', 'arrive') : lines.lines('pull'))
         break
     }
+  }
+
+  /** クリアした（おまけの思い出の旅で来ている） */
+  private cleared(rt: StageRuntime): boolean {
+    return cleared((n) => rt.story.get(n))
   }
 
   // ================================================================ 段階ごとの配置（場面なし）
@@ -1041,7 +1048,7 @@ export class ChronicleEdoStage implements Stage {
     const op = this.oharu.root.position
     const look = v((gp.x + op.x) / 2, 1.0, (gp.z + op.z) / 2)
     void rt.cinematic({ look, from: v(look.x + 4.2, 1.7, look.z - 0.6), hold: Infinity, inSec: 1.3, fov: 44 })
-    await rt.dialogue(lines.lines('farewell'))
+    await rt.dialogue(this.cleared(rt) ? bonusLines('1726', 'leave') : lines.lines('farewell'))
     rt.endCinematic()
     rt.oreGlow(2.2)
     this.lock(rt, false)
@@ -1243,8 +1250,28 @@ export class ChronicleEdoStage implements Stage {
     return this.ringOpen && dist2(rt.player.position, RETURN_RING) < 2.4
   }
 
+  /** クリア後：帰りの光の輪のそばに源兵衛・おはるが立っていても話せるように、輪より近い人がいれば、その人（いなければ null） */
+  private bonusNpc(rt: StageRuntime): Who | null {
+    if (this.step !== 'leave' || !this.cleared(rt)) return null
+    const who = this.nearNpc(rt)
+    if (!who) return null
+    const p = rt.player.position
+    const ringD = dist2(RETURN_RING, p)
+    // 輪のまん中（0.9 m 以内）にいるときは帰る。そうでなければ、輪より近い人と話す
+    return !this.ringOpen || (ringD > 0.9 && dist2(this.ch(who).root.position, p) < ringD) ? who : null
+  }
+
   interact(rt: StageRuntime): boolean {
     if (this.busy) return true
+    const bonusWho = this.bonusNpc(rt)
+    if (bonusWho) {
+      const ls = bonusTalk('1726', bonusWho)
+      if (ls) {
+        this.look[bonusWho] = rt.player.position
+        void rt.dialogue(ls)
+        return true
+      }
+    }
     if (this.nearRing(rt) && this.step === 'leave') {
       void this.leave(rt)
       return true
@@ -1268,6 +1295,15 @@ export class ChronicleEdoStage implements Stage {
     if (this.step === 'demo' && who === 'genbei' && dist2(rt.player.position, BENCH_FRONT) < 3) {
       void this.runDemo(rt)
       return true
+    }
+    // クリア後のおまけ：源兵衛・おはると話す（chronicle/postClear.ts）
+    if (this.step === 'leave' && this.cleared(rt)) {
+      const ls = bonusTalk('1726', who)
+      if (ls) {
+        this.look[who] = rt.player.position
+        void rt.dialogue(ls)
+        return true
+      }
     }
     const key = this.npcLine(who)
     if (key) {
@@ -1296,6 +1332,7 @@ export class ChronicleEdoStage implements Stage {
 
   hints(rt: StageRuntime): Hint[] | null {
     if (this.busy) return []
+    if (this.bonusNpc(rt)) return [{ key: 'F', label: '話す' }]
     if (this.nearRing(rt) && this.step === 'leave') return [{ key: 'F', label: '光の輪で2086年へ帰る' }]
     if (this.nearBook(rt)) return [{ key: 'F', label: '書を見る' }]
     if (this.nearShrine(rt)) return [{ key: 'F', label: '箱をほこらに置く' }]
@@ -1306,7 +1343,8 @@ export class ChronicleEdoStage implements Stage {
     return this.mobs?.hints(rt) ?? null
   }
 
-  objective(_rt: StageRuntime): { title: string; sub: string } {
+  objective(rt: StageRuntime): { title: string; sub: string } {
+    if (this.step === 'leave' && this.cleared(rt)) return { title: 'おまけ：思い出の旅', sub: '源兵衛さん・おはると話せる。光の輪から 2086年へ帰る' }
     if (this.step === 'night' && this.sub.boss === 'fight' && this.gears.holding >= 0) return { title: '引っぱれ！', sub: `${GEAR_NAMES[this.gears.holding]}の歯車を引っぱっている` }
     return edoObjective(this.step, { ...this.sub, nextGear: this.gears.next, open: this.openGear !== null, left: this.gears.left })
   }

@@ -151,13 +151,14 @@ export function buildFutureScene(mats: MaterialLibrary, quality: QualitySettings
   // ---- 結合
   const stat = c.b.build('static')
   root.add(stat)
-  const far = c.bf.build('far')
+  // 遠くの町は影を落とさないので、影用の形（区画ごとの位置だけの形）も作らない
+  const far = c.bf.build('far', undefined, 0, false)
   far.traverse((o) => {
     o.castShadow = false
   })
   root.add(far)
   root.add(c.foliage.build())
-  const farF = farFoliage.build()
+  const farF = farFoliage.build(false)
   farF.traverse((o) => {
     o.castShadow = false
   })

@@ -1,4 +1,4 @@
-// 後処理：N8AO（環境遮蔽）→ 層状のかすみ（距離と高さ）→ ブルーム＋色調（露出・ACES・彩度・コントラスト・暖色・周辺減光）→ SMAA。
+// 後処理：N8AO（環境遮蔽）→ 層状のかすみ（距離と高さ）→ ブルーム＋色調（露出・ACES・彩度・コントラスト・暖色・周辺減光）→ SMAA（＋しま模様を消すゆらぎ）。
 // 画質（render/quality.ts）で AO・ブルーム・SMAA を外せる（setQuality でその場で組み直す）。
 import * as THREE from 'three'
 import { BloomEffect, BlendFunction, Effect, EffectAttribute, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing'
@@ -229,6 +229,9 @@ export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
         aa = new EffectPass(camera, new FXAAEffect())
         composer.addPass(aa)
       }
+      // 画面へ書き出す最後のパスで、ごく小さなゆらぎ（±1/255）を足す。途中の画像は HalfFloat でなめらかだが、
+      // 画面は 1 色 256 段なので、夕方・夜の空や周辺減光のゆるやかな明るさの変わり目に「しま模様」が出ていた
+      ;(aa ?? fx).dithering = true
     },
   }
   chain.setQuality(q)

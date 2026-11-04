@@ -274,6 +274,8 @@ export const OBJECTIVES: Record<string, Objective> = {
   ending: { title: '明日へ', sub: '' },
   epilogue: { title: '10月19日の朝', sub: 'NEXTMAKE の中庭へ行こう' },
   done: { title: 'おわり', sub: 'ナンバタウンを自由に歩ける' },
+  free: { title: 'おまけ：思い出の旅', sub: 'IDOのわっかの年代ダイヤルで、好きな時代へ' },
+  free_qr: { title: 'おまけ：思い出の旅', sub: '台の QR を読もう' },
 }
 
 /** 段階のはじめの目標（phase が決まっていないとき） */

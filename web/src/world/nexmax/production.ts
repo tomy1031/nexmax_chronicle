@@ -11,6 +11,7 @@ import { ball, beadProfile, lathe, merge, paint, projectPatch, superEllipse, typ
 import { HEAD_CENTER, HEAD_PIVOT_Y, HEAD_SPEC, PX, fy, headSurface } from './head'
 import { ORE_CENTER, ORE_R, torsoBack } from './body'
 import { NX_COLORS, type TorsoTexSpec } from './materials'
+import { canvasTextureScale } from '../../render/pbrTextures'
 
 export const PROD_COLORS = {
   white: '#eef2f7',
@@ -204,12 +205,15 @@ export function buildHatch(): THREE.BufferGeometry {
  * uv は主人公と同じ（u=0.25 が正面、0.75 が背中）。
  */
 export function makeProductionTorsoTexture(spec: TorsoTexSpec, serial = 86): THREE.CanvasTexture {
+  // 絵は 1024×512 の座標で描く。標準・省電力は半分の大きさの画像に（量産型は 8 体いて、1 体 2.8 MB → 0.7 MB。たいてい遠くにいる）
   const W = 1024
   const H = 512
+  const s = canvasTextureScale()
   const c = document.createElement('canvas')
-  c.width = W
-  c.height = H
+  c.width = Math.round(W * s)
+  c.height = Math.round(H * s)
   const ctx = c.getContext('2d')!
+  ctx.scale(s, s)
   ctx.fillStyle = PROD_COLORS.white
   ctx.fillRect(0, 0, W, H)
   // 脇の青いパネル（u = 0 / 0.5 のまわり）。上下は丸く切る

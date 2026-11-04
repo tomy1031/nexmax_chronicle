@@ -6,6 +6,7 @@
 // どの町も、人が歩き、鳥が飛び、旗やけむりが動く（見ているだけでも、生きている町に見えるように）。当たり判定は持たない
 // （5 章などで本当に入っていくときだけ、ステージが床を足す）。形は root の下（解放はシェル）。
 import * as THREE from 'three'
+import { PartBatch } from '../../../render/partBatch'
 import { Batch, M, rbox } from '../../../render/batch'
 import type { MaterialLibrary } from '../../../render/materials'
 import { mulberry32, pick, range } from '../../../render/noise'
@@ -645,7 +646,7 @@ function buildRuins(bc: ViewBuildCtx): RecordView {
     const r = range(rng, 36, 52)
     b.add(new THREE.IcosahedronGeometry(range(rng, 2.2, 3.6), 1), m.puffGreen, M(Math.cos(a) * r, 1.8, Math.sin(a) * r - 10), { tint: '#cfe8b8', cast: false })
   }
-  const near = b.build('record_1186')
+  const near = b.build('record_1186', undefined, 0, false)
   near.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = false
   })
@@ -667,6 +668,9 @@ function buildRuins(bc: ViewBuildCtx): RecordView {
   walkers.group.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = false
   })
+  // 村の人の胴・頭・腕・脚（同じ材質）を 1 回で描く（人数 × 6 回 → 1 回）
+  const walkerBatch = PartBatch.create(walkers.group, (m) => m.material === mats.body, 'record_1186_walkers')
+  if (walkerBatch) walkers.group.add(walkerBatch.mesh)
   group.add(walkers.group)
   const birds = new Birds(6, v(0, 0, -16), '#24282e')
   const smoke = new Smoke(v(-16, 0.4, 3), 6, '#d8d0c4')

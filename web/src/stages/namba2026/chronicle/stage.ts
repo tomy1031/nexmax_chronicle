@@ -54,6 +54,7 @@ import { MobTalkV7 } from './mobTalkV7'
 import { smoothFaceOutline } from './faceOutline'
 import { repaintSaekiMark } from './npcBrand'
 import { drawLogo } from './brandArt'
+import { bonusLines, bonusTalk, cleared } from '../../../chronicle/postClear'
 
 const lines = new DialogueDB(linesData)
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
@@ -296,6 +297,7 @@ export class ChronicleNambaStage implements Stage {
     else if (this.step === 'shrine_talk') void this.runArrive9(rt)
     else if (this.step === 'defense') void this.runDefenseResume(rt)
     else if (this.step === 'between') void rt.dialogue(lines.lines('between'))
+    else if (this.step === 'return' && this.cleared(rt)) void rt.dialogue(bonusLines('2026', 'arrive'))
   }
 
   // ================================================================ 6 章：到着・よろいの影獣
@@ -1107,7 +1109,7 @@ export class ChronicleNambaStage implements Stage {
   private async runLeave(rt: StageRuntime): Promise<void> {
     this.busy = true
     rt.setControlLocked(true)
-    await rt.dialogue(lines.lines('return_ready'))
+    await rt.dialogue(this.cleared(rt) ? bonusLines('2026', 'leave') : lines.lines('return_ready'))
     rt.setControlLocked(false)
     this.busy = false
     const r = rt.travel({ to: '2086', cause: 'return', spawn: 'v7_from_2026' })
@@ -1138,7 +1140,7 @@ export class ChronicleNambaStage implements Stage {
   }
 
   /** いま F でできること（hints と interact で同じ判定） */
-  private action(rt: StageRuntime): { kind: string; label: string; kanban?: KanbanId } | null {
+  private action(rt: StageRuntime): { kind: string; label: string; kanban?: KanbanId; who?: 'matsui' | 'saeki' | 'ofuji' } | null {
     if (this.busy || this.rec) return null
     const p = rt.player.position
     const step = this.step
@@ -1154,8 +1156,24 @@ export class ChronicleNambaStage implements Stage {
       if (step === 'depart' && k === 'c') return { kind: 'depart', label: 'QR を読む', kanban: k }
       if (step === 'between' && k === 'c') return { kind: 'between', label: '調べる', kanban: k }
     }
-    if (step === 'return' && this.ringOpen && this.near(p, SPOTS_V7.returnRing, 1.8)) return { kind: 'leave', label: '光の輪に入る' }
+    // クリア後のおまけ：社長・佐伯さん・おふじさんと話す（chronicle/postClear.ts）。帰りの光の輪のそばに人が立っていても話せるように、近いほうをえらぶ
+    const ringD = step === 'return' && this.ringOpen ? Math.hypot(p.x - SPOTS_V7.returnRing.x, p.z - SPOTS_V7.returnRing.z) : Infinity
+    if (step === 'return' && this.cleared(rt)) {
+      let best: { who: 'matsui' | 'saeki' | 'ofuji'; d: number } | null = null
+      for (const [who, ch] of [['matsui', this.matsui], ['saeki', this.saeki], ['ofuji', this.ofuji]] as const) {
+        const d = Math.hypot(p.x - ch.root.position.x, p.z - ch.root.position.z)
+        if (d < 2.2 && (!best || d < best.d)) best = { who, d }
+      }
+      // 輪のまん中（0.9 m 以内）にいるときは帰る。そうでなければ、輪より近い人と話す（おふじさん・佐伯さんは輪のすぐそばに立っている）
+      if (best && ringD > 0.9 && best.d < ringD) return { kind: 'bonus', label: '話す', who: best.who }
+    }
+    if (ringD < 1.8) return { kind: 'leave', label: '光の輪に入る' }
     return null
+  }
+
+  /** クリアした（おまけの思い出の旅で来ている） */
+  private cleared(rt: StageRuntime): boolean {
+    return cleared((n) => rt.story.get(n))
   }
 
   interact(rt: StageRuntime): boolean {
@@ -1191,6 +1209,14 @@ export class ChronicleNambaStage implements Stage {
       case 'leave':
         void this.runLeave(rt)
         return true
+      case 'bonus': {
+        const who = a.who as 'matsui' | 'saeki' | 'ofuji'
+        const ls = bonusTalk('2026', who)
+        if (!ls) return false
+        this.walker.face(who === 'matsui' ? this.matsui : who === 'saeki' ? this.saeki : this.ofuji, rt.player.position)
+        void rt.dialogue(ls)
+        return true
+      }
     }
     return false
   }
@@ -1241,6 +1267,7 @@ export class ChronicleNambaStage implements Stage {
 
   objective(_rt: StageRuntime): { title: string; sub: string } {
     if (this.fight && this.step === 'arrive') return this.fight.objective()
+    if (this.step === 'return' && this.rt && this.cleared(this.rt)) return { title: 'おまけ：思い出の旅', sub: '社長たちと話せる。光の輪から 2086年へ帰る' }
     return nambaV7Objective(this.step, this.ctx())
   }
 

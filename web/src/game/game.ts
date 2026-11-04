@@ -585,6 +585,8 @@ export class Game {
       this.post.render(1 / 60)
     }
     this.active = a
+    // 読みこんだ直後の数秒は一度きりの引っかかりが多いので、解像度はしばらく変えない
+    this.adaptive?.hold(2.5)
     progress(1, '完了')
   }
 

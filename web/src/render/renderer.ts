@@ -118,7 +118,8 @@ export const ADAPTIVE_START = 1.0
 
 export class AdaptiveResolution {
   private acc = 0
-  private frames = 0
+  /** この区間の 1 フレームごとの時間（中央値をとる） */
+  private readonly times: number[] = []
   private cooldown = 0
   ratio: number
   private min: number
@@ -148,9 +149,7 @@ export class AdaptiveResolution {
     this.ceiling = Infinity
     this.ceilingT = 0
     this.fastWindows = 0
-    this.acc = 0
-    this.frames = 0
-    this.cooldown = 2
+    this.hold(2)
     const next = Math.round(Math.min(max, Math.max(min, this.ratio)) * 100) / 100
     if (next !== this.ratio) {
       this.ratio = next
@@ -159,18 +158,30 @@ export class AdaptiveResolution {
   }
 
   /**
-   * 1.5 秒ごとの平均で解像度を上下させる。解像度を変えるとレンダーターゲットを作り直すため一瞬止まる。
-   * 何度も上げ下げして引っかからないよう、下げるのは素早く（大きく）、上げるのは「余裕のある状態が続いたとき」だけにする。
+   * しばらく判断しない（ステージを読みこんだ直後など。最初の数秒はシェーダを作る・画像を送るなどの一度きりの引っかかりが多く、
+   * それを「重い」と見て解像度を下げると、上限まで戻るのに 45 秒以上かかっていた）
+   */
+  hold(seconds: number): void {
+    this.cooldown = Math.max(this.cooldown, seconds)
+    this.acc = 0
+    this.times.length = 0
+  }
+
+  /**
+   * 1.5 秒ごとの、1 フレームの時間の中央値で解像度を上下させる（平均だと、数回の引っかかりで下げてしまう）。
+   * 解像度を変えるとレンダーターゲットを作り直すため一瞬止まる。何度も上げ下げして引っかからないよう、
+   * 下げるのは素早く（大きく）、上げるのは「余裕のある状態が続いたとき」だけにする。
    */
   sample(dt: number): void {
     this.acc += dt
-    this.frames++
+    this.times.push(dt)
     this.cooldown -= dt
     this.ceilingT -= dt
     if (this.acc < 1.5) return
-    const avg = this.acc / this.frames
+    const sorted = this.times.slice().sort((a, b) => a - b)
+    const avg = sorted[sorted.length >> 1]
     this.acc = 0
-    this.frames = 0
+    this.times.length = 0
     if (this.cooldown > 0) return
     const iv = 1 / this.target
     let next = this.ratio

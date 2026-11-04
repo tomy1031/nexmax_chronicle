@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import { uTime, type MaterialLibrary } from '../../render/materials'
 import { loadLetteringFonts } from '../../render/textures'
-import { loadPbrTextures } from '../../render/pbrTextures'
+import { canvasTextureScale, loadPbrTextures } from '../../render/pbrTextures'
 import { FUTURE_TEXT, ROUNDED, paintChochin, paintDecalAtlas, paintFabricAtlas, paintHoloAtlas, paintWindows, type CanvasAtlas } from './textures2086'
 
 export type TimeOfDay = 'morning' | 'night'
@@ -27,8 +27,10 @@ function remapTexture(src: THREE.Texture, lo: number, hi: number, tint: [number,
   out.wrapS = out.wrapT = THREE.RepeatWrapping
   out.anisotropy = aniso
   const run = (img: CanvasImageSource & { width: number; height: number }) => {
-    const W = Math.min(1024, img.width)
-    const H = Math.min(1024, img.height)
+    // 標準・省電力は 512（canvasTextureScale。くり返して貼る模様なので、スマホの解像度では見た目はほぼ同じ。メモリ 1/4・作る時間も 1/4）
+    const S = Math.round(1024 * canvasTextureScale())
+    const W = Math.min(S, img.width)
+    const H = Math.min(S, img.height)
     const cv = out.image as HTMLCanvasElement
     cv.width = W
     cv.height = H

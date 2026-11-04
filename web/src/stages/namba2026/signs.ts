@@ -302,7 +302,7 @@ export class SignAtlas {
       g.imageSmoothingQuality = 'high'
       g.drawImage(this.canvas, 0, 0, S, used, 0, 0, src.width, src.height)
     }
-    const t = tex(src, true, aniso)
+    const t = tex(src, true, aniso, 1)
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping
     // 正方形での v（上 = 1）→ 切り出した画像での v：v' = (v − (1 − used/S)) · S/used
     if (used < S) {

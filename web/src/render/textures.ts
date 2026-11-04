@@ -1,6 +1,7 @@
 // キャンバスで手続き的にテクスチャを描く（外部ダウンロードなし）。
 // 各ペインタは color（sRGB）と height（0..1）を作り、height から法線・ラフネスを導く。
 import * as THREE from 'three'
+import { canvasTextureScale } from './pbrTextures'
 import { TileNoise, mulberry32, range, type Rng } from './noise'
 
 export type Painted = {
@@ -1215,8 +1216,13 @@ export function paintNoiseNormal(S = 256, freq = 16, strength = 2): HTMLCanvasEl
 
 // ------------------------------------------------------------------ 共通：キャンバス→テクスチャ
 
-export function tex(c: HTMLCanvasElement, srgb: boolean, aniso = 8): THREE.CanvasTexture {
-  const t = new THREE.CanvasTexture(c)
+/**
+ * キャンバスをテクスチャにする。1024 四方以上の大きな絵（石・木・布などの、くり返して貼る材質の絵）は、標準・省電力では
+ * 半分の大きさの写しから作る（canvasTextureScale。メモリは 1/4。スマホの描画解像度では見た目はほぼ同じ）。
+ * 自分で大きさを決めている絵（看板のアトラスなど）は scale = 1 を渡す
+ */
+export function tex(c: HTMLCanvasElement, srgb: boolean, aniso = 8, scale = canvasTextureScale()): THREE.CanvasTexture {
+  const t = new THREE.CanvasTexture(scale < 1 && c.width >= 1024 && c.height >= 1024 ? shrinkCanvas(c, scale) : c)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace
   t.anisotropy = aniso
@@ -1225,6 +1231,17 @@ export function tex(c: HTMLCanvasElement, srgb: boolean, aniso = 8): THREE.Canva
   t.magFilter = THREE.LinearFilter
   t.needsUpdate = true
   return t
+}
+
+/** キャンバスを scale 倍に縮めた写し */
+function shrinkCanvas(c: HTMLCanvasElement, scale: number): HTMLCanvasElement {
+  const out = document.createElement('canvas')
+  out.width = Math.max(1, Math.round(c.width * scale))
+  out.height = Math.max(1, Math.round(c.height * scale))
+  const g = out.getContext('2d')!
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(c, 0, 0, out.width, out.height)
+  return out
 }
 
 export function randomRng(seed: number): Rng {

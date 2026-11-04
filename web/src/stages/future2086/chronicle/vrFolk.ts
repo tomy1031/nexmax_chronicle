@@ -4,6 +4,7 @@
 // ゴーグルの人は、見えている昔の町を見回す（頭を左右・上へ）。ときどき、見えている物へ手をのばす（さわれない）。
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { PartBatch } from '../../../render/partBatch'
 import type { ColliderList } from '../../../world/colliders'
 import { F } from '../layout'
 
@@ -191,6 +192,9 @@ export class VrVisitors {
       this.center.add(d.pos)
     })
     this.center.divideScalar(Math.max(1, VISITORS.length)).add(v(0, 1.25, 0))
+    // 全員の胴・頭・腕・脚（同じ材質）を 1 回で描く（画面と影で、人数 × 6 回 → 1 回ずつ）
+    const batch = PartBatch.create(this.group, (m) => m.material === mats.body, 'vr_visitors_body')
+    if (batch) this.group.add(batch.mesh)
     root.add(this.group)
   }
 

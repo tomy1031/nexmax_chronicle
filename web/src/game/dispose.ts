@@ -31,6 +31,10 @@ export function disposeObject3D(root: THREE.Object3D, extraTextures: Iterable<TH
     if (m.geometry) geos.add(m.geometry)
     const mat = (m as { material?: THREE.Material | THREE.Material[] }).material
     if (mat) for (const x of Array.isArray(mat) ? mat : [mat]) mats.add(x)
+    // BatchedMesh は、部品の行列などを入れたテクスチャも自分で持っている（render/partBatch.ts・unitBatch.ts）
+    // （2 回目の dispose は three の中で止まるので、まだ解放していない物だけ）
+    const bm = o as THREE.BatchedMesh & { _matricesTexture?: THREE.Texture | null }
+    if (bm.isBatchedMesh && bm._matricesTexture) bm.dispose()
     const l = o as THREE.Light
     if (l.isLight) {
       const sh = (l as THREE.DirectionalLight).shadow

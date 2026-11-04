@@ -3,6 +3,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { mulberry32, pick, range } from '../../render/noise'
+import { PartBatch } from '../../render/partBatch'
 
 type Walker = {
   root: THREE.Group
@@ -104,6 +105,9 @@ export class Pedestrians {
         this.walkers.push({ root, legL, legR, armSwing: arms, x0: lane.x0, x1: lane.x1, z: root.position.z, speed: range(rng, 1.0, 1.45), dir: rng() < 0.5 ? 1 : -1, phase: rng() * 10, x, pause: 0 })
       }
     }
+    // 全員の胴・腕・脚（同じ材質）を 1 回で描く（画面と影で、人数 × 4 回 → 1 回ずつ。render/partBatch.ts）
+    const batch = PartBatch.create(this.group, (m) => m.material === this.mat, 'pedestrians_body')
+    if (batch) this.group.add(batch.mesh)
   }
 
   /** 歩く人の足元の位置（動いていく本物の参照。読むだけ。町の人の吹き出し mobTalk2026.ts 用） */

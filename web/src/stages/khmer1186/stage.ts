@@ -32,7 +32,7 @@ import type { Elephant } from './elephant'
 import { COLLAPSE_PLAN, MIRROR_FLAGS, NIGHT_WAVES, canPlaceMirror, khmerMobPhase, khmerObjective, khmerSpawn, khmerStep, khmerTime, mirrorsLeft, type KhmerStep, type MeetPhase, type NightPhase } from './storyKhmer'
 import { UraBattle } from '../../chronicle/uraBattle'
 import { SWALLOW } from './swallow'
-import { createKhmerVillagers, type KhmerVillager } from './people'
+import { createKhmerVillagers, batchKhmerVillagers, type KhmerVillager } from './people'
 import { MobTalkKhmer } from './mobTalkKhmer'
 import type { Freezable } from './mirrors'
 import data from './lines_v7.json'
@@ -166,6 +166,7 @@ export class KhmerStage implements Stage {
     root.add(this.chanda.root, this.grandma.root, this.towa.root)
     this.villagers = createKhmerVillagers()
     for (const vv of this.villagers) root.add(vv.ch.root)
+    batchKhmerVillagers(root, this.villagers)
     // 仮の箱（舞台の確認用）は本編では出さない
     this.sc.villagers.setVisible(false)
     this.sc.chanda.group.visible = false

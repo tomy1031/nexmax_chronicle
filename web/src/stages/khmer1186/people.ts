@@ -3,6 +3,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { createPerson, type PersonCharacter } from '../../chronicle/visuals'
+import { PartBatch } from '../../render/partBatch'
 import { VILLAGERS, type Spot, type VillagerSpot } from './layout'
 
 /**
@@ -13,19 +14,41 @@ export const SHOWN_VILLAGERS = ['kid1', 'kid2', 'kid3', 'cook1', 'elder', 'watch
 
 export type KhmerVillager = { id: string; ch: PersonCharacter; spot: VillagerSpot }
 
-/** 村人（本物の人の形・軽い作り・色ちがい）を立ち位置に立たせて返す。root に足すのと update・dispose は呼ぶ側で */
+/**
+ * 村人（本物の人の形・軽い作り・色ちがい）を立ち位置に立たせて返す。root に足すのと update・dispose は呼ぶ側で。
+ * 体の材質は全員で 1 つ（色は頂点色）。呼ぶ側が root に足したあと batchKhmerVillagers で、全員の体を 1 回で描ける
+ */
 export function createKhmerVillagers(): KhmerVillager[] {
   const out: KhmerVillager[] = []
+  const materials = new Map<string, THREE.MeshToonMaterial>()
   VILLAGERS.forEach((s, i) => {
     if (!SHOWN_VILLAGERS.includes(s.id)) return
     const kid = s.role === 'kid'
-    const ch = createPerson('khmerVillager', { variant: i, female: i % 2 === 0, lite: true, height: kid ? 1.1 : s.role === 'monk' ? 1.6 : 1.55 })
+    const ch = createPerson('khmerVillager', { variant: i, female: i % 2 === 0, lite: true, height: kid ? 1.1 : s.role === 'monk' ? 1.6 : 1.55, materials })
     ch.root.position.copy(s.pos)
     ch.root.rotation.y = s.yaw
     ch.setPose(kid ? 'wave' : s.role === 'monk' ? 'pray' : s.role === 'sit' ? 'kneel' : 'idle')
     out.push({ id: s.id, ch, spot: s })
   })
   return out
+}
+
+/**
+ * 村人みんなの体の部品（同じ材質）を 1 回で描く（画面と影で、人数 × 9 回ほど → 1 回ずつ。render/partBatch.ts）。
+ * 村人を root に足したあとに呼ぶ。batch の形は root に足す
+ */
+export function batchKhmerVillagers(root: THREE.Object3D, villagers: readonly KhmerVillager[]): PartBatch | null {
+  const bodies = new Set<THREE.Material>()
+  for (const v of villagers)
+    v.ch.root.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (m.isMesh && m.name === 'khmerVillager' && !Array.isArray(m.material)) bodies.add(m.material)
+    })
+  if (bodies.size !== 1) return null
+  const [mat] = bodies
+  const batch = PartBatch.create(root, (m) => m.material === mat, 'khmer_villagers_body')
+  if (batch) root.add(batch.mesh)
+  return batch
 }
 
 const ROLE_COLOR: Record<VillagerSpot['role'], string> = {

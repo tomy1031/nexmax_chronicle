@@ -119,7 +119,12 @@ ${OUTLINE_WIDTH_GLSL}`,
         `#include <project_vertex>
   vOutline = aOutline;
   if (aOutline > 0.5) {
-    vec3 nV = normalize(normalMatrix * objectNormal);
+    // transformedNormal：normalMatrix をかけた後の法線（BatchedMesh・InstancedMesh で描くときの 1 つ 1 つの向きも入る。
+    // 裏面で描く材質では three が向きを反転しているので、元に戻す）
+    vec3 nV = normalize(transformedNormal);
+#ifdef FLIP_SIDED
+    nV = -nV;
+#endif
     mvPosition.xyz += nV * nxOutlineWidth(-mvPosition.z, uOutlineMin) * uLineScale;
     gl_Position = projectionMatrix * mvPosition;
   }`,

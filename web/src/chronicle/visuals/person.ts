@@ -61,6 +61,11 @@ export type PersonOpts = {
   rimK?: number
   /** 影を落とす（既定 true） */
   castShadow?: boolean
+  /**
+   * 体の材質を、同じ見た目の人どうしで使い回す（線の色・ふちの光が同じなら同じ材質）。村人などをまとめて 1 回で描くため
+   * （render/partBatch.ts）。使い回した材質は、この人の dispose では解放しない（ステージの片づけで解放）
+   */
+  materials?: Map<string, THREE.MeshToonMaterial>
 }
 
 export interface PersonCharacter extends Character {
@@ -1228,8 +1233,13 @@ export function createPerson(preset: PersonPreset, opts: PersonOpts = {}): Perso
     default:
       dressVillager(ctx, opts)
   }
-  const mat = createPersonMaterial({ line: def.line ?? '#2a1a12', rim: opts.rim, rimK: opts.rimK })
-  mats.push(mat)
+  const matKey = `${def.line ?? '#2a1a12'}|${opts.rim ?? ''}|${opts.rimK ?? ''}`
+  let mat = opts.materials?.get(matKey)
+  if (!mat) {
+    mat = createPersonMaterial({ line: def.line ?? '#2a1a12', rim: opts.rim, rimK: opts.rimK })
+    if (opts.materials) opts.materials.set(matKey, mat)
+    else mats.push(mat)
+  }
   ps.bake(mat, { castShadow: opts.castShadow ?? true, name: preset })
   // 顔
   const ftex = faceTexture(def.face.key, def.face.style)
